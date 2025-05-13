@@ -14,3 +14,12 @@ solady/=node_modules/solady/src/
 solarray/=node_modules/solarray/src/
 @prb/math/=node_modules/@prb/math/src/
 ExcessivelySafeCall/=node_modules/excessively-safe-call/src/
+
+@smartsessions/=node_modules/smartsessions/contracts/
+@modulekit/=node_modules/@rhinestone/modulekit/src/
+@erc7579/enumerablemap4337/=node_modules/@erc7579/enumerablemap4337/src/
+@compact-utils/=node_modules/@rhinestone/compact-utils/src/
+@interfaces/=src/interfaces/
+erc7579/=node_modules/erc7579/src/
+flatbytes/=node_modules/@rhinestone/flatbytes/src/
+stringutils/=node_modules/stringutils/src/

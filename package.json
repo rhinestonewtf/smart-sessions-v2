@@ -25,7 +25,12 @@
     "test:optimized": "pnpm run build:optimized && FOUNDRY_PROFILE=test-optimized forge test"
   },
   "dependencies": {
-    "@rhinestone/modulekit": "^0.5.1"
+    "@erc7579/enumerablemap4337": "github:erc7579/enumerablemap",
+    "@rhinestone/compact-utils": "github:rhinestonewtf/compact-utils",
+    "@rhinestone/modulekit": "^0.5.9",
+    "erc7579-implementation": "github:erc7579/erc7579-implementation",
+    "smartsessions": "github:erc7579/smartsessions",
+    "@rhinestone/flatbytes": "github:rhinestonewtf/flatbytes"
   },
   "files": [
     "src",
