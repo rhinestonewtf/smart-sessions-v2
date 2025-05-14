@@ -43,6 +43,9 @@ interface ISmartSessionEmissary {
     /// @notice Emitted when a session is removed
     event SessionRemoved(PermissionId permissionId, address smartAccount);
 
+    /// @notice Emitted when an address whitelist status is updated
+    event WhitelistStatusUpdated(address source, bool status);
+
     /*//////////////////////////////////////////////////////////////
                                  VERIFY
     //////////////////////////////////////////////////////////////*/

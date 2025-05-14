@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { NonceManager } from "@core/NonceManager.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 // Libraries
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
@@ -30,7 +31,7 @@ import {
     Policy
 } from "@smartsessions/DataTypes.sol";
 
-abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
+abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary, Ownable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -102,21 +103,16 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     }
 
     /*//////////////////////////////////////////////////////////////
-                              VIEW FUNCTIONS
+                                 ADMIN
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Gets all permission IDs for a specific account
-    /// @param account The address of the account to query
-    /// @return permissionIds Array of permission IDs associated with the account
-    function getPermissionIDs(address account)
-        external
-        view
-        returns (PermissionId[] memory permissionIds)
-    {
-        bytes32[] memory _permissionIds = $enabledSessions.values(account);
-        assembly {
-            permissionIds := _permissionIds
-        }
+    /// @notice Set the whitelisted status for an address
+    /// @param source The address to be whitelisted
+    /// @param isWhitelisted The whitelisted status to be set
+    function setWhitelistedSource(address source, bool isWhitelisted) external onlyOwner {
+        // Set the whitelisted status for the address
+        $whitelistedSources[source] = isWhitelisted;
+        emit WhitelistStatusUpdated(source, isWhitelisted);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -474,5 +470,19 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         SignerConf storage $s = $sessionValidators[permissionId][account];
         sessionValidator = address($s.sessionValidator);
         sessionValidatorData = $s.config.load();
+    }
+
+    /// @notice Gets all permission IDs for a specific account
+    /// @param account The address of the account to query
+    /// @return permissionIds Array of permission IDs associated with the account
+    function getPermissionIDs(address account)
+        external
+        view
+        returns (PermissionId[] memory permissionIds)
+    {
+        bytes32[] memory _permissionIds = $enabledSessions.values(account);
+        assembly {
+            permissionIds := _permissionIds
+        }
     }
 }

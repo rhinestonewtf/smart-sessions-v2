@@ -34,7 +34,7 @@ import {
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
 
-contract SmartSessionEmissary is SmartSessionManager, Ownable {
+contract SmartSessionEmissary is SmartSessionManager {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
