@@ -3,46 +3,58 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
+import { IERC1271, EIP1271_MAGIC_VALUE } from "@modulekit/module-bases/interfaces/IERC1271.sol";
+import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
 
 // Libraries
-import { EnumerableSet } from "@erc7579/enumerablemap4337/EnumerableSet4337.sol";
+import { EncodeLib } from "@smartsessions/lib/EncodeLib.sol";
+import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol";
+import { IdLib } from "@smartsessions/lib/IdLib.sol";
+import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
+import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
+import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
+import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
+import { SignerLib } from "@smartsessions/lib/SignerLib.sol";
+import { HashLib } from "@smartsessions/lib/HashLib.sol";
+import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
 
 // Types
-import { PermissionId } from "@smartsessions/DataTypes.sol";
+import {
+    PermissionId, SmartSessionMode, EnableSession, Session
+} from "@smartsessions/DataTypes.sol";
+import {
+    ExecType,
+    CallType,
+    CALLTYPE_BATCH,
+    CALLTYPE_SINGLE,
+    EXECTYPE_DEFAULT
+} from "erc7579/lib/ModeLib.sol";
 
-contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
+contract SmartSessionEmissary is SmartSessionManager, Ownable {
     /*//////////////////////////////////////////////////////////////
-                                 STATE
+                               LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Mapping of user address => set of enabled PermissionIds
-    EnumerableSet.Bytes32Set internal $enabledSessions;
-    /// @notice Mapping of whitelisted sources
-    mapping(address source => bool isWhitelisted) internal $whitelistedSources;
+    using EncodeLib for *;
+    using SmartSessionModeLib for *;
+    using IdLib for *;
+    using EnumerableSet for *;
+    using ExecutionLib for *;
+    using PolicyLibV2 for *;
+    using PolicyLib for *;
+    using SignerLib for *;
+    using HashLib for *;
+    using ConfigLib for *;
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address _owner) Ownable(_owner) {
-        // Initialize the contract
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                               MODIFIERS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Only allow calls from whitelisted sources
-    modifier onlyWhitelistedSource() {
-        // Check if the sender is a whitelisted source
-        if (!$whitelistedSources[msg.sender]) {
-            revert InvalidSignature();
-        }
-        _;
-    }
+    constructor(address _owner) Ownable(_owner) { }
 
     /*//////////////////////////////////////////////////////////////
                                  VERIFY
@@ -56,6 +68,7 @@ contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
     )
         external
         onlyWhitelistedSource
+        returns (bytes4)
     {
         // Init validSig
         bool validSig;
@@ -71,8 +84,8 @@ contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
             // USE mode: Directly enforce policies without enabling new ones
             validSig = _enforcePolicies({
                 permissionId: permissionId,
-                userOpHash: userOpHash,
-                userOp: userOp,
+                hash: hash,
+                callData: executions,
                 decompressedSignature: packedSig,
                 account: account
             });
@@ -102,8 +115,8 @@ contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
 
             validSig = _enforcePolicies({
                 permissionId: permissionId,
-                userOpHash: userOpHash,
-                userOp: userOp,
+                hash: hash,
+                callData: executions,
                 decompressedSignature: usePermissionSig,
                 account: account
             });
@@ -114,7 +127,7 @@ contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
         }
 
         // Return the function selector on success, or a specific failure code otherwise.
-        return validSIg ? this.verifyExecution.selector : bytes4(0xFFFFFFFF);
+        return validSig ? this.verifyExecution.selector : bytes4(0xFFFFFFFF);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -129,7 +142,7 @@ contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
      * @param callData Execution data for the call
      * @param decompressedSignature The decompressed signature for validation
      * @param account The account for which policies are being enforced
-     * @return vd ValidationData containing the result of policy checks
+     * @return validSig True if the signature is valid, false otherwise
      */
     function _enforcePolicies(
         PermissionId permissionId,
@@ -165,27 +178,23 @@ contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
             }
             // DEFAULT EXEC & BATCH CALL
             else if (callType == CALLTYPE_BATCH) {
-                vd = vd.intersect(
-                    $actionPolicies.actionPolicies.checkBatch7579Exec({
-                        userOp: userOp,
-                        permissionId: permissionId,
-                        minPolicies: 1 // minimum of one actionPolicy must be set.
-                     })
-                );
+                $actionPolicies.actionPolicies.checkBatch7579Exec({
+                    callData: callData,
+                    permissionId: permissionId,
+                    minPolicies: 1 // minimum of one actionPolicy must be set.
+                 });
             }
             // DEFAULT EXEC & SINGLE CALL
             else if (callType == CALLTYPE_SINGLE) {
-                (address target, uint256 value, bytes calldata callData) =
-                    callData.decodeUserOpCallData().decodeSingle();
-                vd = vd.intersect(
-                    $actionPolicies.actionPolicies.checkSingle7579Exec({
-                        permissionId: permissionId,
-                        target: target,
-                        value: value,
-                        callData: callData,
-                        minPolicies: 1 // minimum of one actionPolicy must be set.
-                     })
-                );
+                (address target, uint256 value, bytes calldata decodedCallData) =
+                    callData.decodeSingle();
+                $actionPolicies.actionPolicies.checkSingle7579Exec({
+                    permissionId: permissionId,
+                    target: target,
+                    value: value,
+                    callData: decodedCallData,
+                    minPolicies: 1 // minimum of one actionPolicy must be set.
+                 });
             }
             // DelegateCalls are not supported by SmartSessionEmissary
             else {
@@ -209,5 +218,71 @@ contract SmartSessionEmissary is Ownable, ISmartSessionEmissary {
             permissionId: permissionId,
             signature: decompressedSignature
         });
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                ENABLE
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Enables policies for a session during user operation validation
+     * @dev This function handles the enabling of new policies and session validators
+     * @param enableData The EnableSession data containing the session to enable
+     * @param permissionId The unique identifier for the permission set
+     * @param account The account for which policies are being enabled
+     * @param mode The SmartSession mode being used
+     */
+    function _enablePolicies(
+        EnableSession memory enableData,
+        PermissionId permissionId,
+        address account,
+        SmartSessionMode mode
+    )
+        internal
+    {
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $signerNonce[permissionId][account]++;
+        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, mode);
+
+        // require signature on account
+        // this is critical as it is the only way to ensure that the user is aware of the policies
+        // and signer
+        // NOTE: although SmartSession implements a ERC1271 feature,
+        // it CAN NOT be used as a valid ERC1271 validator for
+        // this step. SmartSessions ERC1271 function must prevent this
+        if (
+            IERC1271(account).isValidSignature(hash, enableData.permissionEnableSig)
+                != EIP1271_MAGIC_VALUE
+        ) {
+            revert InvalidEnableSignature(account, hash);
+        }
+
+        // Determine if registry should be used based on the mode
+        bool useRegistry = mode.useRegistry();
+
+        // Enable action policies
+        $actionPolicies.enable({
+            permissionId: permissionId,
+            actionPolicyDatas: enableData.sessionToEnable.actions,
+            useRegistry: useRegistry
+        });
+
+        // Enable mode can involve enabling ISessionValidator (new Permission)
+        // or just adding policies (existing permission)
+        // a) ISessionValidator is not set => enable ISessionValidator
+        // b) ISessionValidator is set => just add policies (above)
+        // Attention: if the same policy that has already been configured is added again,
+        // the policy will be overwritten with the new configuration
+        if (!_isISessionValidatorSet(permissionId, account)) {
+            $sessionValidators.enable({
+                permissionId: permissionId,
+                sessionValidator: enableData.sessionToEnable.sessionValidator,
+                sessionValidatorConfig: enableData.sessionToEnable.sessionValidatorInitData,
+                useRegistry: useRegistry
+            });
+        }
+
+        // Mark the session as enabled
+        $enabledSessions.add(msg.sender, PermissionId.unwrap(permissionId));
     }
 }
