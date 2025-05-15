@@ -16,6 +16,7 @@ solarray/=node_modules/solarray/src/
 ExcessivelySafeCall/=node_modules/excessively-safe-call/src/
 
 @smartsessions/=node_modules/smartsessions/contracts/
+@smartsessions-test/=node_modules/smartsessions/test/
 @modulekit/=node_modules/@rhinestone/modulekit/src/
 @erc7579/enumerablemap4337/=node_modules/@erc7579/enumerablemap4337/src/
 @compact-utils/=node_modules/@rhinestone/compact-utils/src/
@@ -25,7 +26,11 @@ flatbytes/=node_modules/@rhinestone/flatbytes/src/
 @flatbytes/=node_modules/@rhinestone/flatbytes/src/
 stringutils/=node_modules/stringutils/src/
 excessively-safe-call=node_modules/excessively-safe-call/src/
+@forge-std/=node_modules/forge-std/src/
 
 @interfaces/=src/interfaces/
 @core/=src/core/
 @lib/=src/lib/
+@test/=test/
+@contracts=src/
+@types=src/types/

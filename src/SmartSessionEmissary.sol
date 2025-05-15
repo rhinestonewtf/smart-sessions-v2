@@ -34,6 +34,7 @@ import {
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
 
+// TODO: Name is kind of wack
 contract SmartSessionEmissary is SmartSessionManager {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -60,6 +61,15 @@ contract SmartSessionEmissary is SmartSessionManager {
                                  VERIFY
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Validates executions for an account using it's enabled policies
+    /// @dev This function is called by a whitelisted source, which is assumed to verify that
+    /// executions are included in the hash
+    ///      that is passed to this function and signed by the session key
+    /// @param account The account for which the policies are being enforced
+    /// @param hash The hash of the user operation
+    /// @param emissaryData The data packed in the SmartSessionEmissary // TODO: rename this?
+    /// @param executions The execution data for the user operation
+    /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address account,
         bytes32 hash,
