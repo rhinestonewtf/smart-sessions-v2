@@ -4,10 +4,8 @@ pragma solidity ^0.8.25;
 // Types
 import { PermissionId } from "@smartsessions/DataTypes.sol";
 
-/**
- * @title NonceManager
- * @dev Abstract contract for managing nonces for smart sessions
- */
+/// @title NonceManager
+/// @dev Abstract contract for managing nonces for smart sessions
 abstract contract NonceManager {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -28,12 +26,10 @@ abstract contract NonceManager {
                                 GETTERS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Get the current nonce for a given permission ID and account
-     * @param permissionId The permission ID
-     * @param account The smart account address
-     * @return The current nonce value
-     */
+    /// @notice Get the current nonce for a given permission ID and account
+    /// @param permissionId The permission ID
+    /// @param account The smart account address
+    /// @return The current nonce value
     function getNonce(PermissionId permissionId, address account) external view returns (uint256) {
         return $signerNonce[permissionId][account];
     }
@@ -42,10 +38,8 @@ abstract contract NonceManager {
                                 SETTERS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Revoke the current enable signature by incrementing the nonce
-     * @param permissionId The permission ID to revoke the signature for
-     */
+    /// @notice Revoke the current enable signature by incrementing the nonce
+    /// @param permissionId The permission ID to revoke the signature for
     function revokeEnableSignature(PermissionId permissionId) external {
         // Increment the nonce and store the old value
         uint256 nonce = $signerNonce[permissionId][msg.sender]++;

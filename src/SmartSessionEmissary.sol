@@ -63,8 +63,8 @@ contract SmartSessionEmissary is SmartSessionManager {
 
     /// @notice Validates executions for an account using it's enabled policies
     /// @dev This function is called by a whitelisted source, which is assumed to verify that
-    /// executions are included in the hash
-    ///      that is passed to this function and signed by the session key
+    ///      executions are included in the hash that is passed to this function and signed by the
+    ///      session key
     /// @param account The account for which the policies are being enforced
     /// @param hash The hash of the user operation
     /// @param emissaryData The data packed in the SmartSessionEmissary // TODO: rename this?
@@ -144,16 +144,14 @@ contract SmartSessionEmissary is SmartSessionManager {
                                 ENFORCE
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Enforces policies and checks ISessionValidator signature for a session
-     * @dev This function is the core of policy enforcement in SmartSession
-     * @param permissionId The unique identifier for the permission set
-     * @param hash Message hash to be validated
-     * @param callData Execution data for the call
-     * @param decompressedSignature The decompressed signature for validation
-     * @param account The account for which policies are being enforced
-     * @return validSig True if the signature is valid, false otherwise
-     */
+    /// @notice Enforces policies and checks ISessionValidator signature for a session
+    /// @dev This function is the core of policy enforcement in SmartSession
+    /// @param permissionId The unique identifier for the permission set
+    /// @param hash Message hash to be validated
+    /// @param callData Execution data for the call
+    /// @param decompressedSignature The decompressed signature for validation
+    /// @param account The account for which policies are being enforced
+    /// @return validSig True if the signature is valid, false otherwise
     function _enforcePolicies(
         PermissionId permissionId,
         bytes32 hash,
@@ -236,14 +234,12 @@ contract SmartSessionEmissary is SmartSessionManager {
                                 ENABLE
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Enables policies for a session during user operation validation
-     * @dev This function handles the enabling of new policies and session validators
-     * @param enableData The EnableSession data containing the session to enable
-     * @param permissionId The unique identifier for the permission set
-     * @param account The account for which policies are being enabled
-     * @param mode The SmartSession mode being used
-     */
+    /// @notice Enables policies for a session during user operation validation
+    /// @dev This function handles the enabling of new policies and session validators
+    /// @param enableData The EnableSession data containing the session to enable
+    /// @param permissionId The unique identifier for the permission set
+    /// @param account The account for which policies are being enabled
+    /// @param mode The SmartSession mode being used
     function _enablePolicies(
         EnableSession memory enableData,
         PermissionId permissionId,

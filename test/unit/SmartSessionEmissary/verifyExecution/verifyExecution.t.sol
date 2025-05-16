@@ -79,14 +79,6 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         withWhitelistedThis
         withEnabledSudoSession
     {
-        // check if isActionPolicyEnabled
-        ActionId testActionId = ActionId.wrap(
-            smartSessionEmissary.getEnabledActions(instance.account, testPermissionId)[0]
-        );
-        smartSessionEmissary.isActionPolicyEnabled(
-            instance.account, testPermissionId, testActionId, address(sudoPolicy)
-        );
-
         // Arrange
         bytes memory emissaryData =
             packEmissaryData(SmartSessionMode.USE, testPermissionId, mockSignature);

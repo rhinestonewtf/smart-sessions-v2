@@ -52,8 +52,8 @@ interface ISmartSessionEmissary {
 
     /// @notice Validates executions for an account using it's enabled policies
     /// @dev This function is called by a whitelisted source, which is assumed to verify that
-    /// executions are included in the hash
-    ///      that is passed to this function and signed by the session key
+    ///      executions are included in the hash that is passed to this function and signed by the
+    ///      session key
     /// @param account The account for which the policies are being enforced
     /// @param hash The hash of the user operation
     /// @param emissaryData The data packed in the SmartSessionEmissary // TODO: rename this?

@@ -92,8 +92,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary, Ow
     }
 
     /// @notice Before disabling policies, we need to check if the session is enabled for the caller
-    /// and the
-    /// given permission
+    ///         and the given permission
     /// @param permissionId The unique identifier for the permission
     modifier disableWithPermissionId(PermissionId permissionId) {
         // Check if the session is enabled for the caller and the given permission before enabling
@@ -195,7 +194,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary, Ow
 
     /// @notice Enable multiple sessions with their associated policies
     /// @dev Since this function is only called during the ERC-4337 execution phase, it is safe to
-    /// use the registry
+    ///      use the registry
     /// @param sessions An array of Session structures to be enabled
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function enableSessions(Session[] calldata sessions)
@@ -208,7 +207,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary, Ow
     /// @notice Enable multiple sessions with their associated policies
     /// @param sessions An array of Session structures to be enabled
     /// @param useRegistry A flag to indicate whether to use a registry check for the policies and
-    /// session validator
+    ///        session validator
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function _enableSessions(
         Session[] calldata sessions,
