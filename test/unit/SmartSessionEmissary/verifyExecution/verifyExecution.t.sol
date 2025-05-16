@@ -10,6 +10,9 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
 
+// Libraries
+import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
+
 // Types
 import {
     Session,
@@ -18,14 +21,17 @@ import {
     FALLBACK_TARGET_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG,
     PermissionId,
-    SmartSessionMode
+    SmartSessionMode,
+    ActionId
 } from "@smartsessions/DataTypes.sol";
 import {
     ExecType,
     CallType,
     CALLTYPE_BATCH,
     CALLTYPE_SINGLE,
-    EXECTYPE_DEFAULT
+    EXECTYPE_DEFAULT,
+    ModeCode,
+    ModeLib
 } from "erc7579/lib/ModeLib.sol";
 
 contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_Test {
@@ -54,13 +60,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         // Setup mock execution data for a single call
         mockTargetSelector = bytes4(keccak256("testFunction()"));
         bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
-        mockExecData = abi.encodeWithSelector(
-            IERC7579Account.execute.selector,
-            CALLTYPE_SINGLE,
-            EXECTYPE_DEFAULT,
-            target,
-            value,
-            callData
+        ModeCode mode = ModeLib.encodeSimpleSingle();
+        mockExecData = abi.encodeCall(
+            IERC7579Account.execute, (mode, ExecutionLib.encodeSingle(target, value, callData))
         );
     }
 
@@ -77,6 +79,14 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         withWhitelistedThis
         withEnabledSudoSession
     {
+        // check if isActionPolicyEnabled
+        ActionId testActionId = ActionId.wrap(
+            smartSessionEmissary.getEnabledActions(instance.account, testPermissionId)[0]
+        );
+        smartSessionEmissary.isActionPolicyEnabled(
+            instance.account, testPermissionId, testActionId, address(sudoPolicy)
+        );
+
         // Arrange
         bytes memory emissaryData =
             packEmissaryData(SmartSessionMode.USE, testPermissionId, mockSignature);

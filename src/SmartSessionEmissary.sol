@@ -191,20 +191,22 @@ contract SmartSessionEmissary is SmartSessionManager {
                 $actionPolicies.actionPolicies.checkBatch7579Exec({
                     callData: callData,
                     permissionId: permissionId,
-                    minPolicies: 1 // minimum of one actionPolicy must be set.
-                 });
+                    minPolicies: 1, // minimum of one actionPolicy must be set.
+                    account: account
+                });
             }
             // DEFAULT EXEC & SINGLE CALL
             else if (callType == CALLTYPE_SINGLE) {
                 (address target, uint256 value, bytes calldata decodedCallData) =
-                    callData.decodeSingle();
+                    callData.decodeUserOpCallData().decodeSingle();
                 $actionPolicies.actionPolicies.checkSingle7579Exec({
                     permissionId: permissionId,
                     target: target,
                     value: value,
                     callData: decodedCallData,
-                    minPolicies: 1 // minimum of one actionPolicy must be set.
-                 });
+                    minPolicies: 1, // minimum of one actionPolicy must be set.
+                    account: account
+                });
             }
             // DelegateCalls are not supported by SmartSessionEmissary
             else {
