@@ -5,6 +5,9 @@ pragma solidity >=0.8.27;
 import { SudoPolicy } from "@smartsessions/external/policies/SudoPolicy.sol";
 import { YesSessionValidator } from "@smartsessions-test/mock/YesSessionValidator.sol";
 
+// Interfaces
+import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
+
 // Dependencies
 import { Test } from "@forge-std/Test.sol";
 import { RhinestoneModuleKit } from "@modulekit/ModuleKit.sol";
@@ -15,6 +18,16 @@ import { Solarray } from "solarray/Solarray.sol";
 // Types
 import { AccountInstance } from "@modulekit/ModuleKit.sol";
 import { ERC7739Data, PolicyData, ERC7739Context, EIP712Domain } from "@smartsessions/DataTypes.sol";
+import { Execution, ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
+import {
+    ExecType,
+    CallType,
+    CALLTYPE_BATCH,
+    CALLTYPE_SINGLE,
+    EXECTYPE_DEFAULT,
+    ModeCode,
+    ModeLib
+} from "erc7579/lib/ModeLib.sol";
 
 /// @notice An abstract base test contract that provides common test logic.
 abstract contract Base_Test is Test, RhinestoneModuleKit {
@@ -88,6 +101,7 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         PolicyData[] memory erc1271Policies
     )
         internal
+        pure
         returns (ERC7739Data memory)
     {
         ERC7739Context[] memory contents = new ERC7739Context[](1);
@@ -114,5 +128,38 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
                 erc7739Data.verifyingContract
             )
         );
+    }
+
+    function getCallData(
+        Execution[] calldata executions,
+        bytes calldata context
+    )
+        external
+        pure
+        returns (bytes memory callData)
+    {
+        if (executions.length == 0) {
+            revert("No executions provided");
+        }
+        ModeCode mode = ModeCode.wrap(bytes32(context[24:56]));
+        CallType callType;
+        assembly {
+            callType := mode
+        }
+        if (callType == CALLTYPE_SINGLE) {
+            callData = abi.encodeCall(
+                IERC7579Account.execute,
+                (
+                    mode,
+                    ExecutionLib.encodeSingle(
+                        executions[0].target, executions[0].value, executions[0].callData
+                    )
+                )
+            );
+        } else if (callType == CALLTYPE_BATCH) {
+            callData = abi.encodeCall(
+                IERC7579Account.execute, (mode, ExecutionLib.encodeBatch(executions))
+            );
+        }
     }
 }
