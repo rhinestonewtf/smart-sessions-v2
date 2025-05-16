@@ -25,8 +25,6 @@ import {
     FALLBACK_ACTIONID
 } from "@smartsessions/DataTypes.sol";
 
-import { console } from "@forge-std/console.sol";
-
 library PolicyLibV2 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -75,10 +73,6 @@ library PolicyLibV2 {
         // malloc for actionId
         ActionId actionId;
 
-        console.log("Target: ", target);
-        console.logBytes4(targetSig);
-        console.log("Value: ", value);
-
         // should the target of this call be the smart session module itself, we will use the
         // designated sentinel
         // actionId for smartsession calls. The user has to explicitly set the smartsession call
@@ -110,7 +104,6 @@ library PolicyLibV2 {
             // otherwise return the validation data
             else return vd;
         }
-        console.logBytes32(ActionId.unwrap(actionId));
         // call the fallback policy for either FALLBACK_ACTIONID or
         // FALLBACK_ACTIONID_SMARTSESSION_CALL
         // If no policies were configured for FALLBACK_ACTIONID or
@@ -176,11 +169,6 @@ library PolicyLibV2 {
         // Get the list of policies for the given permissionId and account
         address[] memory policies = $self.policyList[permissionId].values({ account: account });
         uint256 length = policies.length;
-
-        console.log("Policies length: ", length);
-        console.log("Min policies: ", minPolicies);
-        console.logBytes32(PermissionId.unwrap(permissionId));
-        console.log("Account: ", account);
 
         // Ensure the minimum number of policies is met.
         // Revert otherwise. Current minPolicies for userOp policies is 0.
