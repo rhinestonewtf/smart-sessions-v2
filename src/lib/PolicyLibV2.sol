@@ -32,9 +32,9 @@ library PolicyLibV2 {
 
     using ExecutionLib for *;
     using EnumerableSet for *;
-    using PolicyLib for *;
     using ValidationDataLib for *;
     using IdLib for *;
+    using PolicyLib for *;
     using PolicyLibV2 for *;
 
     /*//////////////////////////////////////////////////////////////

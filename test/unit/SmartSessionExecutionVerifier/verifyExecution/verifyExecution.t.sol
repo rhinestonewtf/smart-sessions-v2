@@ -86,6 +86,9 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
 
         // Setup testValidator as default validator
         testValidator = address(instance.defaultValidator);
+
+        // Deploy the account instance
+        instance.deployAccount();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -311,17 +314,18 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         Session memory session = createBasicSession();
         EnableSession memory enableData =
             makeMultiChainEnableData(testPermissionId, session, testValidator);
-
         bytes memory packedEnableData = encodeEnable(mockSignature, enableData);
 
-        // Act/Assert
+        // Expect revert due to invalid signature
         vm.expectRevert(
             abi.encodeWithSelector(
                 ISmartSessionExecutionVerifier.InvalidEnableSignature.selector,
                 instance.account,
-                HashLib.getAndVerifyDigest(enableData, instance.account, 0, SmartSessionMode.ENABLE)
+                0x7fc02d21cef7ac9ba6757ea092da35eec9a3cef99597565ff77fd40941457ad7
             )
         );
+
+        // Act
         smartSessionExecutionVerifier.verifyExecution(
             instance.account, TEST_HASH, packedEnableData, mockExecData
         );
@@ -335,24 +339,22 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         Session memory session = createBasicSession();
         EnableSession memory enableData =
             makeMultiChainEnableData(testPermissionId, session, testValidator);
-
         bytes memory packedEnableData = encodeEnable(mockSignature, enableData);
-        // First enable
+
+        // Act
         smartSessionExecutionVerifier.verifyExecution(
             instance.account, TEST_HASH, packedEnableData, mockExecData
         );
 
-        // Create a new enable data with same permissionId but different policies
+        // Create new enable data with same permissionId but different policies
         Session memory updatedSession = createBasicSession();
         // Modify the action data to be different
         updatedSession.actions[0].actionTarget = address(0x123);
-        // Recalculate the permission ID
-        testPermissionId = smartSessionExecutionVerifier.getPermissionId(updatedSession);
 
         EnableSession memory updateEnableData =
             makeMultiChainEnableData(testPermissionId, updatedSession, testValidator);
 
-        bytes memory packedUpdateData = abi.encode(updateEnableData, mockSignature);
+        bytes memory packedUpdateData = encodeEnable(mockSignature, updateEnableData);
 
         // Act
         bytes4 result = smartSessionExecutionVerifier.verifyExecution(

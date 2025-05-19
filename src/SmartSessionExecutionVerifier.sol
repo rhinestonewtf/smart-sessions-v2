@@ -16,11 +16,10 @@ import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol"
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
 import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
-import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
 import { SignerLib } from "@smartsessions/lib/SignerLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
-import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
+import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
 
 // Types
 import {
@@ -46,10 +45,9 @@ contract SmartSessionExecutionVerifier is SmartSessionManager {
     using EnumerableSet for *;
     using ExecutionLib for *;
     using PolicyLibV2 for *;
-    using PolicyLib for *;
     using SignerLib for *;
     using HashLib for *;
-    using ConfigLib for *;
+    using ConfigLibV2 for *;
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -272,7 +270,8 @@ contract SmartSessionExecutionVerifier is SmartSessionManager {
         $actionPolicies.enable({
             permissionId: permissionId,
             actionPolicyDatas: enableData.sessionToEnable.actions,
-            useRegistry: useRegistry
+            useRegistry: useRegistry,
+            account: account
         });
 
         // Enable mode can involve enabling ISessionValidator (new Permission)
@@ -286,11 +285,12 @@ contract SmartSessionExecutionVerifier is SmartSessionManager {
                 permissionId: permissionId,
                 sessionValidator: enableData.sessionToEnable.sessionValidator,
                 sessionValidatorConfig: enableData.sessionToEnable.sessionValidatorInitData,
-                useRegistry: useRegistry
+                useRegistry: useRegistry,
+                account: account
             });
         }
 
         // Mark the session as enabled
-        $enabledSessions.add(msg.sender, PermissionId.unwrap(permissionId));
+        $enabledSessions.add(account, PermissionId.unwrap(permissionId));
     }
 }

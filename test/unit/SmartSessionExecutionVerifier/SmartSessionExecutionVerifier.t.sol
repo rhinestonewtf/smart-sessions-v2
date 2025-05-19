@@ -56,7 +56,7 @@ contract SmartSessionExecutionVerifier_Unit_Test is Base_Test {
             permissionId: permissionId,
             account: instance.account,
             data: session,
-            mode: SmartSessionMode.UNSAFE_ENABLE
+            mode: SmartSessionMode.ENABLE
         });
 
         ChainDigest[] memory chainDigests = IntegrationEncodeLib.encodeHashesAndChainIds(
@@ -68,7 +68,7 @@ contract SmartSessionExecutionVerifier_Unit_Test is Base_Test {
             chainDigestIndex: 1,
             hashesAndChainIds: chainDigests,
             sessionToEnable: session,
-            permissionEnableSig: abi.encodePacked(validator)
+            permissionEnableSig: abi.encodePacked(validator, hex"42069420")
         });
     }
 }
