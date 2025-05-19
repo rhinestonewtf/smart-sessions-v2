@@ -6,7 +6,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 
 // Interfaces
-import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
+import { ISmartSessionExecutionVerifier } from "@interfaces/ISmartSessionExecutionVerifier.sol";
 import { IERC1271, EIP1271_MAGIC_VALUE } from "@modulekit/module-bases/interfaces/IERC1271.sol";
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
 
@@ -35,7 +35,7 @@ import {
 } from "erc7579/lib/ModeLib.sol";
 
 // TODO: Name is kind of wack
-contract SmartSessionEmissary is SmartSessionManager {
+contract SmartSessionExecutionVerifier is SmartSessionManager {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -67,13 +67,13 @@ contract SmartSessionEmissary is SmartSessionManager {
     ///      session key
     /// @param account The account for which the policies are being enforced
     /// @param hash The hash of the user operation
-    /// @param emissaryData The data packed in the SmartSessionEmissary // TODO: rename this?
+    /// @param data Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address account,
         bytes32 hash,
-        bytes calldata emissaryData,
+        bytes calldata data,
         bytes calldata executions
     )
         external
@@ -83,9 +83,9 @@ contract SmartSessionEmissary is SmartSessionManager {
         // Init validSig
         bool validSig;
 
-        // unpacking data packed in emissaryData
+        // unpacking data packed in data
         (SmartSessionMode mode, PermissionId permissionId, bytes calldata packedSig) =
-            emissaryData.unpackMode();
+            data.unpackMode();
 
         // If the SmartSession.USE mode was selected, no further policies have to be enabled.
         // We can go straight to userOp validation
@@ -100,7 +100,7 @@ contract SmartSessionEmissary is SmartSessionManager {
                 account: account
             });
         }
-        // If the SmartSession.ENABLE mode was selected, the emissaryData will contain the
+        // If the SmartSession.ENABLE mode was selected, the data will contain the
         // EnableSession data
         // This data will be used to enable policies and signer for the session
         // The signature of the user on the EnableSession data will be checked
@@ -206,7 +206,7 @@ contract SmartSessionEmissary is SmartSessionManager {
                     account: account
                 });
             }
-            // DelegateCalls are not supported by SmartSessionEmissary
+            // DelegateCalls are not supported by SmartSessionExecutionVerifier
             else {
                 revert UnsupportedExecutionType();
             }

@@ -4,6 +4,8 @@ pragma solidity >=0.8.27;
 // Contracts
 import { SudoPolicy } from "@smartsessions/external/policies/SudoPolicy.sol";
 import { YesSessionValidator } from "@smartsessions-test/mock/YesSessionValidator.sol";
+import { NoSessionValidator } from "@test/mock/NoSessionValidator.sol";
+import { NoValidator } from "@test/mock/NoValidator.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
@@ -60,6 +62,12 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
     // The default session validator contract instance.
     YesSessionValidator internal yesSessionValidator;
 
+    // The default invalid session validator contract instance.
+    NoSessionValidator internal noSessionValidator;
+
+    // The default invalid validator contract instance.
+    NoValidator internal noValidator;
+
     /*//////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
@@ -79,6 +87,10 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         sudoPolicy = new SudoPolicy();
         // Deploy the YesSessionValidator contract.
         yesSessionValidator = new YesSessionValidator();
+        // Deploy the NoSessionValidator contract.
+        noSessionValidator = new NoSessionValidator();
+        // Deploy the NoValidator contract.
+        noValidator = new NoValidator();
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -14,7 +14,7 @@ import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 
 // Interfaces
-import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
+import { ISmartSessionExecutionVerifier } from "@interfaces/ISmartSessionExecutionVerifier.sol";
 import { ISmartSession } from "@smartsessions/ISmartSession.sol";
 
 // Types
@@ -31,7 +31,7 @@ import {
     Policy
 } from "@smartsessions/DataTypes.sol";
 
-abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary, Ownable {
+abstract contract SmartSessionManager is NonceManager, ISmartSessionExecutionVerifier, Ownable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/

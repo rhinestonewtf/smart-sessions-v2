@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 // Types
 import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
 
-interface ISmartSessionEmissary {
+interface ISmartSessionExecutionVerifier {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -56,13 +56,13 @@ interface ISmartSessionEmissary {
     ///      session key
     /// @param account The account for which the policies are being enforced
     /// @param hash The hash of the user operation
-    /// @param emissaryData The data packed in the SmartSessionEmissary // TODO: rename this?
+    /// @param data Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address account,
         bytes32 hash,
-        bytes calldata emissaryData,
+        bytes calldata data,
         bytes calldata executions
     )
         external
