@@ -1,0 +1,19 @@
+disableActionPolicies.t.sol
+└── when permission is not enabled
+│   └── it should revert with PermissionIdNotEnabled
+└── when permission is enabled
+    ├── when action ID is not enabled for the permission
+    │   └── it should complete without changes
+    └── when action ID is enabled for the permission
+        ├── when policies array is empty
+        │   └── it should complete without changes
+        ├── when policies array contains invalid policies
+        │   └── it should revert or skip invalid policies
+        └── when policies array contains valid policies
+            ├── when policies are currently enabled for action
+            │   ├── when removing policies leaves some policies remaining
+            │   │   └── it should remove specified policies and emit events
+            │   └── when removing policies leaves no policies remaining
+            │       └── it should remove all policies, remove action ID, emit ActionIdDisabled
+            └── when policies are not currently enabled for action
+                └── it should complete without changes

@@ -1,0 +1,17 @@
+enableActionPolicies.t.sol
+└── when permission is not enabled
+│   └── it should revert with PermissionIdNotEnabled
+└── when permission is enabled
+    ├── when actionPolicies array is empty
+    │   └── it should complete without changes
+    └── when actionPolicies array is not empty
+        ├── when policy is not registered in registry
+        │   └── it should revert with PolicyNotRegistered
+        └── when policy is registered in registry
+            ├── when action target is valid
+            │   ├── when action already has policies
+            │   │   └── it should add new policies to existing action and emit events
+            │   └── when action has no existing policies
+            │       └── it should enable new action with policies and emit events
+            └── when action target is invalid (e.g., address(0))
+               └── it should revert

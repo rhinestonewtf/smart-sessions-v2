@@ -50,7 +50,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionExecutionVer
     /// @notice Mapping of user address => set of enabled PermissionIds
     EnumerableSet.Bytes32Set internal $enabledSessions;
     /// @notice Mapping of whitelisted sources
-    mapping(address source => bool isWhitelisted) internal $whitelistedSources;
+    mapping(address source => bool isWhitelisted) public $whitelistedSources;
     /// @notice Mapping of action policies organized by action IDs and permission IDs
     EnumerableActionPolicy internal $actionPolicies;
     /// @notice Mapping of session validators organized by permission IDs and smart account
@@ -76,8 +76,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionExecutionVer
     /// given permission, after enabling policies, we need to check if the session is still enabled
     /// for the caller and
     /// the given permission. This is to ensure that the session is still enabled after the
-    /// operation and no
-    /// re-entrancy is possible
+    /// operation and no re-entrancy is possible
     /// @param permissionId The unique identifier for the permission
     modifier enableWithPermissionId(PermissionId permissionId) {
         // Check if the session is enabled for the caller and the given permission before enabling

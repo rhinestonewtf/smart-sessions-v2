@@ -1,0 +1,14 @@
+setWhitelistedSource.t.sol
+└── when caller is not owner
+│   └── it should revert with OwnableUnauthorizedAccount
+└── when caller is owner
+    ├── when whitelisting a source (isWhitelisted = true)
+    │   ├── when source is not currently whitelisted
+    │   │   └── it should whitelist the source and emit WhitelistStatusUpdated
+    │   └── when source is already whitelisted
+    │       └── it should keep the source whitelisted and emit WhitelistStatusUpdated
+    └── when removing a source from whitelist (isWhitelisted = false)
+        ├── when source is currently whitelisted
+        │   └── it should remove the source from whitelist and emit WhitelistStatusUpdated
+        └── when source is not currently whitelisted
+            └── it should keep the source not whitelisted and emit WhitelistStatusUpdated

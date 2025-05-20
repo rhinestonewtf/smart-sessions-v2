@@ -6,6 +6,7 @@ import { SudoPolicy } from "@smartsessions/external/policies/SudoPolicy.sol";
 import { YesSessionValidator } from "@smartsessions-test/mock/YesSessionValidator.sol";
 import { NoSessionValidator } from "@test/mock/NoSessionValidator.sol";
 import { NoValidator } from "@test/mock/NoValidator.sol";
+import { NoPolicy } from "@smartsessions-test/mock/NoPolicy.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
@@ -68,6 +69,9 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
     // The default invalid validator contract instance.
     NoValidator internal noValidator;
 
+    // The default invalid policy contract instance.
+    NoPolicy internal noPolicy;
+
     /*//////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
@@ -91,6 +95,8 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         noSessionValidator = new NoSessionValidator();
         // Deploy the NoValidator contract.
         noValidator = new NoValidator();
+        // Deploy the NoPolicy contract.
+        noPolicy = new NoPolicy();
     }
 
     /*//////////////////////////////////////////////////////////////

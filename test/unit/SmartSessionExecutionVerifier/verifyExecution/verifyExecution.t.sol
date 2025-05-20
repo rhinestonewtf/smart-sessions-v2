@@ -52,6 +52,7 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
 
     using ModuleKitHelpers for *;
     using LibZip for bytes;
+    using HashLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -321,7 +322,7 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
             abi.encodeWithSelector(
                 ISmartSessionExecutionVerifier.InvalidEnableSignature.selector,
                 instance.account,
-                0x7fc02d21cef7ac9ba6757ea092da35eec9a3cef99597565ff77fd40941457ad7
+                enableData.hashesAndChainIds.multichainDigest()
             )
         );
 

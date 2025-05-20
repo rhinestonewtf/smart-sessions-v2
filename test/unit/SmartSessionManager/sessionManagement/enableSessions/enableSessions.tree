@@ -1,0 +1,22 @@
+enableSessions.t.sol
+└── when sessions array is empty
+│   └── it should revert with InvalidData
+└── when sessions array is not empty
+    ├── when any session has invalid data
+    │   ├── when session validator is address(0)
+    │   │   └── it should revert with InvalidSessionValidator
+    │   ├── when action policies are invalid
+    │   │   └── it should revert with PolicyNotRegistered or InvalidTarget
+    │   └── when session salt is duplicate
+    │       └── it should handle gracefully (may overwrite or revert)
+    ├── when all sessions have valid data
+    │   ├── when session validator is not already set
+    │   │   └── it should enable new sessions with validators and emit SessionCreated
+    │   ├── when session validator is already set
+    │   │   └── it should enable sessions without overwriting validator and emit SessionCreated
+    │   ├── when enabling single session
+    │   │   └── it should enable session and return correct permissionId
+    │   └── when enabling multiple sessions
+    │       └── it should enable all sessions and return correct permissionIds array
+    └── when registry is disabled (useRegistry = false)
+        └── it should enable sessions without registry check
