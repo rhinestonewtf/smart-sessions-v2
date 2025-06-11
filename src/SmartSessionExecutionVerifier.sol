@@ -33,7 +33,7 @@ import {
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
 
-// TODO: Name is kind of wack
+//  Name is kind of wack
 contract SmartSessionExecutionVerifier is SmartSessionManager {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES

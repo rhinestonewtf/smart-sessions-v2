@@ -4,8 +4,8 @@ pragma solidity ^0.8.25;
 // Types
 import { PermissionId } from "@smartsessions/DataTypes.sol";
 
-/// @title NonceManager
-/// @dev Abstract contract for managing nonces for smart sessions
+/// @title Nonce Manager
+/// @dev Abstract contract for managing nonces for smart sessions and emissary configs
 abstract contract NonceManager {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -21,6 +21,9 @@ abstract contract NonceManager {
     /// @dev Mapping to store nonces for each permission ID and smart account
     mapping(PermissionId permissionId => mapping(address smartAccount => uint256 nonce)) internal
         $signerNonce;
+
+    /// @dev Mapping to store nonces for each sponsor and lockTag
+    mapping(address sponsor => mapping(bytes12 lockTag => uint256 nonce)) internal $emissaryNonce;
 
     /*//////////////////////////////////////////////////////////////
                                 GETTERS
