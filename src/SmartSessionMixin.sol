@@ -29,8 +29,13 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @notice Maps lockTag to enabled permissionIds for verifyClaim lookups
     /// @dev Bridge storage connecting emissary lockTags to SmartSession permissionIds
     mapping(
-        address sponsor
-            => mapping(bytes12 lockTag => mapping(PermissionId permissionId => bool enabled))
+        address sender
+            => mapping(
+                address sponsor
+                    => mapping(
+                        bytes12 lockTag => mapping(PermissionId permissionId => bool enabled)
+                    )
+            )
     ) public smartSessionConfig;
 
     /*//////////////////////////////////////////////////////////////
