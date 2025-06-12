@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IEmissary } from "@compact-utils/interfaces/IEmissary.sol";
+import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
 
 // Types
 import { SmartSessionEmissaryConfig, EmissaryConfig, EmissaryEnable } from "@types/DataTypes.sol";
@@ -37,6 +38,18 @@ interface ISmartSessionEmissary is IEmissary {
     /// @notice Thrown when the enable session signature is not valid
     error InvalidEnableSignature(address account, bytes32 hash);
 
+    /// @notice Thrown when the Emissary enable data is not valid
+    error InvalidEmissaryEnableData();
+
+    /// @notice Thrown when the Emissary configuration is not valid
+    error InvalidEmissaryConfig();
+
+    /// @notice Thrown when the Emissary enable data allocator signature is not valid
+    error InvalidAllocatorSignature();
+
+    /// @notice Thrown when the Emissary enable data user signature is not valid
+    error InvalidUserSignature();
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -49,6 +62,15 @@ interface ISmartSessionEmissary is IEmissary {
 
     /// @notice Emitted when an address whitelist status is updated
     event WhitelistStatusUpdated(address source, bool status);
+
+    /// @notice Emitted when a new validator configuration is successfully set for an account and
+    ///         lock tag.
+    /// @param account The sponsor account whose configuration was updated.
+    /// @param validator The stateless validator address associated with the configuration.
+    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
+    event EmissaryConfigUpdated(
+        address indexed account, IStatelessValidator indexed validator, bytes12 indexed lockTag
+    );
 
     /*//////////////////////////////////////////////////////////////
                                  CONFIG

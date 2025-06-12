@@ -20,6 +20,8 @@ ExcessivelySafeCall/=node_modules/excessively-safe-call/src/
 @modulekit/=node_modules/@rhinestone/modulekit/src/
 @erc7579/enumerablemap4337/=node_modules/@erc7579/enumerablemap4337/src/
 @compact-utils/=node_modules/@rhinestone/compact-utils/src/
+@the-compact/=node_modules/@uniswap/the-compact/src/
+@solady=node_modules/solady/src/
 
 erc7579/=node_modules/erc7579/src/
 flatbytes/=node_modules/@rhinestone/flatbytes/src/

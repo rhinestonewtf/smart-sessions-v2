@@ -2,8 +2,8 @@
 pragma solidity ^0.8.28;
 
 // Contracts
-import { EmissaryBase } from "./EmissaryBase.sol";
-import { SmartSessionMixin } from "./SmartSessionMixin.sol";
+import { EmissaryBase } from "@core/EmissaryBase.sol";
+import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
 import { CompactEIP712 } from "@compact-utils/common/CompactEIP712.sol";
 
 // Interfaces
@@ -15,7 +15,7 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
-///         SmartSessions, traditional stateless validators, and ECDSA/Passkey configurations.
+///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
 contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -87,6 +87,9 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Returns the EIP-712 domain name and version
+    /// @dev Used in the EIP-712 signature hashing process.
+    /// @return name The EIP-712 domain name
+    /// @return version The EIP-712 domain version
     function _domainNameAndVersion()
         internal
         view
@@ -96,5 +99,13 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
     {
         name = "SmartSessionEmissary";
         version = "0.0.1";
+    }
+
+    /// @notice Returns the EIP-712 domain separator for this contract
+    /// @dev Calculates the domain separator based on the domain name, version, chain ID, and
+    ///      contract address.
+    /// @return The EIP-712 domain separator.
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
+        return _domainSeparator();
     }
 }
