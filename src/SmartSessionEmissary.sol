@@ -81,4 +81,20 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
         // Mode-based dispatch for execution verification
         return bytes4(0xFFFFFFFF);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                  712
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Returns the EIP-712 domain name and version
+    function _domainNameAndVersion()
+        internal
+        view
+        virtual
+        override
+        returns (string memory name, string memory version)
+    {
+        name = "SmartSessionEmissary";
+        version = "0.0.1";
+    }
 }

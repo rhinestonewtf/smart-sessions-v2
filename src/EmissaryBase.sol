@@ -147,20 +147,4 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSes
         virtual
         returns (bytes4)
     { }
-
-    /*//////////////////////////////////////////////////////////////
-                                  712
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Returns the EIP-712 domain name and version
-    function _domainNameAndVersion()
-        internal
-        view
-        virtual
-        override
-        returns (string memory name, string memory version)
-    {
-        name = "SmartSessionEmissary";
-        version = "0.0.1";
-    }
 }
