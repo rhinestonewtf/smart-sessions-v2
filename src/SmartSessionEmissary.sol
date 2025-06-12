@@ -35,8 +35,8 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
 
     /// @notice Verifies claims with mode-based dispatch to appropriate verification method
     /// @param sponsor The sponsor account associated with the claim
-    /// @param digest The hash of the claim being verified (for traditional modes)
-    /// @param claimHash The claim hash being verified (for SmartSession mode)
+    /// @param digest The digest of the claim hash
+    /// @param claimHash The hash of the claim to be verified
     /// @param emissaryData Data containing mode byte and mode-specific verification data
     /// @param lockTag The lock tag associated with the claim
     /// @return The selector if valid, otherwise 0xFFFFFFFF
@@ -52,9 +52,29 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
         returns (bytes4)
     {
         // ERC-7739 support detection
-        // Prevent recursive session authorization
+        if (digest == 0x7739773977397739773977397739773977397739773977397739773977397739) {
+            return bytes4(0x77390001);
+        }
+
         // Extract mode from first byte of emissaryData
-        // Mode-based dispatch
+        uint8 mode = uint8(emissaryData[0]);
+
+        // Mode-based dispatch for claim verification
+        if (mode == 0) {
+            // Stateless Validator mode
+            return _verifyClaimStatelessValidator(sponsor, digest, emissaryData, lockTag);
+        } else if (mode == 1) {
+            // ECDSA mode
+            return _verifyClaimECDSA(sponsor, digest, emissaryData, lockTag);
+        } else if (mode == 2) {
+            // Passkey mode
+            return _verifyClaimPasskey(sponsor, digest, emissaryData, lockTag);
+        } else if (mode == 3) {
+            // SmartSession mode
+            return _verifyClaimSmartSession(sponsor, claimHash, emissaryData, lockTag);
+        }
+
+        // Default case for unsupported modes
         return bytes4(0xFFFFFFFF);
     }
 

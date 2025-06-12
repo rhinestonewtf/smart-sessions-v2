@@ -135,33 +135,13 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSes
                                  CLAIM
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Verifies claims using basic methods (ECDSA, Passkey, Stateless validators)
-    /// @param sponsor The sponsor account associated with the claim
-    /// @param digest The hash of the claim being verified
-    /// @param emissaryData Data containing the mode, configId, and signature data
-    /// @param lockTag The lock tag associated with the configuration
-    /// @return The selector if valid, otherwise 0xFFFFFFFF
-    function _verifyClaimBase(
-        address sponsor,
-        bytes32 digest,
-        bytes calldata emissaryData,
-        bytes12 lockTag
-    )
-        internal
-        view
-        virtual
-        returns (bytes4)
-    {
-        return _verifyClaimWithStatelessValidator(sponsor, digest, emissaryData, lockTag);
-    }
-
     /// @notice Verifies claims using Stateless validator configuration
     /// @param sponsor The sponsor account associated with the claim
     /// @param digest The hash of the claim being verified
     /// @param emissaryData Data containing the mode, configId, and signature data
     /// @param lockTag The lock tag associated with the configuration
     /// @return The selector if valid, otherwise 0xFFFFFFFF
-    function _verifyClaimWithStatelessValidator(
+    function _verifyClaimStatelessValidator(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
@@ -190,6 +170,28 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSes
             ? this.verifyClaim.selector
             : bytes4(0xFFFFFFFF);
     }
+
+    function _verifyClaimECDSA(
+        address sponsor,
+        bytes32 digest,
+        bytes calldata emissaryData,
+        bytes12 lockTag
+    )
+        internal
+        view
+        returns (bytes4)
+    { }
+
+    function _verifyClaimPasskey(
+        address sponsor,
+        bytes32 digest,
+        bytes calldata emissaryData,
+        bytes12 lockTag
+    )
+        internal
+        view
+        returns (bytes4)
+    { }
 
     /*//////////////////////////////////////////////////////////////
                                EXECUTION

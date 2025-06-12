@@ -28,7 +28,8 @@ import {
     EnumerableActionPolicy,
     PolicyType,
     EMPTY_PERMISSIONID,
-    Policy
+    Policy,
+    EnumerableERC7739Config
 } from "@smartsessions/DataTypes.sol";
 
 abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
@@ -53,133 +54,18 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     mapping(address source => bool isWhitelisted) public $whitelistedSources;
     /// @notice Mapping of action policies organized by action IDs and permission IDs
     EnumerableActionPolicy internal $actionPolicies;
+    /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
+    Policy internal $erc1271Policies;
+    /// @notice Mapping of enabled erc7739 configurations per user address
+    EnumerableERC7739Config internal $enabledERC7739;
     /// @notice Mapping of session validators organized by permission IDs and smart account
     /// addresses
     mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf)) internal
         $sessionValidators;
 
     /*//////////////////////////////////////////////////////////////
-                               MODIFIERS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Before enabling policies, we need to check if the session is enabled for the caller
-    /// and the
-    /// given permission, after enabling policies, we need to check if the session is still enabled
-    /// for the caller and
-    /// the given permission. This is to ensure that the session is still enabled after the
-    /// operation and no re-entrancy is possible
-    /// @param permissionId The unique identifier for the permission
-    modifier enableWithPermissionId(PermissionId permissionId) {
-        // Check if the session is enabled for the caller and the given permission before enabling
-        // policies on it
-        $enabledSessions.requirePermissionIdEnabled(permissionId);
-        _;
-        // Check if the session is enabled for the caller and the given permission after enabling
-        // policies on it
-        // this is to ensure that the session is still enabled after the operation and no
-        // re-entrancy is possible
-        $enabledSessions.requirePermissionIdEnabled(permissionId);
-    }
-
-    /// @notice Before disabling policies, we need to check if the session is enabled for the caller
-    ///         and the given permission
-    /// @param permissionId The unique identifier for the permission
-    modifier disableWithPermissionId(PermissionId permissionId) {
-        // Check if the session is enabled for the caller and the given permission before enabling
-        // policies on it
-        $enabledSessions.requirePermissionIdEnabled(permissionId);
-        _;
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                           ACTION POLICY MANAGEMENT
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Enable action policies for a specific permission
-    /// @param permissionId The unique identifier for the permission
-    /// @param actionPolicies An array of ActionData structures containing action policy information
-    function enableActionPolicies(
-        PermissionId permissionId,
-        ActionData[] memory actionPolicies
-    )
-        public
-        enableWithPermissionId(permissionId)
-    {
-        // Enable the action policies
-        $actionPolicies.enable({
-            permissionId: permissionId,
-            actionPolicyDatas: actionPolicies,
-            useRegistry: true
-        });
-    }
-
-    /// @notice Disable specific action policies for a given permission and action ID
-    /// @param permissionId The unique identifier for the permission
-    /// @param actionId The specific action identifier
-    function disableActionId(
-        PermissionId permissionId,
-        ActionId actionId
-    )
-        public
-        disableWithPermissionId(permissionId)
-    {
-        // Disable all action policies for the given action ID
-        // No need to emit events here, as unlike with 7739contents and 1271 policies,
-        // here disabling the actionId means all action policies are also disabled
-        $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(msg.sender);
-
-        // remove action Id from enabledActionIds
-        $actionPolicies.enabledActionIds[permissionId].remove(msg.sender, ActionId.unwrap(actionId));
-        emit ISmartSession.ActionIdDisabled(permissionId, actionId, msg.sender);
-    }
-
-    /// @notice Disable action id for a given permission and action ID
-    /// @param permissionId The unique identifier for the permission
-    /// @param actionId The specific action identifier
-    /// @param policies An array of policy addresses to be disabled
-    function disableActionPolicies(
-        PermissionId permissionId,
-        ActionId actionId,
-        address[] calldata policies
-    )
-        public
-        disableWithPermissionId(permissionId)
-    {
-        // Disable the specified action policies for the given action ID
-        $actionPolicies.actionPolicies[actionId].disable({
-            policyType: PolicyType.ACTION,
-            smartAccount: msg.sender,
-            permissionId: permissionId,
-            policies: policies
-        });
-
-        // remove the actionId from the enabledActionIds if no policies are left
-        if (
-            $actionPolicies.actionPolicies[actionId].policyList[permissionId].length(msg.sender)
-                == 0
-        ) {
-            $actionPolicies.enabledActionIds[permissionId].remove(
-                msg.sender, ActionId.unwrap(actionId)
-            );
-            emit ISmartSession.ActionIdDisabled(permissionId, actionId, msg.sender);
-        }
-    }
-
-    /*//////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Enable multiple sessions with their associated policies
-    /// @dev Since this function is only called during the ERC-4337 execution phase, it is safe to
-    ///      use the registry
-    /// @param sessions An array of Session structures to be enabled
-    /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
-    function enableSessions(Session[] calldata sessions)
-        external
-        returns (PermissionId[] memory permissionIds)
-    {
-        return _enableSessions(sessions, true);
-    }
 
     /// @notice Enable multiple sessions with their associated policies
     /// @param sessions An array of Session structures to be enabled
@@ -228,7 +114,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     /// @notice Remove a session and all its associated policies
     /// @param permissionId The unique identifier for the session to be removed
-    function removeSession(PermissionId permissionId) public {
+    function _removeSession(PermissionId permissionId) internal {
         if (permissionId == EMPTY_PERMISSIONID) revert InvalidSession(permissionId);
 
         // Remove all Action policies for this session
