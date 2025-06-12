@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 // Contracts
 import { EmissaryBase } from "./EmissaryBase.sol";
 import { SmartSessionMixin } from "./SmartSessionMixin.sol";
+import { CompactEIP712 } from "@compact-utils/common/CompactEIP712.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -15,7 +16,7 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
 ///         SmartSessions, traditional stateless validators, and ECDSA/Passkey configurations.
-contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, ISmartSessionEmissary {
+contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -26,8 +27,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, ISmartSessionE
 
     /// @notice Initializes the SmartSessionEmissary contract
     /// @param compact The address of The Compact contract
-    /// @param owner The address of the contract owner
-    constructor(address compact, address owner) EmissaryBase(compact) SmartSessionMixin(owner) { }
+    constructor(address compact) CompactEIP712(compact) { }
 
     /*//////////////////////////////////////////////////////////////
                                  CLAIM
@@ -49,7 +49,6 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, ISmartSessionE
     )
         external
         view
-        override
         returns (bytes4)
     {
         // ERC-7739 support detection
@@ -76,8 +75,6 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, ISmartSessionE
         bytes calldata executions
     )
         external
-        override
-        onlyWhitelistedSource
         returns (bytes4)
     {
         // Extract mode from first byte

@@ -144,7 +144,6 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     )
         external
         virtual
-        onlyWhitelistedSource
         returns (bytes4)
     {
         // Validate mode is for SmartSession execution

@@ -23,6 +23,7 @@ ExcessivelySafeCall/=node_modules/excessively-safe-call/src/
 
 erc7579/=node_modules/erc7579/src/
 flatbytes/=node_modules/@rhinestone/flatbytes/src/
+the-compact/=node_modules/@uniswap/the-compact/src/
 @flatbytes/=node_modules/@rhinestone/flatbytes/src/
 stringutils/=node_modules/stringutils/src/
 excessively-safe-call=node_modules/excessively-safe-call/src/

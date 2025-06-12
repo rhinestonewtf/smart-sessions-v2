@@ -3,19 +3,23 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { NonceManager } from "@core/NonceManager.sol";
+import { EIP712 } from "solady/utils/EIP712.sol";
+import { CompactEIP712 } from "@compact-utils/common/CompactEIP712.sol";
 
 // Interfaces
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
+import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 
 // Libraries
+import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 
 // Types
-import { EmissaryConfig, EmissaryEnable } from "@interfaces/ISmartSessionEmissary.sol";
+import { EmissaryConfig, EmissaryEnable } from "@types/DataTypes.sol";
 
 /// @title EmissaryBase
 /// @notice Base emissary contract providing basic validator functionality (ECDSA, Passkey,
 ///         Stateless validators)
-abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712 {
+abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -42,12 +46,6 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712 {
     mapping(
         address sponsor => mapping(uint8 configId => mapping(bytes12 lockTag => Compressed.Bytes))
     ) public ecdsaPasskeyConfig;
-
-    /*//////////////////////////////////////////////////////////////
-                               CONSTRUCTOR
-    //////////////////////////////////////////////////////////////*/
-
-    constructor(address compact) CompactEIP712(compact) { }
 
     /*//////////////////////////////////////////////////////////////
                                  CONFIG
@@ -147,7 +145,6 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712 {
     )
         external
         virtual
-        onlyWhitelistedSource
         returns (bytes4)
     { }
 

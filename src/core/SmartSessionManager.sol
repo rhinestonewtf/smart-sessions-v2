@@ -14,7 +14,7 @@ import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 
 // Interfaces
-import { ISmartSessionExecutionVerifier } from "@interfaces/ISmartSessionExecutionVerifier.sol";
+import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import { ISmartSession } from "@smartsessions/ISmartSession.sol";
 
 // Types
@@ -31,7 +31,7 @@ import {
     Policy
 } from "@smartsessions/DataTypes.sol";
 
-abstract contract SmartSessionManager is NonceManager, ISmartSessionExecutionVerifier, Ownable {
+abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -62,15 +62,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionExecutionVer
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Only allow calls from whitelisted sources
-    modifier onlyWhitelistedSource() {
-        // Check if the sender is a whitelisted source
-        if (!$whitelistedSources[msg.sender]) {
-            revert UnauthorizedSource();
-        }
-        _;
-    }
-
     /// @notice Before enabling policies, we need to check if the session is enabled for the caller
     /// and the
     /// given permission, after enabling policies, we need to check if the session is still enabled
@@ -98,19 +89,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionExecutionVer
         // policies on it
         $enabledSessions.requirePermissionIdEnabled(permissionId);
         _;
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                 ADMIN
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Set the whitelisted status for an address
-    /// @param source The address to be whitelisted
-    /// @param isWhitelisted The whitelisted status to be set
-    function setWhitelistedSource(address source, bool isWhitelisted) external onlyOwner {
-        // Set the whitelisted status for the address
-        $whitelistedSources[source] = isWhitelisted;
-        emit WhitelistStatusUpdated(source, isWhitelisted);
     }
 
     /*//////////////////////////////////////////////////////////////

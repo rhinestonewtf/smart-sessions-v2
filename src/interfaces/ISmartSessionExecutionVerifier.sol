@@ -45,35 +45,4 @@ interface ISmartSessionExecutionVerifier {
 
     /// @notice Emitted when an address whitelist status is updated
     event WhitelistStatusUpdated(address source, bool status);
-
-    /*//////////////////////////////////////////////////////////////
-                                 VERIFY
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Validates executions for an account using it's enabled policies
-    /// @dev This function is called by a whitelisted source, which is assumed to verify that
-    ///      executions are included in the hash that is passed to this function and signed by the
-    ///      session key
-    /// @param account The account for which the policies are being enforced
-    /// @param hash The hash of the user operation
-    /// @param data Packed smart session data including mode, permissionId and signature
-    /// @param executions The execution data for the user operation
-    /// @return bytes4 The function selector on success, or a specific failure code otherwise
-    function verifyExecution(
-        address account,
-        bytes32 hash,
-        bytes calldata data,
-        bytes calldata executions
-    )
-        external
-        returns (bytes4);
-
-    /*//////////////////////////////////////////////////////////////
-                                 ADMIN
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Set the whitelisted status for an address
-    /// @param source The address to be whitelisted
-    /// @param isWhitelisted The whitelisted status to be set
-    function setWhitelistedSource(address source, bool isWhitelisted) external;
 }
