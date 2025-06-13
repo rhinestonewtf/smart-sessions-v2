@@ -55,22 +55,23 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
             return bytes4(0x77390001);
         }
 
+        // TODO: Use Lib
         // Extract mode from first byte of emissaryData
         uint8 mode = uint8(emissaryData[0]);
 
         // Mode-based dispatch for claim verification
         if (mode == 0) {
             // Stateless Validator mode
-            return _verifyClaimStatelessValidator(sponsor, digest, emissaryData, lockTag);
+            return _verifyClaimStatelessValidator(sponsor, digest, emissaryData[0:], lockTag);
         } else if (mode == 1) {
             // ECDSA mode
-            return _verifyClaimECDSA(sponsor, digest, emissaryData, lockTag);
+            return _verifyClaimECDSA(sponsor, digest, emissaryData[0:], lockTag);
         } else if (mode == 2) {
             // Passkey mode
-            return _verifyClaimPasskey(sponsor, digest, emissaryData, lockTag);
+            return _verifyClaimPasskey(sponsor, digest, emissaryData[0:], lockTag);
         } else if (mode == 3) {
             // SmartSession mode
-            return _verifyClaimSmartSession(sponsor, claimHash, emissaryData, lockTag);
+            return _verifyClaimSmartSession(sponsor, claimHash, emissaryData[0:], lockTag);
         }
 
         // Default case for unsupported modes
@@ -102,16 +103,16 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         // Mode-based dispatch for execution verification
         if (mode == 0) {
             // Stateless Validator mode
-            return _verifyExecutionStatelessValidator(sponsor, digest, emissaryData, executions);
+            return _verifyExecutionStatelessValidator(sponsor, digest, emissaryData[0:], executions);
         } else if (mode == 1) {
             // ECDSA mode
-            return _verifyExecutionECDSA(sponsor, digest, emissaryData, executions);
+            return _verifyExecutionECDSA(sponsor, digest, emissaryData[0:], executions);
         } else if (mode == 2) {
             // Passkey mode
-            return _verifyExecutionPasskey(sponsor, digest, emissaryData, executions);
+            return _verifyExecutionPasskey(sponsor, digest, emissaryData[0:], executions);
         } else if (mode == 3) {
             // SmartSession mode
-            return _verifyExecutionSmartSession(sponsor, digest, emissaryData, executions);
+            return _verifyExecutionSmartSession(sponsor, digest, emissaryData[0:], executions);
         }
 
         // Default case for unsupported modes
