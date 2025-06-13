@@ -71,7 +71,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
             return _verifyClaimPasskey(sponsor, digest, emissaryData[0:], lockTag);
         } else if (mode == 3) {
             // SmartSession mode
-            return _verifyClaimSmartSession(sponsor, claimHash, emissaryData[0:], lockTag);
+            return _verifyClaimSmartSession(sponsor, digest, emissaryData[0:], lockTag);
         }
 
         // Default case for unsupported modes
