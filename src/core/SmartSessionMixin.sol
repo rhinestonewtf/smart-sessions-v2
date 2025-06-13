@@ -65,7 +65,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Maps lockTag to enabled permissionIds for verifyClaim lookups
     /// @dev Bridge storage connecting emissary lockTags to SmartSession permissionIds
-    mapping(address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set PermissionIDs))
+    mapping(address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs))
         internal $smartSessionConfig;
 
     /*//////////////////////////////////////////////////////////////
