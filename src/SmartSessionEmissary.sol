@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 // Contracts
 import { EmissaryBase } from "@core/EmissaryBase.sol";
 import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
-import { CompactEIP712 } from "@compact-utils/common/CompactEIP712.sol";
+import { EIP712 } from "@solady/utils/EIP712.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -16,18 +16,17 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
 ///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
-contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
+contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     /*//////////////////////////////////////////////////////////////
-                               CONSTRUCTOR
+                               CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Initializes the SmartSessionEmissary contract
-    /// @param compact The address of The Compact contract
-    constructor(address compact) CompactEIP712(compact) { }
+    /// @notice Invalid return value for unsupported or invalid operations
+    bytes4 constant INVALID_RETURN = 0xFFFFFFFF;
 
     /*//////////////////////////////////////////////////////////////
                                  CLAIM
@@ -75,7 +74,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
         }
 
         // Default case for unsupported modes
-        return bytes4(0xFFFFFFFF);
+        return INVALID_RETURN;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -83,14 +82,14 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates executions using mode-based dispatch
-    /// @param account The account for which the policies are being enforced
-    /// @param hash The hash of the user operation
+    /// @param sponsor The account for which the policies are being enforced
+    /// @param digest The hash of the user operation
     /// @param emissaryData Data containing mode and mode-specific execution data
     /// @param executions The execution data for the user operation
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
-        address account,
-        bytes32 hash,
+        address sponsor,
+        bytes32 digest,
         bytes calldata emissaryData,
         bytes calldata executions
     )
@@ -98,8 +97,25 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
         returns (bytes4)
     {
         // Extract mode from first byte
+        uint8 mode = uint8(emissaryData[0]);
+
         // Mode-based dispatch for execution verification
-        return bytes4(0xFFFFFFFF);
+        if (mode == 0) {
+            // Stateless Validator mode
+            return _verifyExecutionStatelessValidator(sponsor, digest, emissaryData, executions);
+        } else if (mode == 1) {
+            // ECDSA mode
+            return _verifyExecutionECDSA(sponsor, digest, emissaryData, executions);
+        } else if (mode == 2) {
+            // Passkey mode
+            return _verifyExecutionPasskey(sponsor, digest, emissaryData, executions);
+        } else if (mode == 3) {
+            // SmartSession mode
+            return _verifyExecutionSmartSession(sponsor, digest, emissaryData, executions);
+        }
+
+        // Default case for unsupported modes
+        return INVALID_RETURN;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -127,5 +143,15 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin {
     /// @return The EIP-712 domain separator.
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
         return _domainSeparator();
+    }
+
+    /// @notice Returns the EIP-712 typed data hash for a given hash without chain ID
+    function _getTypedDataHashSansChainId(bytes32 hash)
+        internal
+        view
+        override(EmissaryBase, SmartSessionMixin)
+        returns (bytes32)
+    {
+        return _hashTypedDataSansChainId(hash);
     }
 }

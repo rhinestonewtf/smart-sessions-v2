@@ -29,7 +29,8 @@ import {
     PolicyType,
     EMPTY_PERMISSIONID,
     Policy,
-    EnumerableERC7739Config
+    EnumerableERC7739Config,
+    ERC7739ContextHashes
 } from "@smartsessions/DataTypes.sol";
 
 abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
@@ -69,11 +70,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     /// @notice Enable multiple sessions with their associated policies
     /// @param sessions An array of Session structures to be enabled
+    /// @param account The account address associated with the sessions
     /// @param useRegistry A flag to indicate whether to use a registry check for the policies and
     ///        session validator
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function _enableSessions(
         Session[] calldata sessions,
+        address account,
         bool useRegistry
     )
         internal
@@ -88,6 +91,16 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             Session calldata session = sessions[i];
             PermissionId permissionId = session.toPermissionId();
 
+            // Enable ERC1271 policies
+            $erc1271Policies.enable({
+                policyType: PolicyType.ERC1271,
+                permissionId: permissionId,
+                configId: permissionId.toErc1271PolicyId().toConfigId(),
+                policyDatas: session.erc7739Policies.erc1271Policies,
+                useRegistry: useRegistry
+            });
+            $enabledERC7739.enable(session.erc7739Policies.allowedERC7739Content, permissionId);
+
             // Enable Action policies
             $actionPolicies.enable({
                 permissionId: permissionId,
@@ -96,10 +109,10 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             });
 
             // Add the session to the list of enabled sessions for the caller
-            $enabledSessions.add({ account: msg.sender, value: PermissionId.unwrap(permissionId) });
+            $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });
 
             // Enable the ISessionValidator for this session
-            if (!_isISessionValidatorSet(permissionId, msg.sender)) {
+            if (!_isISessionValidatorSet(permissionId, account)) {
                 $sessionValidators.enable({
                     permissionId: permissionId,
                     sessionValidator: session.sessionValidator,
@@ -108,31 +121,35 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 });
             }
             permissionIds[i] = permissionId;
-            emit SessionCreated(permissionId, msg.sender);
+            emit SessionCreated(permissionId, account);
         }
     }
 
     /// @notice Remove a session and all its associated policies
     /// @param permissionId The unique identifier for the session to be removed
-    function _removeSession(PermissionId permissionId) internal {
+    /// @param account The account address associated with the session
+    function _removeSession(PermissionId permissionId, address account) internal {
         if (permissionId == EMPTY_PERMISSIONID) revert InvalidSession(permissionId);
 
+        // Remove all ERC1271 policies for this session
+        $erc1271Policies.policyList[permissionId].removeAll(msg.sender);
+
         // Remove all Action policies for this session
-        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(msg.sender);
+        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
         for (uint256 i; i < actionLength; i++) {
             ActionId actionId =
-                ActionId.wrap($actionPolicies.enabledActionIds[permissionId].at(msg.sender, i));
-            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(msg.sender);
+                ActionId.wrap($actionPolicies.enabledActionIds[permissionId].at(account, i));
+            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(account);
         }
 
         // removing all stored actionIds
-        $actionPolicies.enabledActionIds[permissionId].removeAll(msg.sender);
+        $actionPolicies.enabledActionIds[permissionId].removeAll(account);
 
-        $sessionValidators.disable({ permissionId: permissionId, smartAccount: msg.sender });
+        $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
 
         // Remove all ERC1271 policies for this session
-        $enabledSessions.remove({ account: msg.sender, value: PermissionId.unwrap(permissionId) });
-        emit SessionRemoved(permissionId, msg.sender);
+        $enabledSessions.remove({ account: account, value: PermissionId.unwrap(permissionId) });
+        emit SessionRemoved(permissionId, account);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -280,6 +297,43 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         );
     }
 
+    /// @notice Check if an ERC1271 policy is enabled for a specific account and permission ID
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param policy The policy address
+    /// @return Boolean indicating whether the ERC1271 policy is enabled
+    function isERC1271PolicyEnabled(
+        address account,
+        PermissionId permissionId,
+        address policy
+    )
+        external
+        view
+        returns (bool)
+    {
+        return $erc1271Policies.policyList[permissionId].contains(account, policy);
+    }
+
+    /// @notice Check if an ERC7739 content is enabled for a specific account and permission ID
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param appDomainSeparator The app domain separator for the ERC7739 content
+    /// @param content The content string to check
+    function isERC7739ContentEnabled(
+        address account,
+        PermissionId permissionId,
+        bytes32 appDomainSeparator,
+        string memory content
+    )
+        external
+        view
+        returns (bool)
+    {
+        return $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(
+            account, content.hashERC7739Content()
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                               GETTERS
     //////////////////////////////////////////////////////////////*/
@@ -301,6 +355,21 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         return $actionPolicies.actionPolicies[actionId].policyList[permissionId].values(account);
     }
 
+    /// @notice Get the ERC1271 policies for a specific permission ID
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @return Array of ERC1271 policy addresses
+    function getERC1271Policies(
+        address account,
+        PermissionId permissionId
+    )
+        external
+        view
+        returns (address[] memory)
+    {
+        return $erc1271Policies.policyList[permissionId].values(account);
+    }
+
     /// @notice Get all enabled actions for an account
     /// @param account The account address
     /// @param permissionId The permission ID
@@ -314,6 +383,28 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         returns (bytes32[] memory)
     {
         return $actionPolicies.enabledActionIds[permissionId].values(account);
+    }
+
+    /// @notice Get all enabled ERC7739 content for an account and permission ID
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @return enabledERC7739ContentHashes An array of ERC7739ContextHashes
+    function getEnabledERC7739Content(
+        address account,
+        PermissionId permissionId
+    )
+        external
+        view
+        returns (ERC7739ContextHashes[] memory enabledERC7739ContentHashes)
+    {
+        uint256 length = $enabledERC7739.enabledDomainSeparators[permissionId].length(account);
+        enabledERC7739ContentHashes = new ERC7739ContextHashes[](length);
+        for (uint256 i; i < length; i++) {
+            enabledERC7739ContentHashes[i].appDomainSeparator =
+                $enabledERC7739.enabledDomainSeparators[permissionId].at(account, i);
+            enabledERC7739ContentHashes[i].contentNameHashes = $enabledERC7739.enabledContentNames[permissionId][enabledERC7739ContentHashes[i]
+                .appDomainSeparator].values(account);
+        }
     }
 
     /// @notice Get the session validator and its configuration

@@ -72,6 +72,15 @@ interface ISmartSessionEmissary is IEmissary {
         address indexed account, IStatelessValidator indexed validator, bytes12 indexed lockTag
     );
 
+    /// @notice Emitted when a Smart Session Emissary configuration is successfully set for an
+    /// account.
+    /// @param account The address of the account for which the configuration was set.
+    /// @param permissionId The permission ID associated with the Smart Session.
+    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
+    event SmartSessionEmissaryConfigUpdated(
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
+    );
+
     /*//////////////////////////////////////////////////////////////
                                  CONFIG
     //////////////////////////////////////////////////////////////*/

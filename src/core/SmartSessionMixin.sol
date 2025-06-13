@@ -19,6 +19,9 @@ import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { SignerLib } from "@smartsessions/lib/SignerLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
+import { IdLib as CompactIdLib } from "@the-compact/lib/IdLib.sol";
+import { EIP712Hash } from "@lib/EIP712Hash.sol";
+import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 
 // Types
 import {
@@ -51,6 +54,10 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using SignerLib for *;
     using HashLib for *;
     using ConfigLibV2 for *;
+    using CompactIdLib for address;
+    using CompactIdLib for bytes12;
+    using CompactIdLib for uint96;
+    using SignatureCheckerLib for address;
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -58,15 +65,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Maps lockTag to enabled permissionIds for verifyClaim lookups
     /// @dev Bridge storage connecting emissary lockTags to SmartSession permissionIds
-    mapping(
-        address sender
-            => mapping(
-                address sponsor
-                    => mapping(
-                        bytes12 lockTag => mapping(PermissionId permissionId => bool enabled)
-                    )
-            )
-    ) public $smartSessionConfig;
+    mapping(address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set PermissionIDs))
+        internal $smartSessionConfig;
 
     /*//////////////////////////////////////////////////////////////
                                 CONFIG
@@ -85,35 +85,72 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         virtual
     {
         // Derive lockTag from allocator, scope, resetPeriod
-        // bytes12 lockTag = config.allocator.usingAllocatorId().toLockTag(config.scope,
-        // config.resetPeriod);
+        bytes12 lockTag =
+            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod);
 
         // Nonce validation to prevent replay attacks
-        // - Get current nonce for account + lockTag from $emissaryNonce
-        // - Require enableData.nonce > currentNonce
-        // - Update stored nonce
+        uint256 nonce = enableData.nonce;
+        uint256 currentNonce = $emissaryNonce[account][lockTag];
+        require(nonce > currentNonce, InvalidNonce());
+        $emissaryNonce[account][lockTag] = nonce;
 
-        // Security validations
-        // - Verify chain ID matches current chain
-        // - Verify enableData.expires > block.timestamp
-        // - Calculate EIP-712 hash for session configuration
-        // - Verify user signature (if msg.sender != account)
-        // - Verify allocator signature
+        // Verify chain ID matches current chain
+        require(
+            enableData.allChainIds[enableData.chainIndex] == block.chainid,
+            InvalidEmissaryEnableData()
+        );
+        // Verify data expires after current block timestamp
+        require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
+        // Calculate EIP-712 hash for configuration
+        bytes32 hash = EIP712Hash.config({
+            sponsor: account,
+            lockTag: lockTag,
+            expires: enableData.expires,
+            sessions: config.sessions,
+            nonce: nonce,
+            chainIds: enableData.allChainIds
+        });
+        // Hash the typed data structure (excluding chainId as it's implicitly checked)
+        bytes32 digest = _getTypedDataHashSansChainId(hash);
 
-        // Remove existing sessions for this lockTag
-        // - Iterate through existing smartSessionConfig[account][lockTag]
-        // - Call removeSession() for each enabled permissionId
-        // - Clear mapping entries
+        // Verify user signature
+        if (msg.sender != account) {
+            require(
+                account.isValidSignatureNowCalldata(digest, enableData.userSig),
+                InvalidUserSignature()
+            );
+        }
+        // Verify allocator signature
+        require(
+            config.allocator.isValidERC1271SignatureNowCalldata(digest, enableData.allocatorSig),
+            InvalidAllocatorSignature()
+        );
 
-        // Enable new sessions if provided
-        // if (config.sessions.length > 0) {
-        //     // Call _enableSessions(config.sessions, false) to enable in SmartSession
-        // infrastructure
-        //     // Map returned permissionIds to lockTag in smartSessionConfig
-        //     // Set smartSessionConfig[account][lockTag][permissionId] = true for each
-        // }
+        // Get all enabled permissionIds
+        address sender = config.arbiter;
+        bytes32[] memory enabledPermissionIds = $smartSessionConfig[sender][lockTag].values(account);
 
-        //  Emit session configuration update event
+        // Remove existing sessions for this lockTag and arbiter
+        $smartSessionConfig[sender][lockTag].removeAll(account);
+
+        // Call remove session for each existing permissionId
+        for (uint256 i; i < enabledPermissionIds.length; i++) {
+            PermissionId permissionId = PermissionId.wrap(enabledPermissionIds[i]);
+            _removeSession(permissionId, account);
+        }
+
+        //  Enable new sessions if provided
+        if (config.sessions.length != 0) {
+            PermissionId[] memory permissionIDs = _enableSessions(config.sessions, account, true);
+            // Map returned permissionIds to lockTag in smartSessionConfig
+            for (uint256 i; i < permissionIDs.length; i++) {
+                $smartSessionConfig[sender][lockTag].add(
+                    account, PermissionId.unwrap(permissionIDs[i])
+                );
+                // Emit event for each enabled session
+                emit SmartSessionEmissaryConfigUpdated(account, permissionIDs[i], lockTag);
+            }
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -138,7 +175,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         returns (bytes4 result)
     {
         bool success = _erc1271IsValidSignatureViaNestedEIP712(
-            msg.sender, claimHash, _erc1271UnwrapSignature(emissaryData)
+            msg.sender, claimHash, _erc1271UnwrapSignature(emissaryData), sponsor, lockTag
         );
         /// @solidity memory-safe-assembly
         assembly {
@@ -164,7 +201,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes calldata emissaryData,
         bytes calldata executions
     )
-        external
+        internal
         virtual
         returns (bytes4)
     {
@@ -307,7 +344,9 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes32 hash,
         bytes calldata signature,
         bytes32 appDomainSeparator,
-        bytes calldata contents
+        bytes calldata contents,
+        address sponsor,
+        bytes12 lockTag
     )
         internal
         view
@@ -320,17 +359,27 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
         signature = signature[32:];
 
+        // TODO: We don't need double mapping here
+
+        // make sure permissionId is enabled for sender, sponsor, and lockTag
+        require(
+            $smartSessionConfig[sender][lockTag].contains(
+                sponsor, PermissionId.unwrap(permissionId)
+            ),
+            InvalidSession(permissionId)
+        );
+
         // forgefmt: disable-next-item
         if (
             // return false if the permissionId is not enabled
-            !$enabledSessions.contains(msg.sender, PermissionId.unwrap(permissionId))
+            !$enabledSessions.contains(sponsor, PermissionId.unwrap(permissionId))
             // return false if the content is not enabled
-            || !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(msg.sender, contentHash)
+            || !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(sponsor, contentHash)
         ) return false;
 
         // check the ERC-1271 policy
         bool valid = $erc1271Policies.checkERC1271({
-            account: msg.sender,
+            account: sponsor,
             requestSender: sender,
             hash: hash,
             signature: signature,
@@ -344,9 +393,16 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // this call reverts if the ISessionValidator is not set
         return $sessionValidators.isValidISessionValidator({
             hash: hash,
-            account: msg.sender,
+            account: sponsor,
             permissionId: permissionId,
             signature: signature
         });
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                VIRTUAL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Returns the typed data hash for a given hash
+    function _getTypedDataHashSansChainId(bytes32 hash) internal view virtual returns (bytes32);
 }

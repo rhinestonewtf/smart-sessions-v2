@@ -3,8 +3,6 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { NonceManager } from "@core/NonceManager.sol";
-import { EIP712 } from "@solady/utils/EIP712.sol";
-import { CompactEIP712 } from "@compact-utils/common/CompactEIP712.sol";
 
 // Interfaces
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
@@ -22,7 +20,7 @@ import { EmissaryConfig, EmissaryEnable } from "@types/DataTypes.sol";
 /// @title EmissaryBase
 /// @notice Base emissary contract providing basic validator functionality (ECDSA, Passkey,
 ///         Stateless validators)
-abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSessionEmissary {
+abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -101,7 +99,7 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSes
             chainIds: enableData.allChainIds
         });
         // Hash the typed data structure (excluding chainId as it's implicitly checked)
-        bytes32 digest = _hashTypedDataSansChainId(hash);
+        bytes32 digest = _getTypedDataHashSansChainId(hash);
 
         // Check if config is initialized
         Compressed.Bytes storage $config =
@@ -135,10 +133,10 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSes
                                  CLAIM
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Verifies claims using Stateless validator configuration
+    /// @notice Verifies claims using a configured Stateless Validator
     /// @param sponsor The sponsor account associated with the claim
     /// @param digest The hash of the claim being verified
-    /// @param emissaryData Data containing the mode, configId, and signature data
+    /// @param emissaryData Data containing validator address, configId, and signature
     /// @param lockTag The lock tag associated with the configuration
     /// @return The selector if valid, otherwise 0xFFFFFFFF
     function _verifyClaimStatelessValidator(
@@ -197,21 +195,68 @@ abstract contract EmissaryBase is NonceManager, EIP712, CompactEIP712, ISmartSes
                                EXECUTION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Validates executions for an account using basic methods (ECDSA, Passkey,
-    ///         Stateless validators)
-    /// @param account The account for which the executions are being verified
-    /// @param hash The hash of the user operation
-    /// @param emissaryData data containing mode, configId, and signature data
-    /// @param executions The execution data for the user operation
+    /// @notice Validates executions for an account using a configured Stateless Validator
+    /// @param sponsor The account for which the executions are being verified
+    /// @param digest The hash of the user operation
+    /// @param emissaryData data containing validator address, configId, lockTag, and signature
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
-    function _verifyExecutionBase(
-        address account,
-        bytes32 hash,
+    function _verifyExecutionStatelessValidator(
+        address sponsor,
+        bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata executions
+        bytes calldata /* executions */
+    )
+        internal
+        virtual
+        returns (bytes4)
+    {
+        // Parse emissaryData format for Stateless Validator:
+        IStatelessValidator validator = IStatelessValidator(address(bytes20(emissaryData[:20])));
+        uint8 configId = uint8(bytes1(emissaryData[20:21]));
+        bytes12 lockTag = bytes12(bytes(emissaryData[21:33]));
+        emissaryData = emissaryData[33:];
+
+        // Get the compressed configuration data
+        Compressed.Bytes storage $config =
+            $statelessValidatorConfig[sponsor][configId][lockTag][validator];
+        bytes memory configData = $config.sload();
+
+        // Validate the configuration exists
+        require(configData.length != 0, InvalidEmissaryConfig());
+
+        // Delegate signature validation to the stateless validator
+        // Return the function selector on success, or a specific failure code otherwise.
+        return validator.validateSignatureWithData(digest, emissaryData, configData)
+            ? this.verifyClaim.selector
+            : bytes4(0xFFFFFFFF);
+    }
+
+    function _verifyExecutionECDSA(
+        address sponsor,
+        bytes32 digest,
+        bytes calldata emissaryData,
+        bytes calldata /* executions */
     )
         internal
         virtual
         returns (bytes4)
     { }
+
+    function _verifyExecutionPasskey(
+        address sponsor,
+        bytes32 digest,
+        bytes calldata emissaryData,
+        bytes calldata /* executions */
+    )
+        internal
+        virtual
+        returns (bytes4)
+    { }
+
+    /*//////////////////////////////////////////////////////////////
+                                VIRTUAL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Returns the typed data hash for a given hash
+    function _getTypedDataHashSansChainId(bytes32 hash) internal view virtual returns (bytes32);
 }

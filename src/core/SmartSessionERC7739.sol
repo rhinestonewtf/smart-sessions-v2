@@ -17,7 +17,9 @@ abstract contract SmartSessionERC7739 {
         bytes32 hash,
         bytes calldata signature,
         bytes32 appDomainSeparator,
-        bytes calldata contents
+        bytes calldata contents,
+        address sponsor,
+        bytes12 lockTag
     )
         internal
         view
@@ -113,7 +115,9 @@ abstract contract SmartSessionERC7739 {
     function _erc1271IsValidSignatureViaNestedEIP712(
         address sender,
         bytes32 hash,
-        bytes calldata signature
+        bytes calldata signature,
+        address sponsor,
+        bytes12 lockTag
     )
         internal
         view
@@ -132,7 +136,7 @@ abstract contract SmartSessionERC7739 {
                 uint256 chainId,
                 address verifyingContract,
                 bytes32 salt,
-            ) = EIP712(msg.sender).eip712Domain();
+            ) = EIP712(sponsor).eip712Domain();
             /// @solidity memory-safe-assembly
             assembly {
                 t := mload(0x40) // Grab the free memory pointer.
@@ -203,7 +207,7 @@ abstract contract SmartSessionERC7739 {
             mstore(0x40, m) // Restore the free memory pointer.
         }
         result = _erc1271IsValidSignatureNowCalldata(
-            sender, hash, signature, appDomainSeparator, contents
+            sender, hash, signature, appDomainSeparator, contents, sponsor, lockTag
         );
     }
 }
