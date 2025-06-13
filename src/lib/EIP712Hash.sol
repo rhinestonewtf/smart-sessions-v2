@@ -55,7 +55,7 @@ library EIP712Hash {
         pure
         returns (bytes32 hash)
     {
-        /// PLACEHOLDER
+        // TODO: This is ass placeholder
         hash = keccak256(
             abi.encode(
                 TYPEHASH.CONFIG,

@@ -60,7 +60,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Mapping of enabled erc7739 configurations per user address
     EnumerableERC7739Config internal $enabledERC7739;
     /// @notice Mapping of session validators organized by permission IDs and smart account
-    /// addresses
+    ///         addresses
     mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf)) internal
         $sessionValidators;
 

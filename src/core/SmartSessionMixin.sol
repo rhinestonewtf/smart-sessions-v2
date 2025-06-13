@@ -126,6 +126,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             InvalidAllocatorSignature()
         );
 
+        // TODO: This is ass placeholder
+
         // Get all enabled permissionIds
         address sender = config.arbiter;
         bytes32[] memory enabledPermissionIds = $smartSessionConfig[sender][lockTag].values(account);
@@ -359,7 +361,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
         signature = signature[32:];
 
-        // TODO: We don't need double mapping here
+        // TODO: This is ass placeholder
 
         // make sure permissionId is enabled for sender, sponsor, and lockTag
         require(
