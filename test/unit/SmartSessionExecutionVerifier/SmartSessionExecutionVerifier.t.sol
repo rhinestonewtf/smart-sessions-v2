@@ -6,7 +6,7 @@ import { Base_Test } from "@test/Base.t.sol";
 import { Solarray } from "solarray/Solarray.sol";
 
 // Contracts
-import { SmartSessionExecutionVerifier } from "@contracts/SmartSessionExecutionVerifier.sol";
+import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
 
 // Libraries
 import { IntegrationEncodeLib } from "@smartsessions-test/utils/lib/IntegrationEncodeLib.sol";
@@ -20,13 +20,13 @@ import {
     ChainDigest
 } from "@smartsessions/DataTypes.sol";
 
-contract SmartSessionExecutionVerifier_Unit_Test is Base_Test {
+contract SmartSessionEmissary_Unit_Test is Base_Test {
     /*//////////////////////////////////////////////////////////////
                                 VARIABLES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice The SmartSessionExecutionVerifier contract instance.
-    SmartSessionExecutionVerifier internal smartSessionExecutionVerifier;
+    /// @notice The SmartSessionEmissary contract instance.
+    SmartSessionEmissary internal SmartSessionEmissary;
 
     /*//////////////////////////////////////////////////////////////
                                   SETUP
@@ -35,8 +35,8 @@ contract SmartSessionExecutionVerifier_Unit_Test is Base_Test {
     function setUp() public virtual override {
         // Call the base setup function.
         super.setUp();
-        // Deploy the SmartSessionExecutionVerifier contract.
-        smartSessionExecutionVerifier = new SmartSessionExecutionVerifier(admin.addr);
+        // Deploy the SmartSessionEmissary contract.
+        SmartSessionEmissary = new SmartSessionEmissary(admin.addr);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -52,7 +52,7 @@ contract SmartSessionExecutionVerifier_Unit_Test is Base_Test {
         view
         returns (EnableSession memory enableData)
     {
-        bytes32 sessionDigest = smartSessionExecutionVerifier.getSessionDigest({
+        bytes32 sessionDigest = SmartSessionEmissary.getSessionDigest({
             permissionId: permissionId,
             account: instance.account,
             data: session,
