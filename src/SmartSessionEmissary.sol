@@ -10,8 +10,10 @@ import { EIP712 } from "@solady/utils/EIP712.sol";
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 
 // Libraries
+import { ModeLib } from "@lib/ModeLib.sol";
 
 // Types
+import { VerificationMode } from "@types/DataTypes.sol";
 
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
@@ -20,6 +22,8 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
+
+    using ModeLib for bytes;
 
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
@@ -35,14 +39,13 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
     /// @notice Verifies claims with mode-based dispatch to appropriate verification method
     /// @param sponsor The sponsor account associated with the claim
     /// @param digest The digest of the claim hash
-    /// @param claimHash The hash of the claim to be verified
     /// @param emissaryData Data containing mode byte and mode-specific verification data
     /// @param lockTag The lock tag associated with the claim
     /// @return The selector if valid, otherwise 0xFFFFFFFF
     function verifyClaim(
         address sponsor,
         bytes32 digest,
-        bytes32 claimHash,
+        bytes32, /*/ claimHash */
         bytes calldata emissaryData,
         bytes12 lockTag
     )
@@ -55,21 +58,20 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
             return bytes4(0x77390001);
         }
 
-        // TODO: Use Lib
         // Extract mode from first byte of emissaryData
-        uint8 mode = uint8(emissaryData[0]);
+        VerificationMode mode = emissaryData.decodeMode();
 
         // Mode-based dispatch for claim verification
-        if (mode == 0) {
+        if (mode == VerificationMode.StatelessValidator) {
             // Stateless Validator mode
             return _verifyClaimStatelessValidator(sponsor, digest, emissaryData[0:], lockTag);
-        } else if (mode == 1) {
+        } else if (mode == VerificationMode.ECDSA) {
             // ECDSA mode
             return _verifyClaimECDSA(sponsor, digest, emissaryData[0:], lockTag);
-        } else if (mode == 2) {
+        } else if (mode == VerificationMode.Passkey) {
             // Passkey mode
             return _verifyClaimPasskey(sponsor, digest, emissaryData[0:], lockTag);
-        } else if (mode == 3) {
+        } else if (mode == VerificationMode.SmartSession) {
             // SmartSession mode
             return _verifyClaimSmartSession(sponsor, digest, emissaryData[0:], lockTag);
         }
@@ -98,19 +100,19 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         returns (bytes4)
     {
         // Extract mode from first byte
-        uint8 mode = uint8(emissaryData[0]);
+        VerificationMode mode = emissaryData.decodeMode();
 
         // Mode-based dispatch for execution verification
-        if (mode == 0) {
+        if (mode == VerificationMode.StatelessValidator) {
             // Stateless Validator mode
             return _verifyExecutionStatelessValidator(sponsor, digest, emissaryData[0:], executions);
-        } else if (mode == 1) {
+        } else if (mode == VerificationMode.ECDSA) {
             // ECDSA mode
             return _verifyExecutionECDSA(sponsor, digest, emissaryData[0:], executions);
-        } else if (mode == 2) {
+        } else if (mode == VerificationMode.Passkey) {
             // Passkey mode
             return _verifyExecutionPasskey(sponsor, digest, emissaryData[0:], executions);
-        } else if (mode == 3) {
+        } else if (mode == VerificationMode.SmartSession) {
             // SmartSession mode
             return _verifyExecutionSmartSession(sponsor, digest, emissaryData[0:], executions);
         }

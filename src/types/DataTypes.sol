@@ -8,6 +8,21 @@ import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidat
 import { Session } from "@smartsessions/DataTypes.sol";
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
 
+/*//////////////////////////////////////////////////////////////
+                            ENUMS
+/////////////////////////////////////////////////////////////*/
+
+enum VerificationMode {
+    StatelessValidator,
+    ECDSA,
+    Passkey,
+    SmartSession
+}
+
+/*//////////////////////////////////////////////////////////////
+                            STRUCTS
+//////////////////////////////////////////////////////////////*/
+
 /// @notice Configuration for the Smart Session Emissary.
 /// @dev This configuration is used to set up the Smart Session Emissary with multiple sessions,
 ///      a scope, a reset period, and an allocator address.
