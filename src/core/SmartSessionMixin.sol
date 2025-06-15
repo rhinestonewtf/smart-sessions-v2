@@ -36,6 +36,8 @@ import {
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
 
+import { console } from "forge-std/console.sol";
+
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
 /// @dev Bridges lockTag-based emissary system with permissionId-based SmartSession system

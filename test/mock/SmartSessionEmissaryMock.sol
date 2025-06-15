@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.8.0 <0.9.0;
+
+import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
+
+// Types
+import {
+    PermissionId,
+    ActionId,
+    ActionData,
+    Session,
+    SmartSessionMode,
+    SignerConf,
+    EnumerableActionPolicy,
+    PolicyType,
+    EMPTY_PERMISSIONID,
+    Policy
+} from "@smartsessions/DataTypes.sol";
+
+/// @dev Extended SmartSessionEmissary with helpers for testing purposes.
+contract SmartSessionEmissaryMock is SmartSessionEmissary {
+    /*//////////////////////////////////////////////////////////////
+                           SESSION MANAGEMENT
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Enable multiple sessions with their associated policies
+    /// @dev Since this function is only called during the ERC-4337 execution phase, it is safe to
+    ///      use the registry
+    /// @param sessions An array of Session structures to be enabled
+    /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
+    function enableSessions(Session[] calldata sessions)
+        external
+        returns (PermissionId[] memory permissionIds)
+    {
+        return _enableSessions(sessions, msg.sender, true);
+    }
+}

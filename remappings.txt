@@ -37,3 +37,4 @@ excessively-safe-call=node_modules/excessively-safe-call/src/
 @test/=test/
 @contracts=src/
 @types=src/types/
+@mocks/=test/mocks/

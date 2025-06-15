@@ -6,7 +6,7 @@ import { Base_Test } from "@test/Base.t.sol";
 import { Solarray } from "solarray/Solarray.sol";
 
 // Contracts
-import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
+import { SmartSessionEmissaryMock } from "@test/mock/SmartSessionEmissaryMock.sol";
 
 // Libraries
 import { IntegrationEncodeLib } from "@smartsessions-test/utils/lib/IntegrationEncodeLib.sol";
@@ -26,7 +26,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice The SmartSessionEmissary contract instance.
-    SmartSessionEmissary internal SmartSessionEmissary;
+    SmartSessionEmissaryMock internal smartSessionEmissary;
 
     /*//////////////////////////////////////////////////////////////
                                   SETUP
@@ -36,7 +36,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         // Call the base setup function.
         super.setUp();
         // Deploy the SmartSessionEmissary contract.
-        SmartSessionEmissary = new SmartSessionEmissary(admin.addr);
+        smartSessionEmissary = new SmartSessionEmissaryMock();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -52,7 +52,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         view
         returns (EnableSession memory enableData)
     {
-        bytes32 sessionDigest = SmartSessionEmissary.getSessionDigest({
+        bytes32 sessionDigest = smartSessionEmissary.getSessionDigest({
             permissionId: permissionId,
             account: instance.account,
             data: session,

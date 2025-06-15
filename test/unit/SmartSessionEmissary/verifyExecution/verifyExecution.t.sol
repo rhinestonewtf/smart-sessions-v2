@@ -2,11 +2,11 @@
 pragma solidity >=0.8.27;
 
 // Dependencies
-import { SmartSessionExecutionVerifier_Unit_Test } from
-    "@test/unit/SmartSessionExecutionVerifier/SmartSessionExecutionVerifier.t.sol";
+import { SmartSessionEmissary_Unit_Test } from
+    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
 
 // Interfaces
-import { ISmartSessionExecutionVerifier } from "@interfaces/ISmartSessionExecutionVerifier.sol";
+import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
 
@@ -41,11 +41,10 @@ import {
     ModePayload,
     MODE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
+import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 import { MODULE_TYPE_VALIDATOR } from "erc7579/interfaces/IERC7579Module.sol";
 
-contract SmartSessionExecutionVerifier_verifyExecution_Test is
-    SmartSessionExecutionVerifier_Unit_Test
-{
+contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -96,88 +95,60 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
-    ///------------------------------------///
-    /// 1. When caller is not whitelisted  ///
-    ///------------------------------------///
-
-    function test_verifyExecution_UnauthorizedSource() public {
+    function test_verifyExecution_UseMode_Success() public withEnabledSudoSession {
         // Arrange
-        bytes memory data = packData(SmartSessionMode.USE, testPermissionId, mockSignature);
-
-        // Act/Assert
-        vm.expectRevert(ISmartSessionExecutionVerifier.UnauthorizedSource.selector);
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData
-        );
-    }
-
-    ///------------------------------------///
-    /// 2. UseMode                         ///
-    ///------------------------------------///
-
-    function test_verifyExecution_UseMode_Success()
-        public
-        withWhitelistedThis
-        withEnabledSudoSession
-    {
-        // Arrange
-        bytes memory data = packData(SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data =
+            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Act
-        bytes4 result = smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData
-        );
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
 
         // Assert
         assertEq(
             result,
-            ISmartSessionExecutionVerifier.verifyExecution.selector,
+            ISmartSessionEmissary.verifyExecution.selector,
             "Should return successful verification selector"
         );
     }
 
-    function test_verifyExecution_UseMode_InvalidPermissionId() public withWhitelistedThis {
+    function test_verifyExecution_UseMode_InvalidPermissionId() public {
         // Arrange
         PermissionId invalidPermissionId = PermissionId.wrap(keccak256("invalid"));
-        bytes memory data = packData(SmartSessionMode.USE, invalidPermissionId, mockSignature);
+        bytes memory data = packData(
+            EMISSARY_SMART_SESSION, SmartSessionMode.USE, invalidPermissionId, mockSignature
+        );
 
         // Act/Assert
         vm.expectRevert(
             abi.encodeWithSelector(
-                ISmartSessionExecutionVerifier.InvalidPermissionId.selector, invalidPermissionId
+                ISmartSessionEmissary.InvalidPermissionId.selector, invalidPermissionId
             )
         );
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData
-        );
+        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
     }
 
-    function test_verifyExecution_UseMode_UnsupportedSelector()
-        public
-        withWhitelistedThis
-        withEnabledSudoSession
-    {
+    function test_verifyExecution_UseMode_UnsupportedSelector() public withEnabledSudoSession {
         // Arrange
-        bytes memory data = packData(SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data =
+            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Create mock data with an unsupported selector
         bytes memory unsupportedExecData =
             abi.encodeWithSelector(bytes4(keccak256("unsupportedFunction()")), "data");
 
         // Act/Assert
-        vm.expectRevert(ISmartSessionExecutionVerifier.UnsupportedSelector.selector);
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, unsupportedExecData
-        );
+        vm.expectRevert(ISmartSessionEmissary.UnsupportedSelector.selector);
+        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, unsupportedExecData);
     }
 
     function test_verifyExecution_UseMode_UnsupportedExecutionType_TryExec()
         public
-        withWhitelistedThis
         withEnabledSudoSession
     {
         // Arrange
-        bytes memory data = packData(SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data =
+            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Setup mock execution data with TRY execution type
         bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
@@ -188,19 +159,17 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         );
 
         // Act/Assert
-        vm.expectRevert(ISmartSessionExecutionVerifier.UnsupportedExecutionType.selector);
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, tryExecData
-        );
+        vm.expectRevert(ISmartSessionEmissary.UnsupportedExecutionType.selector);
+        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, tryExecData);
     }
 
     function test_verifyExecution_UseMode_UnsupportedExecutionType_DelegateCall()
         public
-        withWhitelistedThis
         withEnabledSudoSession
     {
         // Arrange
-        bytes memory data = packData(SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data =
+            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Setup mock execution data with DELEGATE call type
         bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
@@ -212,19 +181,14 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         );
 
         // Act/Assert
-        vm.expectRevert(ISmartSessionExecutionVerifier.UnsupportedExecutionType.selector);
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, delegateExecData
-        );
+        vm.expectRevert(ISmartSessionEmissary.UnsupportedExecutionType.selector);
+        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, delegateExecData);
     }
 
-    function test_verifyExecution_UseMode_BatchCall_Success()
-        public
-        withWhitelistedThis
-        withEnabledBatchSudoSession
-    {
+    function test_verifyExecution_UseMode_BatchCall_Success() public withEnabledBatchSudoSession {
         // Arrange
-        bytes memory data = packData(SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data =
+            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Create mock batch execution data
         ModeCode mode = ModeLib.encodeSimpleBatch();
@@ -247,151 +211,36 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
             abi.encodeCall(IERC7579Account.execute, (mode, ExecutionLib.encodeBatch(executions)));
 
         // Act
-        bytes4 result = smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, batchExecData
-        );
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, batchExecData);
 
         // Assert
         assertEq(
             result,
-            ISmartSessionExecutionVerifier.verifyExecution.selector,
+            ISmartSessionEmissary.verifyExecution.selector,
             "Should return successful verification selector for batch execution"
         );
     }
 
     function test_verifyExecution_UseMode_InvalidSignature()
         public
-        withWhitelistedThis
         withEnabledSessionWithFailingValidator
     {
         // Arrange
-        bytes memory data = packData(SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data =
+            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Act
-        bytes4 result = smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData
-        );
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
 
         // Assert
         assertEq(result, bytes4(0xFFFFFFFF), "Should return failure code for invalid signature");
     }
 
-    ///------------------------------///
-    /// 3. EnableMode                ///
-    ///------------------------------///
-
-    function test_verifyExecution_EnableMode_Success() public withWhitelistedThis {
-        // Arrange - Create enable session data
-        Session memory session = createBasicSession();
-        EnableSession memory enableData =
-            makeMultiChainEnableData(testPermissionId, session, testValidator);
-        bytes memory packedEnableData = encodeEnable(mockSignature, enableData);
-
-        // Act
-        bytes4 result = smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, packedEnableData, mockExecData
-        );
-
-        // Assert
-        assertEq(
-            result,
-            ISmartSessionExecutionVerifier.verifyExecution.selector,
-            "Should return successful verification selector for enable mode"
-        );
-
-        // Verify permission was enabled
-        assertTrue(
-            smartSessionExecutionVerifier.isPermissionEnabled(testPermissionId, instance.account),
-            "Permission should be enabled"
-        );
-    }
-
-    function test_verifyExecution_EnableMode_InvalidSignature()
-        public
-        withWhitelistedThis
-        withNoValidator
-    {
-        // Arrange - Create enable session data
-        Session memory session = createBasicSession();
-        EnableSession memory enableData =
-            makeMultiChainEnableData(testPermissionId, session, testValidator);
-        bytes memory packedEnableData = encodeEnable(mockSignature, enableData);
-
-        // Expect revert due to invalid signature
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ISmartSessionExecutionVerifier.InvalidEnableSignature.selector,
-                instance.account,
-                enableData.hashesAndChainIds.multichainDigest()
-            )
-        );
-
-        // Act
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, packedEnableData, mockExecData
-        );
-    }
-
-    function test_verifyExecution_EnableMode_SessionValidatorAlreadySet()
-        public
-        withWhitelistedThis
-    {
-        // Arrange - First enable a session
-        Session memory session = createBasicSession();
-        EnableSession memory enableData =
-            makeMultiChainEnableData(testPermissionId, session, testValidator);
-        bytes memory packedEnableData = encodeEnable(mockSignature, enableData);
-
-        // Act
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, packedEnableData, mockExecData
-        );
-
-        // Create new enable data with same permissionId but different policies
-        Session memory updatedSession = createBasicSession();
-        // Modify the action data to be different
-        updatedSession.actions[0].actionTarget = address(0x123);
-
-        EnableSession memory updateEnableData =
-            makeMultiChainEnableData(testPermissionId, updatedSession, testValidator);
-
-        bytes memory packedUpdateData = encodeEnable(mockSignature, updateEnableData);
-
-        // Act
-        bytes4 result = smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, packedUpdateData, mockExecData
-        );
-
-        // Assert
-        assertEq(
-            result,
-            ISmartSessionExecutionVerifier.verifyExecution.selector,
-            "Should return successful verification selector for update to existing session"
-        );
-    }
-
-    function test_verifyExecution_UnsupportedMode() public withWhitelistedThis {
-        bytes memory data = abi.encodePacked(uint8(3), testPermissionId, mockSignature);
-
-        // Act/Assert
-        vm.expectRevert();
-        smartSessionExecutionVerifier.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData
-        );
-    }
-
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
-
-    modifier withWhitelistedThis() {
-        // Prank to admin
-        vm.prank(admin.addr);
-        // Whitelist this contract
-        smartSessionExecutionVerifier.setWhitelistedSource(address(this), true);
-        // Continue with the test
-        _;
-    }
 
     modifier withEnabledSudoSession() {
         // Prank to account
@@ -421,10 +270,10 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionExecutionVerifier.enableSessions(sessions);
+        smartSessionEmissary.enableSessions(sessions);
 
         // Generate the permission ID
-        testPermissionId = smartSessionExecutionVerifier.getPermissionId(session);
+        testPermissionId = smartSessionEmissary.getPermissionId(session);
 
         // Continue with the test
         _;
@@ -465,10 +314,10 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionExecutionVerifier.enableSessions(sessions);
+        smartSessionEmissary.enableSessions(sessions);
 
         // Generate the permission ID
-        testPermissionId = smartSessionExecutionVerifier.getPermissionId(session);
+        testPermissionId = smartSessionEmissary.getPermissionId(session);
 
         // Continue with the test
         _;
@@ -502,10 +351,10 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionExecutionVerifier.enableSessions(sessions);
+        smartSessionEmissary.enableSessions(sessions);
 
         // Generate the permission ID
-        testPermissionId = smartSessionExecutionVerifier.getPermissionId(session);
+        testPermissionId = smartSessionEmissary.getPermissionId(session);
 
         // Continue with the test
         _;
@@ -530,7 +379,8 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
     //////////////////////////////////////////////////////////////*/
 
     function packData(
-        SmartSessionMode mode,
+        EmissaryMode emissaryMode,
+        SmartSessionMode sessionMode,
         PermissionId permissionId,
         bytes memory signature
     )
@@ -538,7 +388,7 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(mode, permissionId, signature);
+        return abi.encodePacked(emissaryMode, sessionMode, permissionId, signature);
     }
 
     function packPermissionSig() internal view returns (bytes memory) {
@@ -568,7 +418,7 @@ contract SmartSessionExecutionVerifier_verifyExecution_Test is
         });
 
         // Calculate the permission ID
-        testPermissionId = smartSessionExecutionVerifier.getPermissionId(session);
+        testPermissionId = smartSessionEmissary.getPermissionId(session);
     }
 
     function encodeEnable(
