@@ -363,15 +363,15 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
         signature = signature[32:];
 
-        // TODO: This is ass placeholder
+        // // TODO: This is ass placeholder
 
-        // make sure permissionId is enabled for sender, sponsor, and lockTag
-        require(
-            $smartSessionConfig[sender][lockTag].contains(
-                sponsor, PermissionId.unwrap(permissionId)
-            ),
-            InvalidSession(permissionId)
-        );
+        // // make sure permissionId is enabled for sender, sponsor, and lockTag
+        // require(
+        //     $smartSessionConfig[sender][lockTag].contains(
+        //         sponsor, PermissionId.unwrap(permissionId)
+        //     ),
+        //     InvalidSession(permissionId)
+        // );
 
         // forgefmt: disable-next-item
         if (

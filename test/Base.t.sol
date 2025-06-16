@@ -7,9 +7,15 @@ import { YesSessionValidator } from "@smartsessions-test/mock/YesSessionValidato
 import { NoSessionValidator } from "@test/mock/NoSessionValidator.sol";
 import { NoValidator } from "@test/mock/NoValidator.sol";
 import { NoPolicy } from "@smartsessions-test/mock/NoPolicy.sol";
+import { EIP712 } from "@solady/utils/EIP712.sol";
+import { SmartSessionCompatibilityFallback } from
+    "@smartsessions/SmartSessionCompatibilityFallback.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
+
+// Libraries
+import { ModuleKitHelpers } from "@modulekit/ModuleKit.sol";
 
 // Dependencies
 import { Test } from "@forge-std/Test.sol";
@@ -28,12 +34,20 @@ import {
     CALLTYPE_BATCH,
     CALLTYPE_SINGLE,
     EXECTYPE_DEFAULT,
+    CALLTYPE_STATIC,
     ModeCode,
     ModeLib
 } from "erc7579/lib/ModeLib.sol";
+import { MODULE_TYPE_FALLBACK } from "erc7579/interfaces/IERC7579Module.sol";
 
 /// @notice An abstract base test contract that provides common test logic.
 abstract contract Base_Test is Test, RhinestoneModuleKit {
+    /*//////////////////////////////////////////////////////////////
+                                LIBRARIES
+    //////////////////////////////////////////////////////////////*/
+
+    using ModuleKitHelpers for *;
+
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
@@ -72,6 +86,9 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
     // The default invalid policy contract instance.
     NoPolicy internal noPolicy;
 
+    // The fallback module instance.
+    SmartSessionCompatibilityFallback internal fallbackModule;
+
     /*//////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
@@ -97,6 +114,15 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         noValidator = new NoValidator();
         // Deploy the NoPolicy contract.
         noPolicy = new NoPolicy();
+        // Deploy the fallback module.
+        fallbackModule = new SmartSessionCompatibilityFallback();
+        // Install the fallback module on the account instance.
+        bytes memory _fallback = abi.encode(EIP712.eip712Domain.selector, CALLTYPE_STATIC, "");
+        instance.installModule({
+            moduleTypeId: MODULE_TYPE_FALLBACK,
+            module: address(fallbackModule),
+            data: _fallback
+        });
     }
 
     /*//////////////////////////////////////////////////////////////
