@@ -9,6 +9,13 @@ import { Session } from "@smartsessions/DataTypes.sol";
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
 
 /*//////////////////////////////////////////////////////////////
+                               CONSTANTS
+//////////////////////////////////////////////////////////////*/
+
+/// @dev Invalid return value for unsupported or invalid operations
+bytes4 constant INVALID_RETURN = 0xFFFFFFFF;
+
+/*//////////////////////////////////////////////////////////////
                             STRUCTS
 //////////////////////////////////////////////////////////////*/
 
@@ -46,4 +53,30 @@ struct EmissaryEnable {
     uint256 nonce;
     uint256[] allChainIds;
     uint256 chainIndex;
+}
+
+/// @notice Structure holding WebAuthn credential information
+/// @dev Maps a credential ID to its public key and verification requirements
+/// @param pubKeyX The X coordinate of the credential's public key on the P-256 curve
+/// @param pubKeyY The Y coordinate of the credential's public key on the P-256 curve
+/// @param requireUV Whether user verification (biometrics/PIN) is required for this credential
+struct WebAuthnCredential {
+    uint256 pubKeyX;
+    uint256 pubKeyY;
+    bool requireUV;
+}
+
+/// @notice WebAuthVerificationContext
+/// @dev Context for WebAuthn verification, including credential details and threshold
+/// @param usePrecompile Whether to use the RIP7212 precompile for signature verification,
+///                      or fallback to FreshCryptoLib. According to ERC-7562, calling the
+///                      precompile is only allowed on networks that support it.
+/// @param threshold The number of signatures required for validation
+/// @param credentialIds The IDs of the credentials used for signing
+/// @param credential data WebAuthn credential data
+struct WebAuthVerificationContext {
+    bool usePrecompile;
+    uint256 threshold;
+    bytes32[] credentialIds;
+    WebAuthnCredential[] credentialData;
 }

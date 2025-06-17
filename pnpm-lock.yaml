@@ -11,6 +11,12 @@ importers:
       '@erc7579/enumerablemap4337':
         specifier: github:erc7579/enumerablemap
         version: https://codeload.github.com/erc7579/enumerablemap/tar.gz/36291c5aeccb82d25d95e44bec617470e171a1a6
+      '@openzeppelin/contracts':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@rhinestone/checknsignatures':
+        specifier: github:rhinestonewtf/checknsignatures
+        version: https://codeload.github.com/rhinestonewtf/checknsignatures/tar.gz/f8389c186fb58480a9a42d598adebaa1a557762d
       '@rhinestone/compact-utils':
         specifier: github:rhinestonewtf/compact-utils#chore/update-deps
         version: git+https://git@github.com:rhinestonewtf/compact-utils.git#62d3898c53fba107a8d184e01a6dff1a60b4a794(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)
@@ -20,6 +26,9 @@ importers:
       '@rhinestone/modulekit':
         specifier: ^0.5.9
         version: 0.5.9(ethers@5.8.0)(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)
+      FreshCryptoLib:
+        specifier: github:rdubois-crypto/FreshCryptoLib
+        version: https://codeload.github.com/rdubois-crypto/FreshCryptoLib/tar.gz/8179e08cac72072bd260796633fec41fdfd5b441
       erc7579-implementation:
         specifier: github:erc7579/erc7579-implementation
         version: https://codeload.github.com/erc7579/erc7579-implementation/tar.gz/16138d1afd4e9711f6c1425133538837bd7787b5(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
@@ -29,6 +38,9 @@ importers:
       smartsessions:
         specifier: github:erc7579/smartsessions
         version: https://codeload.github.com/erc7579/smartsessions/tar.gz/fe51221ae3b49da2e84c8f769aa9a6b81151a830(ethers@5.8.0)(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)
+      webauthn-sol:
+        specifier: github:rhinestonewtf/webauthn-sol
+        version: https://codeload.github.com/rhinestonewtf/webauthn-sol/tar.gz/00b5ba48bac39231dc4a95ba2763ecc02b779c39
 
 packages:
 
@@ -2257,6 +2269,10 @@ packages:
   web3-utils@1.10.4:
     resolution: {integrity: sha512-tsu8FiKJLk2PzhDl9fXbGUWTkkVXYhtTA+SmEFkKft+9BgwLxfCRpU96sWv7ICC8zixBNd3JURVoiR3dUXgP8A==}
     engines: {node: '>=8.0.0'}
+
+  webauthn-sol@https://codeload.github.com/rhinestonewtf/webauthn-sol/tar.gz/00b5ba48bac39231dc4a95ba2763ecc02b779c39:
+    resolution: {tarball: https://codeload.github.com/rhinestonewtf/webauthn-sol/tar.gz/00b5ba48bac39231dc4a95ba2763ecc02b779c39}
+    version: 0.0.0
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -5365,6 +5381,8 @@ snapshots:
       number-to-bn: 1.7.0
       randombytes: 2.1.0
       utf8: 3.0.0
+
+  webauthn-sol@https://codeload.github.com/rhinestonewtf/webauthn-sol/tar.gz/00b5ba48bac39231dc4a95ba2763ecc02b779c39: {}
 
   webidl-conversions@3.0.1: {}
 

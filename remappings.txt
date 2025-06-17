@@ -30,6 +30,10 @@ the-compact/=node_modules/@uniswap/the-compact/src/
 stringutils/=node_modules/stringutils/src/
 excessively-safe-call=node_modules/excessively-safe-call/src/
 @forge-std/=node_modules/forge-std/src/
+@checknsignatures/=node_modules/@rhinestone/checknsignatures/src/
+@webauthn/=node_modules/webauthn-sol/src/
+FreshCryptoLib/=node_modules/FreshCryptoLib/solidity/src
+node_modules/webauthn-sol/src/:openzeppelin-contracts/=node_modules/@openzeppelin/
 
 @interfaces/=src/interfaces/
 @core/=src/core/

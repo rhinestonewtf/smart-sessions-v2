@@ -19,6 +19,9 @@ import {
     EMISSARY_SMART_SESSION
 } from "@lib/ModeLib.sol";
 
+// Types
+import { INVALID_RETURN } from "@types/DataTypes.sol";
+
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
 ///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
@@ -28,13 +31,6 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
     //////////////////////////////////////////////////////////////*/
 
     using ModeLib for bytes;
-
-    /*//////////////////////////////////////////////////////////////
-                               CONSTANTS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Invalid return value for unsupported or invalid operations
-    bytes4 constant INVALID_RETURN = 0xFFFFFFFF;
 
     /*//////////////////////////////////////////////////////////////
                                  CLAIM

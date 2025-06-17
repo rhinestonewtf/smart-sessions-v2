@@ -26,12 +26,16 @@
   },
   "dependencies": {
     "@erc7579/enumerablemap4337": "github:erc7579/enumerablemap",
+    "@openzeppelin/contracts": "^5.3.0",
+    "@rhinestone/checknsignatures": "github:rhinestonewtf/checknsignatures",
     "@rhinestone/compact-utils": "github:rhinestonewtf/compact-utils#chore/update-deps",
-    "@rhinestone/modulekit": "^0.5.9",
-    "erc7579-implementation": "github:erc7579/erc7579-implementation",
-    "smartsessions": "github:erc7579/smartsessions",
     "@rhinestone/flatbytes": "github:rhinestonewtf/flatbytes",
-    "excessively-safe-call": "github:nomad-xyz/ExcessivelySafeCall"
+    "@rhinestone/modulekit": "^0.5.9",
+    "FreshCryptoLib": "github:rdubois-crypto/FreshCryptoLib",
+    "erc7579-implementation": "github:erc7579/erc7579-implementation",
+    "excessively-safe-call": "github:nomad-xyz/ExcessivelySafeCall",
+    "smartsessions": "github:erc7579/smartsessions",
+    "webauthn-sol": "github:rhinestonewtf/webauthn-sol"
   },
   "files": [
     "src",

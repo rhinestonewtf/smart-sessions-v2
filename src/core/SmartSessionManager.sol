@@ -191,6 +191,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         view
         returns (bytes32)
     {
+        // TODO: Check if we can use emissaryNonce for this
         uint256 nonce = $signerNonce[permissionId][account];
         return data.sessionDigest({ account: account, mode: mode, nonce: nonce });
     }
