@@ -119,14 +119,9 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             InvalidAllocatorSignature()
         );
 
-        // TODO: This is ass placeholder
-
         // Get all enabled permissionIds
         address sender = config.arbiter;
         bytes32[] memory enabledPermissionIds = $smartSessionConfig[sender][lockTag].values(account);
-
-        // Remove existing sessions for this lockTag and arbiter
-        $smartSessionConfig[sender][lockTag].removeAll(account);
 
         // Call remove session for each existing permissionId
         for (uint256 i; i < enabledPermissionIds.length; i++) {
