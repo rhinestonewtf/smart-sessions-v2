@@ -93,12 +93,14 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
     /// @param digest The hash of the user operation
     /// @param emissaryData Data containing mode and mode-specific execution data
     /// @param executions The execution data for the user operation
+    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata executions
+        bytes calldata executions,
+        bytes12 lockTag
     )
         external
         returns (bytes4)
@@ -109,16 +111,19 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         // Mode-based dispatch for execution verification
         if (mode == EMISSARY_STATELESS_VALIDATOR) {
             // Stateless Validator mode
-            return _verifyExecutionStatelessValidator(sponsor, digest, emissaryData[1:], executions);
+            return _verifyExecutionStatelessValidator(
+                sponsor, digest, emissaryData[1:], executions, lockTag
+            );
         } else if (mode == EMISSARY_ECDSA) {
             // ECDSA mode
-            return _verifyExecutionECDSA(sponsor, digest, emissaryData[1:], executions);
+            return _verifyExecutionECDSA(sponsor, digest, emissaryData[1:], executions, lockTag);
         } else if (mode == EMISSARY_PASSKEY) {
             // Passkey mode
-            return _verifyExecutionPasskey(sponsor, digest, emissaryData[1:], executions);
+            return _verifyExecutionPasskey(sponsor, digest, emissaryData[1:], executions, lockTag);
         } else if (mode == EMISSARY_SMART_SESSION) {
             // SmartSession mode
-            return _verifyExecutionSmartSession(sponsor, digest, emissaryData[1:], executions);
+            return
+                _verifyExecutionSmartSession(sponsor, digest, emissaryData[1:], executions, lockTag);
         }
 
         // Default case for unsupported modes

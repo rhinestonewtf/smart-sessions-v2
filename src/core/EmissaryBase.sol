@@ -199,12 +199,14 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
     /// @param sponsor The account for which the executions are being verified
     /// @param digest The hash of the user operation
     /// @param emissaryData data containing validator address, configId, lockTag, and signature
+    /// @param lockTag The lock tag associated with the configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function _verifyExecutionStatelessValidator(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata /* executions */
+        bytes calldata, /* executions */
+        bytes12 lockTag
     )
         internal
         virtual
@@ -213,8 +215,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         // Parse emissaryData format for Stateless Validator:
         IStatelessValidator validator = IStatelessValidator(address(bytes20(emissaryData[:20])));
         uint8 configId = uint8(bytes1(emissaryData[20:21]));
-        bytes12 lockTag = bytes12(bytes(emissaryData[21:33]));
-        emissaryData = emissaryData[33:];
+        emissaryData = emissaryData[21:];
 
         // Get the compressed configuration data
         Compressed.Bytes storage $config =
@@ -235,7 +236,8 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata /* executions */
+        bytes calldata, /* executions */
+        bytes12 /* lockTag */
     )
         internal
         virtual
@@ -246,7 +248,8 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata /* executions */
+        bytes calldata, /* executions */
+        bytes12 /* lockTag */
     )
         internal
         virtual

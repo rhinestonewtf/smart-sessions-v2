@@ -198,12 +198,14 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param hash The hash of the user operation
     /// @param emissaryData Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
+    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function _verifyExecutionSmartSession(
         address account,
         bytes32 hash,
         bytes calldata emissaryData,
-        bytes calldata executions
+        bytes calldata executions,
+        bytes12 lockTag
     )
         internal
         virtual
@@ -226,7 +228,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
                 hash: hash,
                 callData: executions,
                 decompressedSignature: packedSig,
-                account: account
+                account: account,
+                lockTag: lockTag
             });
         }
         // if an Unknown mode is provided, the function will revert
@@ -249,20 +252,24 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param callData Execution data for the call
     /// @param decompressedSignature The decompressed signature for validation
     /// @param account The account for which policies are being enforced
+    /// @param lockTag The lock tag associated with the session
     /// @return validSig True if the signature is valid, false otherwise
     function _enforcePolicies(
         PermissionId permissionId,
         bytes32 hash,
         bytes calldata callData,
         bytes memory decompressedSignature,
-        address account
+        address account,
+        bytes12 lockTag
     )
         internal
         returns (bool validSig)
     {
         // ensure that the permissionId is enabled
         if (
-            !$enabledSessions.contains({ account: account, value: PermissionId.unwrap(permissionId) })
+            !$smartSessionConfig[msg.sender][lockTag].contains(
+                account, PermissionId.unwrap(permissionId)
+            ) || !$enabledSessions.contains(account, PermissionId.unwrap(permissionId))
         ) {
             revert InvalidPermissionId(permissionId);
         }
@@ -371,18 +378,12 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         console.logBytes32(PermissionId.unwrap(permissionId));
         console.logBytes32(appDomainSeparator);
 
-        // // TODO: This is ass placeholder
-
-        // // make sure permissionId is enabled for sender, sponsor, and lockTag
-        // require(
-        //     $smartSessionConfig[sender][lockTag].contains(
-        //         sponsor, PermissionId.unwrap(permissionId)
-        //     ),
-        //     InvalidSession(permissionId)
-        // );
-
         // forgefmt: disable-next-item
         if (
+            // return false if permissionId is not enabled for lockTag and sender
+             !$smartSessionConfig[sender][lockTag].contains(
+                sponsor, PermissionId.unwrap(permissionId)
+            ) || 
             // return false if the permissionId is not enabled
             !$enabledSessions.contains(sponsor, PermissionId.unwrap(permissionId))
             // return false if the content is not enabled
