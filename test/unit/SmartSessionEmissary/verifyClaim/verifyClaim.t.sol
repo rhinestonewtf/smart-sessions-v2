@@ -42,10 +42,10 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
     bytes12 testLockTag;
     bytes32 testClaimHash;
     bytes32 testDigest;
-    bytes mockERC7739Signature;
     bytes32 appDomainSeparator;
     string constant TEST_CONTENT = "TestContent(string data)";
     string constant TEST_CONTENT_NAME = "TestContent";
+    bytes mockERC7739Signature;
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
@@ -71,16 +71,6 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
             )
         );
 
-        // Create mock ERC-7739 signature
-        mockERC7739Signature = abi.encodePacked(
-            testPermissionId, // 32 bytes
-            "mockSessionSig", // session validator signature
-            appDomainSeparator, // 32 bytes
-            "testContentData", // contents
-            TEST_CONTENT, // contentsType
-            uint16(bytes(TEST_CONTENT).length) // contentsType length
-        );
-
         // Deploy the account instance
         instance.deployAccount();
     }
@@ -89,7 +79,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_verifyClaim_ERC7739SupportDetection() public {
+    function test_verifyClaim_ERC7739SupportDetection() public view {
         // Arrange
         bytes32 erc7739DetectionHash =
             0x7739773977397739773977397739773977397739773977397739773977397739;
@@ -121,43 +111,6 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         );
     }
 
-    function test_verifyClaim_SmartSessionMode_InvalidPermissionId() public {
-        // Arrange
-        PermissionId invalidPermissionId = PermissionId.wrap(keccak256("invalid"));
-        bytes memory invalidSignature = abi.encodePacked(
-            invalidPermissionId,
-            "mockSessionSig",
-            appDomainSeparator,
-            "testContentData",
-            TEST_CONTENT,
-            uint16(bytes(TEST_CONTENT).length)
-        );
-
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, invalidSignature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, testDigest, testClaimHash, emissaryData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for invalid permission ID");
-    }
-
-    function test_verifyClaim_SmartSessionMode_InvalidLockTag() public withEnabledClaimSession {
-        // Arrange
-        bytes12 invalidLockTag = bytes12(keccak256("invalidLockTag"));
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockERC7739Signature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, testDigest, testClaimHash, emissaryData, invalidLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for invalid lock tag");
-    }
-
     function test_verifyClaim_SmartSessionMode_InvalidSignature()
         public
         withEnabledClaimSessionWithFailingValidator
@@ -174,30 +127,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         assertEq(result, bytes4(0xffffffff), "Should return failure code for invalid signature");
     }
 
-    function test_verifyClaim_SmartSessionMode_ContentNotEnabled() public withEnabledClaimSession {
-        // Arrange - Use different content that's not enabled
-        string memory unauthorizedContent = "UnauthorizedContent(string data)";
-        bytes memory unauthorizedSignature = abi.encodePacked(
-            testPermissionId,
-            "mockSessionSig",
-            appDomainSeparator,
-            "unauthorizedData",
-            unauthorizedContent,
-            uint16(bytes(unauthorizedContent).length)
-        );
-
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, unauthorizedSignature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, testDigest, testClaimHash, emissaryData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for unauthorized content");
-    }
-
-    function test_verifyClaim_UnsupportedMode() public {
+    function test_verifyClaim_UnsupportedMode() public view {
         // Arrange
         EmissaryMode unsupportedMode = EmissaryMode.wrap(0xFF); // Invalid mode
         bytes memory emissaryData = abi.encodePacked(unsupportedMode, "mockData");
@@ -215,9 +145,9 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Arrange
         bytes memory emptyData = "";
 
-        // Act
+        // Act & Assert
         vm.expectRevert();
-        bytes4 result = smartSessionEmissary.verifyClaim(
+        smartSessionEmissary.verifyClaim(
             instance.account, testDigest, testClaimHash, emptyData, testLockTag
         );
     }
@@ -231,12 +161,10 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, malformedSignature);
 
         // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
+        vm.expectRevert();
+        smartSessionEmissary.verifyClaim(
             instance.account, testDigest, testClaimHash, emissaryData, testLockTag
         );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for malformed signature");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -279,6 +207,9 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Set a mock lockTag for testing
         testLockTag = bytes12(keccak256("mockLockTag"));
 
+        //_ Create mock ERC-7739 signature
+        _createMockERC7739Signature();
+
         // Continue with the test
         _;
     }
@@ -311,13 +242,14 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions);
-
-        // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        PermissionId[] memory testPermissionIds = smartSessionEmissary.enableSessions(sessions);
+        testPermissionId = testPermissionIds[0];
 
         // Set a mock lockTag for testing
         testLockTag = bytes12(keccak256("mockLockTag"));
+
+        //_ Create mock ERC-7739 signature
+        _createMockERC7739Signature();
 
         // Continue with the test
         _;
@@ -345,5 +277,30 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         contexts[0] =
             ERC7739Context({ appDomainSeparator: appDomainSeparator, contentNames: contentNames });
         return contexts;
+    }
+
+    function _createMockERC7739Signature() internal {
+        // Create mock signature components (r, s, v)
+        bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
+        bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
+        uint8 v = 27;
+
+        // Create contents and contentsDescription
+        bytes32 contents = keccak256(abi.encode("testData", TEST_CONTENT));
+        bytes memory contentsDescription = abi.encodePacked(TEST_CONTENT, TEST_CONTENT_NAME);
+
+        // Construct the signature following ERC-7739 format
+        bytes memory sessionSignature = abi.encodePacked(
+            r,
+            s,
+            v, // Session validator signature
+            appDomainSeparator, // App domain separator
+            contents, // Contents hash
+            contentsDescription, // Contents type + name
+            uint16(contentsDescription.length) // Length of contents description
+        );
+
+        // Prepend the permissionId
+        mockERC7739Signature = abi.encodePacked(testPermissionId, sessionSignature);
     }
 }

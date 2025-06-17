@@ -358,10 +358,18 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         override
         returns (bool)
     {
+        console.log("SmartSessionMixin: _erc1271IsValidSignatureNowCalldata");
         bytes32 contentHash = string(contents).hashERC7739Content();
+        console.logBytes32(contentHash);
+        console.logBytes(signature);
         // isolate the PermissionId and actual signature from the supplied signature param
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
         signature = signature[32:];
+        console.log("sender: %s", sender);
+        console.log("sponsor: %s", sponsor);
+        console.logBytes(signature);
+        console.logBytes32(PermissionId.unwrap(permissionId));
+        console.logBytes32(appDomainSeparator);
 
         // // TODO: This is ass placeholder
 
