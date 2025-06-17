@@ -199,13 +199,14 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions);
-
-        // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
 
         // Set a mock lockTag for testing
         testLockTag = bytes12(keccak256("mockLockTag"));
+
+        smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
+
+        // Generate the permission ID
+        testPermissionId = smartSessionEmissary.getPermissionId(session);
 
         //_ Create mock ERC-7739 signature
         _createMockERC7739Signature();
@@ -239,14 +240,15 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
             permitERC4337Paymaster: false
         });
 
+        // Set a mock lockTag for testing
+        testLockTag = bytes12(keccak256("mockLockTag"));
+
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        PermissionId[] memory testPermissionIds = smartSessionEmissary.enableSessions(sessions);
+        PermissionId[] memory testPermissionIds =
+            smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
         testPermissionId = testPermissionIds[0];
-
-        // Set a mock lockTag for testing
-        testLockTag = bytes12(keccak256("mockLockTag"));
 
         //_ Create mock ERC-7739 signature
         _createMockERC7739Signature();

@@ -63,6 +63,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
     bytes32 TEST_HASH;
     bytes4 mockTargetSelector;
     address testValidator;
+    bytes12 testLockTag = bytes12(keccak256("mockLockTag"));
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
@@ -101,8 +102,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Act
-        bytes4 result =
-            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
+        bytes4 result = smartSessionEmissary.verifyExecution(
+            instance.account, TEST_HASH, data, mockExecData, testLockTag
+        );
 
         // Assert
         assertEq(
@@ -125,7 +127,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
                 ISmartSessionEmissary.InvalidPermissionId.selector, invalidPermissionId
             )
         );
-        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
+        smartSessionEmissary.verifyExecution(
+            instance.account, TEST_HASH, data, mockExecData, testLockTag
+        );
     }
 
     function test_verifyExecution_UseMode_UnsupportedSelector() public withEnabledSudoSession {
@@ -139,7 +143,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
         // Act/Assert
         vm.expectRevert(ISmartSessionEmissary.UnsupportedSelector.selector);
-        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, unsupportedExecData);
+        smartSessionEmissary.verifyExecution(
+            instance.account, TEST_HASH, data, unsupportedExecData, testLockTag
+        );
     }
 
     function test_verifyExecution_UseMode_UnsupportedExecutionType_TryExec()
@@ -160,7 +166,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
         // Act/Assert
         vm.expectRevert(ISmartSessionEmissary.UnsupportedExecutionType.selector);
-        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, tryExecData);
+        smartSessionEmissary.verifyExecution(
+            instance.account, TEST_HASH, data, tryExecData, testLockTag
+        );
     }
 
     function test_verifyExecution_UseMode_UnsupportedExecutionType_DelegateCall()
@@ -182,7 +190,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
         // Act/Assert
         vm.expectRevert(ISmartSessionEmissary.UnsupportedExecutionType.selector);
-        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, delegateExecData);
+        smartSessionEmissary.verifyExecution(
+            instance.account, TEST_HASH, data, delegateExecData, testLockTag
+        );
     }
 
     function test_verifyExecution_UseMode_BatchCall_Success() public withEnabledBatchSudoSession {
@@ -211,8 +221,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             abi.encodeCall(IERC7579Account.execute, (mode, ExecutionLib.encodeBatch(executions)));
 
         // Act
-        bytes4 result =
-            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, batchExecData);
+        bytes4 result = smartSessionEmissary.verifyExecution(
+            instance.account, TEST_HASH, data, batchExecData, testLockTag
+        );
 
         // Assert
         assertEq(
@@ -231,8 +242,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Act
-        bytes4 result =
-            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
+        bytes4 result = smartSessionEmissary.verifyExecution(
+            instance.account, TEST_HASH, data, mockExecData, testLockTag
+        );
 
         // Assert
         assertEq(result, bytes4(0xFFFFFFFF), "Should return failure code for invalid signature");
@@ -270,7 +282,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions);
+        smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
 
         // Generate the permission ID
         testPermissionId = smartSessionEmissary.getPermissionId(session);
@@ -314,7 +326,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions);
+        smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
 
         // Generate the permission ID
         testPermissionId = smartSessionEmissary.getPermissionId(session);
@@ -351,7 +363,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions);
+        smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
 
         // Generate the permission ID
         testPermissionId = smartSessionEmissary.getPermissionId(session);
