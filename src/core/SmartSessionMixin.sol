@@ -62,15 +62,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using SignatureCheckerLib for address;
 
     /*//////////////////////////////////////////////////////////////
-                                STORAGE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Maps lockTag to enabled permissionIds for verifyClaim lookups
-    /// @dev Bridge storage connecting emissary lockTags to SmartSession permissionIds
-    mapping(address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs))
-        internal $smartSessionConfig;
-
-    /*//////////////////////////////////////////////////////////////
                                 CONFIG
     //////////////////////////////////////////////////////////////*/
 
@@ -140,12 +131,13 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // Call remove session for each existing permissionId
         for (uint256 i; i < enabledPermissionIds.length; i++) {
             PermissionId permissionId = PermissionId.wrap(enabledPermissionIds[i]);
-            _removeSession(permissionId, account);
+            _removeSession(permissionId, account, lockTag, sender);
         }
 
         //  Enable new sessions if provided
         if (config.sessions.length != 0) {
-            PermissionId[] memory permissionIDs = _enableSessions(config.sessions, account, true);
+            PermissionId[] memory permissionIDs =
+                _enableSessions(config.sessions, account, true, lockTag, sender);
             // Map returned permissionIds to lockTag in smartSessionConfig
             for (uint256 i; i < permissionIDs.length; i++) {
                 $smartSessionConfig[sender][lockTag].add(
@@ -269,7 +261,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         if (
             !$smartSessionConfig[msg.sender][lockTag].contains(
                 account, PermissionId.unwrap(permissionId)
-            ) || !$enabledSessions.contains(account, PermissionId.unwrap(permissionId))
+            )
         ) {
             revert InvalidPermissionId(permissionId);
         }
@@ -384,10 +376,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
              !$smartSessionConfig[sender][lockTag].contains(
                 sponsor, PermissionId.unwrap(permissionId)
             ) || 
-            // return false if the permissionId is not enabled
-            !$enabledSessions.contains(sponsor, PermissionId.unwrap(permissionId))
             // return false if the content is not enabled
-            || !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(sponsor, contentHash)
+             !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(sponsor, contentHash)
         ) return false;
 
         // check the ERC-1271 policy

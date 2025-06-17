@@ -27,11 +27,17 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
     /// @dev Since this function is only called during the ERC-4337 execution phase, it is safe to
     ///      use the registry
     /// @param sessions An array of Session structures to be enabled
+    /// @param lockTag A bytes12 value used to tag the lock
+    /// @param arbiter The address of the arbiter for the sessions
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
-    function enableSessions(Session[] calldata sessions)
+    function enableSessions(
+        Session[] calldata sessions,
+        bytes12 lockTag,
+        address arbiter
+    )
         external
         returns (PermissionId[] memory permissionIds)
     {
-        return _enableSessions(sessions, msg.sender, true);
+        return _enableSessions(sessions, msg.sender, true, lockTag, arbiter);
     }
 }
