@@ -12,6 +12,7 @@ import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
+import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -40,6 +41,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     using EnumerableSet for *;
     using ConfigLib for *;
+    using ConfigLibV2 for *;
     using IdLib for *;
     using HashLib for *;
     using PolicyLib for *;
@@ -103,15 +105,19 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 permissionId: permissionId,
                 configId: permissionId.toErc1271PolicyId().toConfigId(),
                 policyDatas: session.erc7739Policies.erc1271Policies,
-                useRegistry: useRegistry
+                useRegistry: useRegistry,
+                account: account
             });
-            $enabledERC7739.enable(session.erc7739Policies.allowedERC7739Content, permissionId);
+            $enabledERC7739.enable(
+                session.erc7739Policies.allowedERC7739Content, permissionId, account
+            );
 
             // Enable Action policies
             $actionPolicies.enable({
                 permissionId: permissionId,
                 actionPolicyDatas: session.actions,
-                useRegistry: useRegistry
+                useRegistry: useRegistry,
+                account: account
             });
 
             // Add the session to the list of enabled sessions for the caller
@@ -126,7 +132,8 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                     permissionId: permissionId,
                     sessionValidator: session.sessionValidator,
                     sessionValidatorConfig: session.sessionValidatorInitData,
-                    useRegistry: useRegistry
+                    useRegistry: useRegistry,
+                    account: account
                 });
             }
             permissionIds[i] = permissionId;

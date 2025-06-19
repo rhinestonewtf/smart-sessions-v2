@@ -7,9 +7,10 @@ import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidat
 // Types
 import { Session } from "@smartsessions/DataTypes.sol";
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
+import { EnableSession, PermissionId } from "@smartsessions/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
-                               CONSTANTS
+                            CONSTANTS
 //////////////////////////////////////////////////////////////*/
 
 /// @dev Invalid return value for unsupported or invalid operations
@@ -25,10 +26,11 @@ bytes4 constant INVALID_RETURN = 0xFFFFFFFF;
 struct SmartSessionEmissaryConfig {
     address arbiter;
     address sender;
-    Session[] sessions;
     Scope scope;
     ResetPeriod resetPeriod;
     address allocator;
+    EnableSession session;
+    PermissionId permissionId;
 }
 
 /// @notice Configuration for the basic Emissary.

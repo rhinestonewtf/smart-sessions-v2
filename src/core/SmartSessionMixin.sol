@@ -7,6 +7,7 @@ import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
+import { IERC1271, EIP1271_MAGIC_VALUE } from "@modulekit/module-bases/interfaces/IERC1271.sol";
 
 // Libraries
 import { EncodeLib } from "@smartsessions/lib/EncodeLib.sol";
@@ -25,7 +26,11 @@ import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 
 // Types
 import {
-    PermissionId, SmartSessionMode, EnableSession, Session
+    PermissionId,
+    SmartSessionMode,
+    EnableSession,
+    Session,
+    PolicyType
 } from "@smartsessions/DataTypes.sol";
 import { SmartSessionEmissaryConfig, EmissaryEnable } from "@interfaces/ISmartSessionEmissary.sol";
 import {
@@ -80,67 +85,115 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes12 lockTag =
             config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod);
 
-        // Nonce validation to prevent replay attacks
-        uint256 nonce = enableData.nonce;
-        uint256 currentNonce = $emissaryNonce[account][lockTag];
-        require(nonce > currentNonce, InvalidNonce());
-        $emissaryNonce[account][lockTag] = nonce;
-
         // Verify chain ID matches current chain
         require(
             enableData.allChainIds[enableData.chainIndex] == block.chainid,
             InvalidEmissaryEnableData()
         );
+
         // Verify data expires after current block timestamp
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
-        // Calculate EIP-712 hash for configuration
-        bytes32 hash = EIP712Hash.config({
-            sponsor: account,
-            lockTag: lockTag,
-            expires: enableData.expires,
-            sessions: config.sessions,
-            nonce: nonce,
-            chainIds: enableData.allChainIds
-        });
-        // Hash the typed data structure (excluding chainId as it's implicitly checked)
-        bytes32 digest = _getTypedDataHashSansChainId(hash);
 
-        // Verify user signature
+        // Enable policies
+        _enablePolicies(
+            account,
+            config.session,
+            config.permissionId,
+            config.arbiter,
+            lockTag,
+            config.allocator,
+            enableData.allocatorSig
+        );
+
+        // Emit event if the session is enabled
+        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
+    }
+
+    /// @notice Enables policies for an account, using the provided enable data after verifying
+    ///         required signatures.
+    /// @param account The address of the account for which policies are being enabled
+    /// @param enableData The data containing session and policy information to be enabled
+    /// @param permissionId The unique identifier for the permission set
+    /// @param arbiter The address of the arbiter for the session
+    /// @param lockTag The lock tag associated with the session
+    /// @param allocator The address of the allocator for the session
+    /// @param allocatorSig The signature from the allocator authorizing the session
+    function _enablePolicies(
+        address account,
+        EnableSession memory enableData,
+        PermissionId permissionId,
+        address arbiter,
+        bytes12 lockTag,
+        address allocator,
+        bytes calldata allocatorSig
+    )
+        internal
+    {
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $signerNonce[permissionId][account]++;
+        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, SmartSessionMode.ENABLE);
+
+        // Verify the user signature if the sender is not the account
         if (msg.sender != account) {
             require(
-                account.isValidSignatureNowCalldata(digest, enableData.userSig),
-                InvalidUserSignature()
+                IERC1271(account).isValidSignature(hash, enableData.permissionEnableSig)
+                    == EIP1271_MAGIC_VALUE,
+                InvalidEnableSignature(account, hash)
             );
         }
+
         // Verify allocator signature
         require(
-            config.allocator.isValidERC1271SignatureNowCalldata(digest, enableData.allocatorSig),
+            allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSig),
             InvalidAllocatorSignature()
         );
 
-        // Get all enabled permissionIds
-        address sender = config.arbiter;
-        bytes32[] memory enabledPermissionIds = $smartSessionConfig[sender][lockTag].values(account);
+        // Enable ERC1271 policies
+        $enabledERC7739.enable({
+            contexts: enableData.sessionToEnable.erc7739Policies.allowedERC7739Content,
+            permissionId: permissionId,
+            account: account
+        });
 
-        // Call remove session for each existing permissionId
-        for (uint256 i; i < enabledPermissionIds.length; i++) {
-            PermissionId permissionId = PermissionId.wrap(enabledPermissionIds[i]);
-            _removeSession(permissionId, account, lockTag, sender);
+        // Enabel ERC1271 policies
+        $erc1271Policies.enable({
+            policyType: PolicyType.ERC1271,
+            permissionId: permissionId,
+            configId: permissionId.toErc1271PolicyId().toConfigId(),
+            policyDatas: enableData.sessionToEnable.erc7739Policies.erc1271Policies,
+            useRegistry: false,
+            account: account
+        });
+
+        // Enable action policies
+        $actionPolicies.enable({
+            permissionId: permissionId,
+            actionPolicyDatas: enableData.sessionToEnable.actions,
+            useRegistry: false,
+            account: account
+        });
+
+        // Enable mode can involve enabling ISessionValidator (new Permission)
+        // or just adding policies (existing permission)
+        // a) ISessionValidator is not set => enable ISessionValidator
+        // b) ISessionValidator is set => just add policies (above)
+        // Attention: if the same policy that has already been configured is added again,
+        // the policy will be overwritten with the new configuration
+        if (!_isISessionValidatorSet(permissionId, account)) {
+            $sessionValidators.enable({
+                permissionId: permissionId,
+                sessionValidator: enableData.sessionToEnable.sessionValidator,
+                sessionValidatorConfig: enableData.sessionToEnable.sessionValidatorInitData,
+                useRegistry: false,
+                account: account
+            });
         }
 
-        //  Enable new sessions if provided
-        if (config.sessions.length != 0) {
-            PermissionId[] memory permissionIDs =
-                _enableSessions(config.sessions, account, true, lockTag, sender);
-            // Map returned permissionIds to lockTag in smartSessionConfig
-            for (uint256 i; i < permissionIDs.length; i++) {
-                $smartSessionConfig[sender][lockTag].add(
-                    account, PermissionId.unwrap(permissionIDs[i])
-                );
-                // Emit event for each enabled session
-                emit SmartSessionEmissaryConfigUpdated(account, permissionIDs[i], lockTag);
-            }
-        }
+        // Mark the session as enabled
+        $smartSessionConfig[arbiter][lockTag].add({
+            account: account,
+            value: PermissionId.unwrap(permissionId)
+        });
     }
 
     /*//////////////////////////////////////////////////////////////

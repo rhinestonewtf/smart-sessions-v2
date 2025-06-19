@@ -12,6 +12,7 @@ import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
 import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
+import { HashLib } from "@smartsessions/lib/HashLib.sol";
 
 // Types
 import {
@@ -27,7 +28,9 @@ import {
     PolicyType,
     Policy,
     ConfigId,
-    PolicyData
+    PolicyData,
+    EnumerableERC7739Config,
+    ERC7739Context
 } from "@smartsessions/DataTypes.sol";
 
 library ConfigLibV2 {
@@ -40,6 +43,7 @@ library ConfigLibV2 {
     using EnumerableSet for *;
     using ConfigLib for *;
     using ConfigLibV2 for *;
+    using HashLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                  ENABLE
@@ -167,6 +171,34 @@ library ConfigLibV2 {
             });
 
             emit ISmartSession.PolicyEnabled(permissionId, policyType, policy, account);
+        }
+    }
+
+    /// @dev Adjusted enable from ConfigLib to work with address instead of msg.sender
+    function enable(
+        EnumerableERC7739Config storage $enabledERC7739,
+        ERC7739Context[] memory contexts,
+        PermissionId permissionId,
+        address account
+    )
+        internal
+    {
+        uint256 length = contexts.length;
+        for (uint256 i; i < length; i++) {
+            bytes32 appDomainSeparator = contexts[i].appDomainSeparator;
+
+            uint256 contentNamesLength = contexts[i].contentNames.length;
+            if (contentNamesLength != 0) {
+                $enabledERC7739.enabledDomainSeparators[permissionId].add(
+                    account, appDomainSeparator
+                );
+            }
+            for (uint256 y; y < contentNamesLength; y++) {
+                bytes32 contentHash = contexts[i].contentNames[y].hashERC7739Content();
+                $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].add(
+                    account, contentHash
+                );
+            }
         }
     }
 }
