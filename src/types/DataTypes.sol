@@ -3,11 +3,11 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
+import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
 
 // Types
-import { Session } from "@smartsessions/DataTypes.sol";
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
-import { EnableSession, PermissionId } from "@smartsessions/DataTypes.sol";
+import { PermissionId, ChainDigest, ERC7739Data, ActionData } from "@smartsessions/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                             CONSTANTS
@@ -19,6 +19,46 @@ bytes4 constant INVALID_RETURN = 0xFFFFFFFF;
 /*//////////////////////////////////////////////////////////////
                             STRUCTS
 //////////////////////////////////////////////////////////////*/
+
+/// @notice Data structure for enabling a session.
+/// @dev This structure contains the chain digest index, hashes and chain IDs,
+///      and the session to enable.
+struct EnableSession {
+    uint8 chainDigestIndex;
+    ChainDigest[] hashesAndChainIds;
+    Session sessionToEnable;
+}
+
+/// Represents a Session structure with various attributes for managing user operations and
+/// policies.
+///
+/// Attributes:
+///     sessionValidator (ISessionValidator): The validator contract for signing user operations.
+///         Every userOp must be signed by the session key "owner". The signature is validated
+///         via a stateless external contract (ISessionValidator) that can implement different
+///         means of validation.
+///
+///     sessionValidatorInitData (bytes): Initialization data for the ISessionValidator contract.
+///         The ISessionValidator contract can be configured with different parameters that are
+///         passed in this field.
+///
+///     salt (bytes32): A unique identifier to prevent collision between sessions.
+///         A session key owner can have multiple sessions with the same parameters. To facilitate
+///         this, a salt is necessary to avoid collision.
+///
+///     erc7739Policies (ERC7739Data): ERC1271 Policies specific to the ERC7739 standard.
+///
+///     actions (ActionData[]): An array of action data for specifying function-specific policies.
+///         A common use case of session keys is to scope access to a specific target and function
+///         selector. SmartSession calls this "Action". With ActionData, we can specify policies
+///         that are only run if a 7579 execution contains a specific action.
+struct Session {
+    ISessionValidator sessionValidator;
+    bytes sessionValidatorInitData;
+    bytes32 salt;
+    ERC7739Data erc7739Policies;
+    ActionData[] actions;
+}
 
 /// @notice Configuration for the Smart Session Emissary.
 /// @dev This configuration is used to set up the Smart Session Emissary with multiple sessions,

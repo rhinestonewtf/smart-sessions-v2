@@ -25,13 +25,7 @@ import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 
 // Types
-import {
-    PermissionId,
-    SmartSessionMode,
-    EnableSession,
-    Session,
-    PolicyType
-} from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode, PolicyType } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable
@@ -43,7 +37,7 @@ import {
     CALLTYPE_SINGLE,
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
-import { INVALID_RETURN } from "@types/DataTypes.sol";
+import { EnableSession, Session, INVALID_RETURN } from "@types/DataTypes.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
@@ -99,7 +93,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             lockTag,
             enableData.expires,
             config.allocator,
-            enableData.allocatorSig
+            enableData.allocatorSig,
+            enableData.userSig
         );
 
         // Emit event if the session is enabled
@@ -123,7 +118,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes12 lockTag,
         uint256 expires,
         address allocator,
-        bytes calldata allocatorSig
+        bytes calldata allocatorSig,
+        bytes calldata userSig
     )
         internal
     {
@@ -132,11 +128,11 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes32 hash =
             enableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter, allocator);
 
+        /// TODO: Move this to lib and reuse in EmissaryBase
         // Verify the user signature if the sender is not the account
         if (msg.sender != account) {
             require(
-                IERC1271(account).isValidSignature(hash, enableData.permissionEnableSig)
-                    == EIP1271_MAGIC_VALUE,
+                IERC1271(account).isValidSignature(hash, userSig) == EIP1271_MAGIC_VALUE,
                 InvalidEnableSignature(account, hash)
             );
         }

@@ -8,8 +8,6 @@ import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/Mes
 
 // Types
 import {
-    Session,
-    EnableSession,
     SmartSessionMode,
     ActionData,
     ERC7739Data,
@@ -18,6 +16,7 @@ import {
     FALLBACK_TARGET_SELECTOR_FLAG_PERMITTED_TO_CALL_SMARTSESSION,
     ChainDigest
 } from "@smartsessions/DataTypes.sol";
+import { EnableSession, Session } from "@types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                             TYPEHASHES
