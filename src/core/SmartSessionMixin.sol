@@ -18,10 +18,10 @@ import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { SignerLib } from "@smartsessions/lib/SignerLib.sol";
-import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
 import { IdLib as CompactIdLib } from "@the-compact/lib/IdLib.sol";
-import { EIP712Hash } from "@lib/EIP712Hash.sol";
+import { HashLib } from "@smartsessions/lib/HashLib.sol";
+import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 
 // Types
@@ -32,7 +32,10 @@ import {
     Session,
     PolicyType
 } from "@smartsessions/DataTypes.sol";
-import { SmartSessionEmissaryConfig, EmissaryEnable } from "@interfaces/ISmartSessionEmissary.sol";
+import {
+    SmartSessionEmissaryConfig,
+    SmartSessionEmissaryEnable
+} from "@interfaces/ISmartSessionEmissary.sol";
 import {
     ExecType,
     CallType,
@@ -59,11 +62,10 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using PolicyLibV2 for *;
     using SignerLib for *;
     using HashLib for *;
+    using HashLibV2 for *;
     using ConfigLibV2 for *;
-    using CompactIdLib for address;
-    using CompactIdLib for bytes12;
-    using CompactIdLib for uint96;
-    using SignatureCheckerLib for address;
+    using CompactIdLib for *;
+    using SignatureCheckerLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 CONFIG
@@ -76,7 +78,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     function setConfig(
         address account,
         SmartSessionEmissaryConfig calldata config,
-        EmissaryEnable calldata enableData
+        SmartSessionEmissaryEnable calldata enableData
     )
         external
         virtual
@@ -85,22 +87,17 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes12 lockTag =
             config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod);
 
-        // Verify chain ID matches current chain
-        require(
-            enableData.allChainIds[enableData.chainIndex] == block.chainid,
-            InvalidEmissaryEnableData()
-        );
-
         // Verify data expires after current block timestamp
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
 
         // Enable policies
         _enablePolicies(
             account,
-            config.session,
+            enableData.session,
             config.permissionId,
             config.arbiter,
             lockTag,
+            enableData.expires,
             config.allocator,
             enableData.allocatorSig
         );
@@ -124,14 +121,16 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         PermissionId permissionId,
         address arbiter,
         bytes12 lockTag,
+        uint256 expires,
         address allocator,
         bytes calldata allocatorSig
     )
         internal
     {
         // Increment nonce to prevent replay attacks
-        uint256 nonce = $signerNonce[permissionId][account]++;
-        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, SmartSessionMode.ENABLE);
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
+        bytes32 hash =
+            enableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter, allocator);
 
         // Verify the user signature if the sender is not the account
         if (msg.sender != account) {

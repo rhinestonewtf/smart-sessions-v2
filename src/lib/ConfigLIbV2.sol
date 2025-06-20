@@ -33,6 +33,8 @@ import {
     ERC7739Context
 } from "@smartsessions/DataTypes.sol";
 
+/// @dev Extended ConfigLib library from SmartSessions to allow passing an address instead of
+///      msg.sender for different enable functions.
 library ConfigLibV2 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES

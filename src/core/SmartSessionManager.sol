@@ -31,7 +31,8 @@ import {
     EMPTY_PERMISSIONID,
     Policy,
     EnumerableERC7739Config,
-    ERC7739ContextHashes
+    ERC7739ContextHashes,
+    SmartSessionMode
 } from "@smartsessions/DataTypes.sol";
 
 abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
@@ -183,24 +184,21 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Get the session digest for verification
-    /// @param permissionId The unique identifier for the permission
     /// @param account The account address
+    /// @param lockTag The lock tag used to identify the session
     /// @param data The session data
-    /// @param mode The smart session mode
     /// @return The session digest
     function getSessionDigest(
-        PermissionId permissionId,
         address account,
-        Session memory data,
-        SmartSessionMode mode
+        bytes12 lockTag,
+        Session memory data
     )
         public
         view
         returns (bytes32)
     {
-        // TODO: Check if we can use emissaryNonce for this
-        uint256 nonce = $signerNonce[permissionId][account];
-        return data.sessionDigest({ account: account, mode: mode, nonce: nonce });
+        uint256 nonce = $emissaryNonce[account][lockTag];
+        return data.sessionDigest({ account: account, mode: SmartSessionMode.ENABLE, nonce: nonce });
     }
 
     /// @notice Get the permission ID from a session

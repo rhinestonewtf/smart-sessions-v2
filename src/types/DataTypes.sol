@@ -29,7 +29,6 @@ struct SmartSessionEmissaryConfig {
     Scope scope;
     ResetPeriod resetPeriod;
     address allocator;
-    EnableSession session;
     PermissionId permissionId;
 }
 
@@ -46,15 +45,23 @@ struct EmissaryConfig {
 }
 
 /// @notice Data structure for enabling an Emissary.
-/// @dev This structure contains the signatures, expiration time, nonce, and chain IDs
+/// @dev This structure contains the signatures, expiration time, chain IDs
 ///      for enabling an Emissary on a specific chain.
 struct EmissaryEnable {
     bytes allocatorSig;
     bytes userSig;
     uint256 expires;
-    uint256 nonce;
     uint256[] allChainIds;
     uint256 chainIndex;
+}
+
+/// @notice Data structure for enabling a Smart Session Emissary.
+/// @dev This structure contains the signatures, and EnableSession data
+struct SmartSessionEmissaryEnable {
+    bytes allocatorSig;
+    bytes userSig;
+    uint256 expires;
+    EnableSession session;
 }
 
 /// @notice Structure holding WebAuthn credential information

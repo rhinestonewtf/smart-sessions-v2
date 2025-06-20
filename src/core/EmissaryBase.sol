@@ -85,18 +85,17 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
             config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod);
 
         // Nonce validation to prevent replay attacks
-        uint256 nonce = enableData.nonce;
-        uint256 currentNonce = $emissaryNonce[account][lockTag];
-        require(nonce > currentNonce, InvalidNonce());
-        $emissaryNonce[account][lockTag] = nonce;
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
 
         // Verify chain ID matches current chain
         require(
             enableData.allChainIds[enableData.chainIndex] == block.chainid,
             InvalidEmissaryEnableData()
         );
+
         // Verify data expires after current block timestamp
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
+
         // Calculate EIP-712 hash for configuration
         bytes32 hash = EIP712Hash.config({
             sponsor: account,

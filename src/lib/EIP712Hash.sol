@@ -42,32 +42,4 @@ library EIP712Hash {
             )
         );
     }
-
-    function config(
-        address sponsor,
-        Session[] calldata sessions,
-        uint256 expires,
-        bytes12 lockTag,
-        uint256 nonce,
-        uint256[] calldata chainIds
-    )
-        internal
-        pure
-        returns (bytes32 hash)
-    {
-        // TODO: This is ass placeholder
-        hash = keccak256(
-            abi.encode(
-                TYPEHASH.CONFIG,
-                sponsor,
-                address(0), // No validator for this case
-                uint8(0), // No configId for this case
-                lockTag,
-                expires,
-                keccak256(abi.encode(sessions)),
-                nonce,
-                keccak256(abi.encodePacked(chainIds))
-            )
-        );
-    }
 }
