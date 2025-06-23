@@ -143,7 +143,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
                                  CLAIM
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Verifies claims using a configured Stateless Validator
+    /// @notice Verifies digests using a configured Stateless Validator
     /// @param sponsor The sponsor account associated with the claim
     /// @param digest The hash of the claim being verified
     /// @param emissaryData Data containing validator address, configId, and signature
@@ -179,7 +179,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
             : INVALID_RETURN;
     }
 
-    /// @notice Verifies claims using ECDSA signatures and stored ECDSA configurations
+    /// @notice Verifies digests using ECDSA signatures and stored ECDSA configurations
     /// @param sponsor The sponsor account associated with the claim
     /// @param digest The hash of the claim being verified
     /// @param emissaryData Data containing mode byte and mode-specific verification data
@@ -212,7 +212,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         return isValid ? this.verifyClaim.selector : INVALID_RETURN;
     }
 
-    /// @notice Verifies claims using Passkey signatures and stored Passkey configurations
+    /// @notice Verifies digests using Passkey signatures and stored Passkey configurations
     /// @param sponsor The sponsor account associated with the claim
     /// @param digest The hash of the claim being verified
     /// @param emissaryData Data containing mode byte and mode-specific verification data

@@ -206,13 +206,13 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
                                  CLAIM
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Verifies claims using SmartSession (mode 2)
+    /// @notice Verifies digests using SmartSession (mode 2)
     /// @param sponsor The sponsor account associated with the claim
     /// @param claimHash The hash of the claim being verified
     /// @param emissaryData Data containing the permissionId and ERC-7739 signature
     /// @param lockTag The lock tag associated with the claim
     /// @return result The verifyClaim selector if valid, otherwise 0xffffffff
-    function _verifyClaimSmartSession(
+    function _verifyDigestSmartSession(
         address sponsor,
         bytes32 claimHash,
         bytes calldata emissaryData,
