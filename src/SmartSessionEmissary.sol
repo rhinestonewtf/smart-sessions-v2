@@ -5,6 +5,7 @@ pragma solidity ^0.8.28;
 import { EmissaryBase } from "@core/EmissaryBase.sol";
 import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
+import { ERC7579ValidatorBase } from "@modulekit/module-bases/ERC7579ValidatorBase.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -20,17 +21,153 @@ import {
 } from "@lib/ModeLib.sol";
 
 // Types
-import { INVALID_RETURN } from "@types/DataTypes.sol";
+import {
+    INVALID_RETURN,
+    SmartSessionEmissaryConfig,
+    SmartSessionEmissaryEnable,
+    EmissaryConfig,
+    EmissaryEnable
+} from "@types/DataTypes.sol";
 
-/// @title Smart Session Emissary
-/// @notice An extended emissary contract that supports multiple verification modes including
-///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
-contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
+/// @title ERC7579 Emissary Validator
+/// @notice An ERC7579 compliant validator contract that also functions as an Emissary.
+///         It supports multiple verification modes for claims and executions, including
+///         Stateless Validator, ECDSA, Passkey, and SmartSession modes.
+contract ERC7579EmissaryValidator is
+    EmissaryBase,
+    SmartSessionMixin,
+    EIP712,
+    ERC7579ValidatorBase
+{
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using ModeLib for bytes;
+
+    /*//////////////////////////////////////////////////////////////
+                               VALIDATION
+    //////////////////////////////////////////////////////////////*/
+
+    function validateUserOp(
+        PackedUserOperation calldata userOp,
+        bytes32 userOpHash
+    )
+        external
+        virtual
+        returns (ValidationData)
+    {
+        // Extract mode from the user operation data signature
+        EmissaryMode mode = userOp.signature.decodeMode();
+
+        // Mode-based dispatch for user operation validation
+        if (mode == EMISSARY_STATELESS_VALIDATOR) {
+            // Stateless Validator mode
+            return _validateUserOpStatelessValidator(userOp, userOpHash);
+        } else if (mode == EMISSARY_ECDSA) {
+            // ECDSA mode
+            return _validateUserOpECDSA(userOp, userOpHash);
+        } else if (mode == EMISSARY_PASSKEY) {
+            // Passkey mode
+            return _validateUserOpPasskey(userOp, userOpHash);
+        } else if (mode == EMISSARY_SMART_SESSION) {
+            // SmartSession mode
+            return _validateUserOpSmartSession(userOp, userOpHash);
+        }
+
+        // Default case for unsupported modes
+        return VALIDATION_FAILED;
+    }
+
+    /// @notice Validates a signature with the sender address and hash
+    /// @param sender The address of the sender
+    /// @param hash The hash of the data to be validated
+    /// @param data The data containing the mode and signature
+    /// @return bytes4 EIP1271_SUCCESS the signature is valid, otherwise EIP1271_SUCCESS
+    function isValidSignatureWithSender(
+        address sender,
+        bytes32 hash,
+        bytes calldata data
+    )
+        external
+        view
+        returns (bytes4)
+    {
+        // Extract mode from first byte
+        EmissaryMode mode = data.decodeMode();
+
+        // Mode-based dispatch for signature validation
+        if (mode == EMISSARY_STATELESS_VALIDATOR) {
+            // Stateless Validator mode
+            return _isValidSignatureStatelessValidator(sender, hash, data[1:]);
+        } else if (mode == EMISSARY_ECDSA) {
+            // ECDSA mode
+            return _isValidSignatureECDSA(sender, hash, data[1:]);
+        } else if (mode == EMISSARY_PASSKEY) {
+            // Passkey mode
+            return _isValidSignaturePasskey(sender, hash, data[1:]);
+        } else if (mode == EMISSARY_SMART_SESSION) {
+            // SmartSession mode
+            return _isValidSignatureSmartSession(sender, hash, data[1:]);
+        }
+
+        // Default case for unsupported modes
+        return EIP1271_SUCCESS;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                7579 CONFIG
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Checks if the module is initialized for a given smart account
+    /// @param smartAccount The address of the smart account to check
+    /// @return true if the module is initialized, false otherwise
+    function isInitialized(address smartAccount) external view returns (bool) {
+        return $isInitialized(smartAccount);
+    }
+
+    /// @notice Returns if the module is of a specific type
+    /// @param typeID The type ID to check against
+    /// @returns true if the module is ERC7579_MODULE_TYPE_VALIDATOR, false otherwise
+    function isModuleType(uint256 typeID) external pure override returns (bool) {
+        return typeID == ERC7579_MODULE_TYPE_VALIDATOR;
+    }
+
+    /// @notice Called when the module is installed on a smart account
+    /// @param data Arbitrary data that may be required for initialization
+    function onInstall(bytes calldata data) external {
+        // Initialize the module for the smart account
+        $isInitialized[msg.sender] = true;
+
+        // Extract mode from first byte
+        EmissaryMode mode = data.decodeMode();
+
+        // Set the Emissary configuration for the smart account based on the mode
+        if (mode == EMISSARY_SMART_SESSION) {
+            (
+                SmartSessionEmissaryConfig calldata config,
+                SmartSessionEmissaryEnable calldata enableData
+            ) = abi.decode(data[1:], (SmartSessionEmissaryConfig, SmartSessionEmissaryEnable));
+
+            // Set the configuration for SmartSession mode
+            setConfig(msg.sender, config, enableData);
+        } else {
+            (EmissaryConfig calldata config, EmissaryEnable calldata enableData) =
+                abi.decode(data[1:], (EmissaryConfig, EmissaryEnable));
+
+            // Set the configuration for EmissaryBase mode
+            setConfig(msg.sender, config, enableData);
+        }
+    }
+
+    /// TODO: this is borked
+    function onUninstall(bytes calldata data) external {
+        // Uninstall the module for the smart account
+        $isInitialized[msg.sender] = false;
+
+        // Emit an event for uninstalling the module
+        emit ISmartSessionEmissary.ModuleUninstalled(msg.sender, data);
+    }
 
     /*//////////////////////////////////////////////////////////////
                                  CLAIM
@@ -49,7 +186,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         bytes calldata emissaryData,
         bytes12 lockTag
     )
-        external
+        public
         view
         returns (bytes4)
     {
@@ -98,7 +235,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         bytes calldata executions,
         bytes12 lockTag
     )
-        external
+        public
         returns (bytes4)
     {
         // Extract mode from first byte

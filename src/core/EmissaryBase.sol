@@ -63,6 +63,8 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
     mapping(
         address sponsor => mapping(uint8 configId => mapping(bytes12 lockTag => Compressed.Bytes))
     ) public $ecdsaPasskeyConfig;
+    /// @notice Mapping of account address to isInitialized status
+    mapping(address account => bool isInitialized) internal $isInitialized;
 
     /*//////////////////////////////////////////////////////////////
                                  CONFIG
@@ -77,8 +79,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         EmissaryConfig calldata config,
         EmissaryEnable calldata enableData
     )
-        external
-        virtual
+        public
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag =

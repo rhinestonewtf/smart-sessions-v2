@@ -77,12 +77,21 @@ interface ISmartSessionEmissary is IEmissary {
     );
 
     /// @notice Emitted when a Smart Session Emissary configuration is successfully set for an
-    /// account.
+    ///         account.
     /// @param account The address of the account for which the configuration was set.
     /// @param permissionId The permission ID associated with the Smart Session.
     /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
     event SmartSessionEmissaryConfigUpdated(
         address indexed account, PermissionId permissionId, bytes12 indexed lockTag
+    );
+
+    /// @notice Emitted when Permit4337 paymaster is enabled for a specific permission ID and
+    ///         account.
+    /// @param permissionId The permission ID for which the paymaster is enabled.
+    /// @param account The address of the account for which the paymaster is enabled.
+    /// @param enabled A boolean indicating whether the paymaster is enabled or disabled.
+    event PermissionIdPermit4337Paymaster(
+        PermissionId permissionId, address indexed account, bool enabled
     );
 
     /*//////////////////////////////////////////////////////////////

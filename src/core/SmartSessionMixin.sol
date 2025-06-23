@@ -25,7 +25,7 @@ import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 
 // Types
-import { PermissionId, SmartSessionMode, PolicyType } from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode, PolicyType, Session } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable
@@ -37,7 +37,7 @@ import {
     CALLTYPE_SINGLE,
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
-import { EnableSession, Session, INVALID_RETURN } from "@types/DataTypes.sol";
+import { EnableSession, INVALID_RETURN } from "@types/DataTypes.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
@@ -74,8 +74,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         SmartSessionEmissaryConfig calldata config,
         SmartSessionEmissaryEnable calldata enableData
     )
-        external
-        virtual
+        public
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag =
@@ -143,6 +142,16 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             InvalidAllocatorSignature()
         );
 
+        // Enable UserOp policies
+        $userOpPolicies.enable({
+            policyType: PolicyType.USER_OP,
+            permissionId: permissionId,
+            configId: permissionId.toUserOpPolicyId().toConfigId(),
+            policyDatas: enableData.sessionToEnable.userOpPolicies,
+            useRegistry: false,
+            account: account
+        });
+
         // Enable ERC1271 policies
         $enabledERC7739.enable({
             contexts: enableData.sessionToEnable.erc7739Policies.allowedERC7739Content,
@@ -150,7 +159,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             account: account
         });
 
-        // Enabel ERC1271 policies
+        // Enable ERC1271 policies
         $erc1271Policies.enable({
             policyType: PolicyType.ERC1271,
             permissionId: permissionId,
@@ -167,6 +176,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             useRegistry: false,
             account: account
         });
+
+        _setPermit4337Paymaster(permissionId, enableData.sessionToEnable.permitERC4337Paymaster);
 
         // Enable mode can involve enabling ISessionValidator (new Permission)
         // or just adding policies (existing permission)
