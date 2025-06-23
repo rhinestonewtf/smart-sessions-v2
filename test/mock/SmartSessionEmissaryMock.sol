@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0 <0.9.0;
 
-import { ERC7579EmissaryValidator as SmartSessionEmissary } from
-    "@contracts/ERC7579EmissaryValidator.sol";
+import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
 
 // Types
 import {

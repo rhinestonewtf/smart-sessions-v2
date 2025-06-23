@@ -17,6 +17,7 @@ import { CheckSignatures } from "@checknsignatures/CheckNSignatures.sol";
 import { ECDSA } from "@solady/utils/ECDSA.sol";
 import { WebAuthn } from "@webauthn/WebAuthn.sol";
 import { LibSort } from "@solady/utils/LibSort.sol";
+import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
 import {
@@ -34,12 +35,11 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    using IdLib for address;
-    using IdLib for bytes12;
-    using IdLib for uint96;
-    using SignatureCheckerLib for address;
-    using Compressed for Compressed.Bytes;
+    using IdLib for *;
+    using SignatureCheckerLib for *;
+    using Compressed for *;
     using LibSort for *;
+    using SignatureLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -121,17 +121,9 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
 
         // If already initialized, verify signatures
         if (!isInit) {
-            // Verify user signature
-            if (msg.sender != account) {
-                require(
-                    account.isValidSignatureNowCalldata(digest, enableData.userSig),
-                    InvalidUserSignature()
-                );
-            }
-            // Verify allocator signature
-            require(
-                config.allocator.isValidERC1271SignatureNowCalldata(digest, enableData.allocatorSig),
-                InvalidAllocatorSignature()
+            // Verify user and allocator signatures
+            digest.verifySignatures(
+                config.allocator, account, enableData.allocatorSig, enableData.userSig
             );
         }
 

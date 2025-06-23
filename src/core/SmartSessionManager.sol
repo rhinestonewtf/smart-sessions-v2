@@ -63,16 +63,10 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     Policy internal $erc1271Policies;
     /// @notice Mapping of enabled erc7739 configurations per user address
     EnumerableERC7739Config internal $enabledERC7739;
-    /// @notice Mapping of user operation policies
-    Policy internal $userOpPolicies;
     /// @notice Mapping of session validators organized by permission IDs and smart account
     ///         addresses
     mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf)) internal
         $sessionValidators;
-    /// @notice Mapping of permitERC4337Paymaster for each permissionId and smart account
-    mapping(
-        PermissionId permissionId => mapping(address smartAccount => bool permitERC4337Paymaster)
-    ) internal $permitERC4337Paymaster;
 
     /*//////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
@@ -104,16 +98,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         for (uint256 i; i < length; i++) {
             Session calldata session = sessions[i];
             PermissionId permissionId = session.toPermissionId();
-
-            // Enable UserOp policies
-            $userOpPolicies.enable({
-                policyType: PolicyType.USER_OP,
-                permissionId: permissionId,
-                configId: permissionId.toUserOpPolicyId().toConfigId(),
-                policyDatas: session.userOpPolicies,
-                useRegistry: useRegistry,
-                account: account
-            });
 
             // Enable ERC1271 policies
             $erc1271Policies.enable({
@@ -173,9 +157,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         // Remove all ERC1271 policies for this session
         $erc1271Policies.policyList[permissionId].removeAll(account);
 
-        // Remove all UserOp policies for this session
-        $userOpPolicies.policyList[permissionId].removeAll(account);
-
         // Remove all Action policies for this session
         uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
         for (uint256 i; i < actionLength; i++) {
@@ -195,18 +176,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             value: PermissionId.unwrap(permissionId)
         });
         emit SessionRemoved(permissionId, account);
-    }
-
-    /// @notice Set the permitERC4337Paymaster status for a specific permissionId and account
-    function _setPermit4337Paymaster(
-        PermissionId permissionId,
-        bool enabled,
-        address account
-    )
-        internal
-    {
-        $permitERC4337Paymaster[permissionId][account] = enabled;
-        emit PermissionIdPermit4337Paymaster(permissionId, account, enabled);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -295,27 +264,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         return $smartSessionConfig[arbiter][lockTag].contains(
             account, PermissionId.unwrap(permissionId)
         );
-    }
-
-    /// @notice Check if UserOp policies are enabled for an account
-    /// @param account The account address
-    /// @param permissionId The permission ID
-    /// @param userOpPolicies The UserOp policy data array to check
-    /// @return Boolean indicating whether the UserOp policies are enabled
-    function areUserOpPoliciesEnabled(
-        address account,
-        PermissionId permissionId,
-        PolicyData[] calldata userOpPolicies
-    )
-        external
-        view
-        returns (bool)
-    {
-        return $userOpPolicies.areEnabled({
-            permissionId: permissionId,
-            smartAccount: account,
-            policyDatas: userOpPolicies
-        });
     }
 
     /// @notice Check if ERC1271 policies are enabled for an account
@@ -471,20 +419,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         returns (address[] memory)
     {
         return $erc1271Policies.policyList[permissionId].values(account);
-    }
-
-    /// @notice Get the UserOp policies for a specific permission ID
-    /// @param account The account address
-    /// @param permissionId The permission ID
-    function getUserOpPolicies(
-        address account,
-        PermissionId permissionId
-    )
-        external
-        view
-        returns (address[] memory)
-    {
-        return $userOpPolicies.policyList[permissionId].values(account);
     }
 
     /// @notice Get all enabled actions for an account

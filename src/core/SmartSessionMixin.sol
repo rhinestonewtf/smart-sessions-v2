@@ -23,12 +23,14 @@ import { IdLib as CompactIdLib } from "@the-compact/lib/IdLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
+import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
 import { PermissionId, SmartSessionMode, PolicyType, Session } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
-    SmartSessionEmissaryEnable
+    SmartSessionEmissaryEnable,
+    SmartSessionEmissaryDisable
 } from "@interfaces/ISmartSessionEmissary.sol";
 import {
     ExecType,
@@ -37,7 +39,7 @@ import {
     CALLTYPE_SINGLE,
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
-import { EnableSession, INVALID_RETURN } from "@types/DataTypes.sol";
+import { EnableSession, DisableSession, INVALID_RETURN } from "@types/DataTypes.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
@@ -60,6 +62,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using ConfigLibV2 for *;
     using CompactIdLib for *;
     using SignatureCheckerLib for *;
+    using SignatureLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 CONFIG
@@ -102,11 +105,39 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Removes a Smart Session Emissary configuration for a specific account
     /// @param account The address of the account for which the configuration is being removed
-    /// @param permissionId The unique identifier for the permission set
-    /// @param disableData The disable data containing the allocator, allocator signature, user
-    ///        signature, lockTag, and arbiter
-    /// TODO:
-    function removeConfig() public;
+    /// @param config The Smart Session Emissary configuration to be removed
+    /// @param disableData The disable data containing the allocatorSignature, user signature,
+    ///                    disable session data, and expiration time
+    function removeConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryDisable calldata disableData
+    )
+        external
+    {
+        // Derive lockTag from allocator, scope, resetPeriod
+        bytes12 lockTag =
+            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod);
+
+        // Verify data expires after current block timestamp
+        require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
+
+        // Disable policies
+        _disablePolicies(
+            account,
+            disableData.session,
+            config.permissionId,
+            config.arbiter,
+            lockTag,
+            disableData.expires,
+            config.allocator,
+            disableData.allocatorSig,
+            disableData.userSig
+        );
+
+        // Emit event if the session is removed
+        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
+    }
 
     /// @notice Enables policies for an account, using the provided enable data after verifying
     ///         required signatures.
@@ -135,30 +166,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes32 hash =
             enableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter, allocator);
 
-        /// TODO: Move this to lib and reuse in EmissaryBase
-        // Verify the user signature if the sender is not the account
-        if (msg.sender != account) {
-            require(
-                IERC1271(account).isValidSignature(hash, userSig) == EIP1271_MAGIC_VALUE,
-                InvalidEnableSignature(account, hash)
-            );
-        }
-
-        // Verify allocator signature
-        require(
-            allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSig),
-            InvalidAllocatorSignature()
-        );
-
-        // Enable UserOp policies
-        $userOpPolicies.enable({
-            policyType: PolicyType.USER_OP,
-            permissionId: permissionId,
-            configId: permissionId.toUserOpPolicyId().toConfigId(),
-            policyDatas: enableData.sessionToEnable.userOpPolicies,
-            useRegistry: false,
-            account: account
-        });
+        // Verify the user and allocator signatures
+        hash.verifySignatures(account, allocator, allocatorSig, userSig);
 
         // Enable ERC1271 policies
         $enabledERC7739.enable({
@@ -185,8 +194,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             account: account
         });
 
-        _setPermit4337Paymaster(permissionId, enableData.sessionToEnable.permitERC4337Paymaster);
-
         // Enable mode can involve enabling ISessionValidator (new Permission)
         // or just adding policies (existing permission)
         // a) ISessionValidator is not set => enable ISessionValidator
@@ -208,6 +215,39 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             account: account,
             value: PermissionId.unwrap(permissionId)
         });
+    }
+
+    /// @notice Disables policies for an account, using the provided disable data after verifying
+    ///         required signatures.
+    /// @param account The address of the account for which policies are being disabled
+    /// @param disableData The data containing session and policy information to be disabled
+    /// @param permissionId The unique identifier for the permission set
+    /// @param arbiter The address of the arbiter for the session
+    /// @param lockTag The lock tag associated with the session
+    /// @param allocator The address of the allocator for the session
+    /// @param allocatorSig The signature from the allocator authorizing the session
+    /// @param userSig The signature from the user authorizing the session disable
+    function _disablePolicies(
+        address account,
+        DisableSession memory disableData,
+        PermissionId permissionId,
+        address arbiter,
+        bytes12 lockTag,
+        uint256 expires,
+        address allocator,
+        bytes calldata allocatorSig,
+        bytes calldata userSig
+    )
+        internal
+    {
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
+        /*//////////////////////////////////////////////////////////////
+                                  TODO
+        //////////////////////////////////////////////////////////////*/
+
+        // bytes32 hash =
+        //     disableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter, allocator);
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -14,8 +14,7 @@ import {
     FALLBACK_TARGET_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG_PERMITTED_TO_CALL_SMARTSESSION,
-    ChainDigest,
-    Session
+    ChainDigest
 } from "@smartsessions/DataTypes.sol";
 import { EnableSession, Session } from "@types/DataTypes.sol";
 
@@ -27,49 +26,35 @@ import { EnableSession, Session } from "@types/DataTypes.sol";
  * SignedSession(
  *     address account,                                  // User account address
  *     SignedPermissions permissions,                    // Signed permissions struct
- *     │   bool permitGenericPolicy,                     // Allow policy fallback
- *     │   bool permitAdminAccess,                       // Allow unsafe fallback (the action
- *     │                                                 //   policy is permitted to call
- *     │                                                 //   administrative functions of smart
- *     │                                                 //   session module).
- *     │                                                 //   @dev frontends must be handled with
- *     │                                                 //   great care, as this can be used for
- *     │                                                 //   privilege escalation
- *     │   bool ignoreSecurityAttestations,              // Ignore Registry / Security Attestations
- *     │   bool permitERC4337Paymaster,                  // Allow Session Key to use ERC4337
- *     │                                                 // paymaster
- *     │   PolicyData[] userOpPolicies,                  // UserOp policies array
- *     │   ├── address policy,                           // Policy contract address
- *     │   └── bytes initData,                           // Policy initialization data
- *     │   ERC7739Data erc7739Policies,                  // ERC7739 policies struct
- *     │   ├── ERC7739Context[] allowedERC7739Content,   // Allowed content array
- *     │   │   ├── bytes32 appDomainSeparator,           // Domain separator
- *     │   │   └── string[] contentName,                 // Content identifiers
- *     │   └── PolicyData[] erc1271Policies,             // ERC1271 policies array
- *     │       ├── address policy,                       // Policy address
- *     │       └── bytes initData,                       // Init data
- *     │   ActionData[] actions,                         // Actions array
- *     │   ├── bytes4 actionTargetSelector,              // Function selector
- *     │   ├── address actionTarget,                     // Target contract
- *     │   └── PolicyData[] actionPolicies,              // Action policies array
- *     │       ├── address policy,                       // Policy address
- *     │       └── bytes initData,                       // Init data
+ *     │   bool  permitGenericPolicy,                    // Allow policy fallback
+ *     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
+ *     │   ├── ERC7739Context[] allowedERC7739Content    // Allowed content array
+ *     │   │   ├── bytes32 appDomainSeparator            // Domain separator
+ *     │   │   └── string[] contentName                  // Content identifiers
+ *     │   └── PolicyData[] erc1271Policies              // ERC1271 policies array
+ *     │       ├── address policy                        // Policy address
+ *     │       └── bytes initData                        // Init data
+ *     │   ActionData[] actions                          // Actions array
+ *     │   ├── bytes4 actionTargetSelector               // Function selector
+ *     │   ├── address actionTarget                      // Target contract
+ *     │   └── PolicyData[] actionPolicies               // Action policies array
+ *     │       ├── address policy                        // Policy address
+ *     │       └── bytes initData                        // Init data
  *     address sessionValidator,                         // Validator contract address
  *     bytes sessionValidatorInitData,                   // Validator initialization data
  *     bytes32 salt,                                     // Unique salt value
  *     address smartSessionEmissary,                     // Smart Session Emissary contract address
- *     uint256 nonce,                                    // Nonce value
+ *     uint256 nonce                                     // Nonce value
  *     uint256 expires,                                  // Expiration timestamp
  *     bytes12 lockTag,                                  // Lock tag for the session
  *     address arbiter,                                  // Arbiter address
- *     address allocator                                 // Allocator address
+ *     address allocator,                                // Allocator address
  * )
-  */
-
+ */
 bytes32 constant SESSION_TYPEHASH =
     0xd44896e3cb83d70abc949a38dd6f9f75e675dc329dfe958617f066f79ff88f05; // TODO: Recalculate this hash
 bytes32 constant SIGNED_PERMISSIONS_TYPEHASH =
-    0x871289c05e426554eb0f843c9aa542f9c2bc4eba7742ada6a5c014d3568674d4;
+    0x871289c05e426554eb0f843c9aa542f9c2bc4eba7742ada6a5c014d3568674d4; // TODO: Recalculate this hash
 
 // ChainSession(uint64 chainId,SignedSession session)
 bytes32 constant CHAIN_SESSION_TYPEHASH =
@@ -81,12 +66,12 @@ bytes32 constant MULTICHAIN_SESSION_TYPEHASH =
 
 // keccak256("EIP712Domain(string name,string version)");
 bytes32 constant _MULTICHAIN_DOMAIN_TYPEHASH =
-    0xb03948446334eb9b2196d5eb166f69b9d49403eb4a12f36de8d3f9f3cb8e15c3;
+    0xb03948446334eb9b2196d5eb166f69b9d49403eb4a12f36de8d3f9f3cb8e15c3; // TODO: Recalculate this hash
 
 // keccak256(abi.encode(_MULTICHAIN_DOMAIN_TYPEHASH, keccak256("SmartSessionEmissary"),
 // keccak256("1")));
 bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
-    0xe4b7e03cf1e8e7a6af0eec6f72a68d532e03fdaad0b8326461731cb31803a084;
+    0x057501e891776d1482927e5f094ae44049a4d893ba2d7b334dd7db8d38d3a0e1; // TODO: Recalculate this hash
 
 /// @dev An extended version of HashLib from SmartSessions that includes additional data from
 ///      emissary configurations when computing the session digest.
@@ -96,6 +81,11 @@ bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
 ///      - lockTag: bytes12
 ///      - arbiter: address
 ///      - allocator: address
+///      Removed fields from the SignedSession struct:
+///      - ignoreSecurityAttestations: bool
+///      - permitAdminAccess: bool
+///      - permitERC4337Paymaster: bool
+///      - userOpPolicies: PolicyData[]
 library HashLibV2 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -104,7 +94,6 @@ library HashLibV2 {
     using HashLibV2 for *;
     using HashLib for ActionData;
     using HashLib for ERC7739Data;
-    using HashLib for Session;
     using EfficientHashLib for *;
 
     /*//////////////////////////////////////////////////////////////
@@ -151,7 +140,7 @@ library HashLibV2 {
                 abi.encode(
                     SESSION_TYPEHASH, // Typehash for the SignedSession struct
                     account, // User account address (sponsor)
-                    session.hashPermissions(true), // Hashed permissions data
+                    hashPermissions(session), // Hashed permissions data
                     address(session.sessionValidator), // Validator contract address
                     keccak256(session.sessionValidatorInitData), // Validator initialization data
                     session.salt, // Session salt
@@ -164,6 +153,19 @@ library HashLibV2 {
                 )
             );
         }
+    }
+
+    /// @notice Adjusted hashPermissions function to exclude unused fields from SmartSessions
+    function hashPermissions(Session memory session) internal pure returns (bytes32) {
+        (bool permitFallback, bytes32 actionDataArrayHash) = session.actions.hashActionDataArray();
+        return keccak256(
+            abi.encode(
+                SIGNED_PERMISSIONS_TYPEHASH,
+                permitFallback, // permitGenericPolicy
+                session.erc7739Policies.hashERC7739Data(), // erc7739Policies
+                actionDataArrayHash // actions
+            )
+        );
     }
 
     /*//////////////////////////////////////////////////////////////

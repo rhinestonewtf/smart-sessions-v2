@@ -9,7 +9,8 @@ import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidat
 import {
     SmartSessionEmissaryConfig,
     EmissaryConfig,
-    SmartSessionEmissaryEnable
+    SmartSessionEmissaryEnable,
+    SmartSessionEmissaryDisable
 } from "@types/DataTypes.sol";
 import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
 
@@ -44,6 +45,9 @@ interface ISmartSessionEmissary is IEmissary {
 
     /// @notice Thrown when the Emissary enable data is not valid
     error InvalidEmissaryEnableData();
+
+    /// @notice Thrown when the Emissary disable data is not valid
+    error InvalidEmissaryDisableData();
 
     /// @notice Thrown when the Emissary configuration is not valid
     error InvalidEmissaryConfig();
@@ -83,15 +87,6 @@ interface ISmartSessionEmissary is IEmissary {
     /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
     event SmartSessionEmissaryConfigUpdated(
         address indexed account, PermissionId permissionId, bytes12 indexed lockTag
-    );
-
-    /// @notice Emitted when Permit4337 paymaster is enabled for a specific permission ID and
-    ///         account.
-    /// @param permissionId The permission ID for which the paymaster is enabled.
-    /// @param account The address of the account for which the paymaster is enabled.
-    /// @param enabled A boolean indicating whether the paymaster is enabled or disabled.
-    event PermissionIdPermit4337Paymaster(
-        PermissionId permissionId, address indexed account, bool enabled
     );
 
     /*//////////////////////////////////////////////////////////////
