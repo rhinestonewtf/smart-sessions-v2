@@ -2,7 +2,7 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import { ERC7579EmissaryValidator as SmartSessionEmissary } from
-    "@contracts/SmartSessionEmissary.sol";
+    "@contracts/ERC7579EmissaryValidator.sol";
 
 // Types
 import {

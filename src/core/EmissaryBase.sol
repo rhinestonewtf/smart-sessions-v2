@@ -149,7 +149,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
     /// @param emissaryData Data containing validator address, configId, and signature
     /// @param lockTag The lock tag associated with the configuration
     /// @return The selector if valid, otherwise 0xFFFFFFFF
-    function _verifyClaimStatelessValidator(
+    function _verifyDigestStatelessValidator(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
@@ -184,7 +184,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
     /// @param digest The hash of the claim being verified
     /// @param emissaryData Data containing mode byte and mode-specific verification data
     /// @param lockTag The lock tag associated with the configuration
-    function _verifyClaimECDSA(
+    function _verifyDigestECDSA(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
@@ -218,7 +218,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
     /// @param emissaryData Data containing mode byte and mode-specific verification data
     /// @param lockTag The lock tag associated with the configuration
     /// @return The selector if valid, otherwise 0xFFFFFFFF
-    function _verifyClaimPasskey(
+    function _verifyDigestPasskey(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,

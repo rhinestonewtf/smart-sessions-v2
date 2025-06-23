@@ -28,6 +28,7 @@ import {
     EmissaryConfig,
     EmissaryEnable
 } from "@types/DataTypes.sol";
+import { PackedUserOperation } from "@modulekit/external/ERC4337.sol";
 
 /// @title ERC7579 Emissary Validator
 /// @notice An ERC7579 compliant validator contract that also functions as an Emissary.
@@ -49,6 +50,7 @@ contract ERC7579EmissaryValidator is
                                VALIDATION
     //////////////////////////////////////////////////////////////*/
 
+    /// TODO
     function validateUserOp(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
@@ -93,22 +95,22 @@ contract ERC7579EmissaryValidator is
         view
         returns (bytes4)
     {
-        // Extract mode from first byte
-        EmissaryMode mode = data.decodeMode();
+        // Extract mode and lock tag from the data
+        (EmissaryMode mode, bytes12 lockTag) = data.decodeModeAndLockTag();
 
         // Mode-based dispatch for signature validation
         if (mode == EMISSARY_STATELESS_VALIDATOR) {
             // Stateless Validator mode
-            return _isValidSignatureStatelessValidator(sender, hash, data[1:]);
+            return _verifyDigestStatelessValidator(sender, hash, data[14:], lockTag);
         } else if (mode == EMISSARY_ECDSA) {
             // ECDSA mode
-            return _isValidSignatureECDSA(sender, hash, data[1:]);
+            return _verifyDigestECDSA(sender, hash, data[14:], lockTag);
         } else if (mode == EMISSARY_PASSKEY) {
             // Passkey mode
-            return _isValidSignaturePasskey(sender, hash, data[1:]);
+            return _verifyDigestPasskey(sender, hash, data[14:], lockTag);
         } else if (mode == EMISSARY_SMART_SESSION) {
             // SmartSession mode
-            return _isValidSignatureSmartSession(sender, hash, data[1:]);
+            return _verifyDigestSmartSession(sender, hash, data[14:], lockTag);
         }
 
         // Default case for unsupported modes
@@ -160,13 +162,12 @@ contract ERC7579EmissaryValidator is
         }
     }
 
-    /// TODO: this is borked
-    function onUninstall(bytes calldata data) external {
-        // Uninstall the module for the smart account
+    /// @notice Called when the module is uninstalled from a smart account
+    /// @dev Clears the initialization state for the smart account, allocator governed state is
+    ///      retained and needs to be cleared using setConfig and an allocator signature
+    function onUninstall(bytes calldata /*data*/ ) external {
+        // De-initialize the module for the smart account
         $isInitialized[msg.sender] = false;
-
-        // Emit an event for uninstalling the module
-        emit ISmartSessionEmissary.ModuleUninstalled(msg.sender, data);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -201,16 +202,16 @@ contract ERC7579EmissaryValidator is
         // Mode-based dispatch for claim verification
         if (mode == EMISSARY_STATELESS_VALIDATOR) {
             // Stateless Validator mode
-            return _verifyClaimStatelessValidator(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyDigestStatelessValidator(sponsor, digest, emissaryData[1:], lockTag);
         } else if (mode == EMISSARY_ECDSA) {
             // ECDSA mode
-            return _verifyClaimECDSA(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyDigestECDSA(sponsor, digest, emissaryData[1:], lockTag);
         } else if (mode == EMISSARY_PASSKEY) {
             // Passkey mode
-            return _verifyClaimPasskey(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyDigestPasskey(sponsor, digest, emissaryData[1:], lockTag);
         } else if (mode == EMISSARY_SMART_SESSION) {
             // SmartSession mode
-            return _verifyClaimSmartSession(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyDigestSmartSession(sponsor, digest, emissaryData[1:], lockTag);
         }
 
         // Default case for unsupported modes
