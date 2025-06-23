@@ -208,7 +208,6 @@ abstract contract SmartSessionERC7739 {
             }
             mstore(0x40, m) // Restore the free memory pointer.
         }
-        console.log("SmartSessionERC7739: Validating signature for sender:", sender);
         result = _erc1271IsValidSignatureNowCalldata(
             sender, hash, signature, appDomainSeparator, contents, sponsor, lockTag
         );

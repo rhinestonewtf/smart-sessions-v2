@@ -100,6 +100,14 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
     }
 
+    /// @notice Removes a Smart Session Emissary configuration for a specific account
+    /// @param account The address of the account for which the configuration is being removed
+    /// @param permissionId The unique identifier for the permission set
+    /// @param disableData The disable data containing the allocator, allocator signature, user
+    ///        signature, lockTag, and arbiter
+    /// TODO:
+    function removeConfig() public;
+
     /// @notice Enables policies for an account, using the provided enable data after verifying
     ///         required signatures.
     /// @param account The address of the account for which policies are being enabled
