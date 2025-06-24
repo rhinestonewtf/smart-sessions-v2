@@ -44,19 +44,18 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
     //////////////////////////////////////////////////////////////*/
 
     function makeMultiChainEnableData(
-        PermissionId permissionId,
         Session memory session,
-        address validator
+        address validator,
+        bytes12 lockTag
     )
         internal
         view
         returns (EnableSession memory enableData)
     {
         bytes32 sessionDigest = smartSessionEmissary.getSessionDigest({
-            permissionId: permissionId,
+            lockTag: lockTag,
             account: instance.account,
-            data: session,
-            mode: SmartSessionMode.ENABLE
+            data: session
         });
 
         ChainDigest[] memory chainDigests = IntegrationEncodeLib.encodeHashesAndChainIds(

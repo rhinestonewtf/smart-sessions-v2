@@ -2,8 +2,8 @@
 pragma solidity >=0.8.27;
 
 // Dependencies
-import { SmartSessionEmissary_Unit_Test } from
-    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
+import { MultiChainClaimRecipient_Unit_Test } from
+    "@test/integration/MuliChainClaimRecipientPolicy/MultiChainClaimRecipient.t.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -25,7 +25,9 @@ import {
 } from "@smartsessions/DataTypes.sol";
 import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 
-contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test {
+contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
+    MultiChainClaimRecipient_Unit_Test
+{
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -33,6 +35,39 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
     using ModuleKitHelpers for *;
     using LibZip for bytes;
     using HashLib for *;
+
+    /*//////////////////////////////////////////////////////////////
+                                STRUCTS
+    //////////////////////////////////////////////////////////////*/
+
+    struct Target {
+        address recipient;
+        bytes32 tokenOut;
+        uint256 targetChain;
+        uint256 fillExpires;
+    }
+
+    struct Mandate {
+        Target target;
+        bytes32 preClaimOps;
+        bytes32 targetOps;
+        bytes32 q;
+    }
+
+    struct Element {
+        address arbiter;
+        uint256 chainId;
+        bytes32 commitments;
+        Mandate mandate;
+    }
+
+    struct MultichainCompact {
+        address sponsor;
+        uint256 nonce;
+        uint256 expires;
+        Element notarizedElement;
+        bytes32[] otherElements;
+    }
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -46,6 +81,10 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
     string constant TEST_CONTENT = "TestContent(string data)";
     string constant TEST_CONTENT_NAME = "TestContent";
     bytes mockERC7739Signature;
+
+    address constant TEST_RECIPIENT = 0x0000000000000000000000000000000000000B0b;
+    address constant TEST_ARBITER = 0xa1B1710000000000000000000000000000000000;
+    address constant TEST_SPONSOR = 0x9123501000000000000000000000000000000000;
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
@@ -79,21 +118,6 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_verifyClaim_ERC7739SupportDetection() public view {
-        // Arrange
-        bytes32 erc7739DetectionHash =
-            0x7739773977397739773977397739773977397739773977397739773977397739;
-        bytes memory emptyData = "";
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, erc7739DetectionHash, bytes32(0), emptyData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0x77390001), "Should return ERC-7739 support indicator");
-    }
-
     function test_verifyClaim_SmartSessionMode_Success() public withEnabledClaimSession {
         // Arrange
         bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockERC7739Signature);
@@ -111,64 +135,6 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         );
     }
 
-    function test_verifyClaim_SmartSessionMode_InvalidSignature()
-        public
-        withEnabledClaimSessionWithFailingValidator
-    {
-        // Arrange
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockERC7739Signature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, testDigest, testClaimHash, emissaryData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for invalid signature");
-    }
-
-    function test_verifyClaim_UnsupportedMode() public view {
-        // Arrange
-        EmissaryMode unsupportedMode = EmissaryMode.wrap(0xFF); // Invalid mode
-        bytes memory emissaryData = abi.encodePacked(unsupportedMode, "mockData");
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, testDigest, testClaimHash, emissaryData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for unsupported mode");
-    }
-
-    function test_verifyClaim_EmptyEmissaryData() public {
-        // Arrange
-        bytes memory emptyData = "";
-
-        // Act & Assert
-        vm.expectRevert();
-        smartSessionEmissary.verifyClaim(
-            instance.account, testDigest, testClaimHash, emptyData, testLockTag
-        );
-    }
-
-    function test_verifyClaim_SmartSessionMode_MalformedSignature()
-        public
-        withEnabledClaimSession
-    {
-        // Arrange - Create malformed ERC-7739 signature (too short)
-        bytes memory malformedSignature = abi.encodePacked(testPermissionId, "shortSig");
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, malformedSignature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, testDigest, testClaimHash, emissaryData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for malformed signature");
-    }
-
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
@@ -179,7 +145,10 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
 
         // Setup ERC-7739 content policies
         PolicyData[] memory policyDatas = new PolicyData[](1);
-        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+        policyDatas[0] = PolicyData({
+            policy: address(multiChainClaimRecipient),
+            initData: abi.encode(address(0xb0b))
+        });
 
         // Create ERC-7739 data with the test content enabled
         ERC7739Data memory erc7739Data = ERC7739Data({
@@ -217,48 +186,6 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         _;
     }
 
-    modifier withEnabledClaimSessionWithFailingValidator() {
-        // Prank to account
-        vm.prank(instance.account);
-
-        // Setup ERC-7739 content policies
-        PolicyData[] memory policyDatas = new PolicyData[](1);
-        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
-
-        // Create ERC-7739 data with the test content enabled
-        ERC7739Data memory erc7739Data = ERC7739Data({
-            allowedERC7739Content: _createAllowedContent(),
-            erc1271Policies: policyDatas
-        });
-
-        // Setup session with failing validator
-        Session memory session = Session({
-            sessionValidator: ISessionValidator(address(noSessionValidator)),
-            salt: keccak256("failingClaimSalt"),
-            sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: erc7739Data,
-            actions: new ActionData[](0),
-            permitERC4337Paymaster: false
-        });
-
-        // Set a mock lockTag for testing
-        testLockTag = bytes12(keccak256("mockLockTag"));
-
-        // Enable session
-        Session[] memory sessions = new Session[](1);
-        sessions[0] = session;
-        PermissionId[] memory testPermissionIds =
-            smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
-        testPermissionId = testPermissionIds[0];
-
-        //_ Create mock ERC-7739 signature
-        _createMockERC7739Signature();
-
-        // Continue with the test
-        _;
-    }
-
     /*//////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
@@ -283,6 +210,49 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         return contexts;
     }
 
+    function _createMockMultichainCompact() internal view returns (bytes memory) {
+        // Create mock target
+        Target memory target = Target({
+            recipient: TEST_RECIPIENT,
+            tokenOut: keccak256("mockTokenOut"), // Mock token out hash
+            targetChain: 1, // Ethereum mainnet
+            fillExpires: block.timestamp + 3600 // 1 hour from now
+         });
+
+        // Create mock mandate
+        Mandate memory mandate = Mandate({
+            target: target,
+            preClaimOps: keccak256("mockPreClaimOps"), // Mock pre-claim ops hash
+            targetOps: keccak256("mockTargetOps"), // Mock target ops hash
+            q: keccak256("mockQualifier") // Mock qualifier hash
+         });
+
+        // Create mock notarized element
+        Element memory notarizedElement = Element({
+            arbiter: TEST_ARBITER,
+            chainId: block.chainid,
+            commitments: keccak256("mockCommitments"), // Mock commitments hash
+            mandate: mandate
+        });
+
+        // Create mock other elements (empty for simplicity)
+        bytes32[] memory otherElements = new bytes32[](2);
+        otherElements[0] = keccak256("mockOtherElement1");
+        otherElements[1] = keccak256("mockOtherElement2");
+
+        // Create the complete MultichainCompact struct
+        MultichainCompact memory multichainCompact = MultichainCompact({
+            sponsor: TEST_SPONSOR,
+            nonce: 12_345,
+            expires: block.timestamp + 7200, // 2 hours from now
+            notarizedElement: notarizedElement,
+            otherElements: otherElements
+        });
+
+        // Encode and return the struct
+        return abi.encode(multichainCompact);
+    }
+
     function _createMockERC7739Signature() internal {
         // Create mock signature components (r, s, v)
         bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
@@ -304,7 +274,10 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
             uint16(contentsDescription.length) // Length of contents description
         );
 
-        // Prepend the permissionId
-        mockERC7739Signature = abi.encodePacked(testPermissionId, sessionSignature);
+        // Prepend the permissionId and extraStuff to the session signature
+        bytes memory extraStuff = _createMockMultichainCompact();
+        mockERC7739Signature = abi.encodePacked(
+            testPermissionId, bytes32(extraStuff.length), extraStuff, sessionSignature
+        );
     }
 }

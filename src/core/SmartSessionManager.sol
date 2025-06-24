@@ -9,6 +9,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
 import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
+import { IdLibV2 } from "@lib/IdLibV2.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
@@ -33,7 +34,8 @@ import {
     EnumerableERC7739Config,
     ERC7739ContextHashes,
     SmartSessionMode,
-    PolicyData
+    PolicyData,
+    ConfigId
 } from "@smartsessions/DataTypes.sol";
 
 abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
@@ -45,6 +47,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     using ConfigLib for *;
     using ConfigLibV2 for *;
     using IdLib for *;
+    using IdLibV2 for *;
     using HashLib for *;
     using PolicyLib for *;
     using FlatBytesLib for *;
@@ -103,7 +106,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             $erc1271Policies.enable({
                 policyType: PolicyType.ERC1271,
                 permissionId: permissionId,
-                configId: permissionId.toErc1271PolicyId().toConfigId(),
+                configId: permissionId.toErc1271PolicyId().toConfigId(account),
                 policyDatas: session.erc7739Policies.erc1271Policies,
                 useRegistry: useRegistry,
                 account: account

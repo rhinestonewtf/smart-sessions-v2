@@ -13,6 +13,7 @@ import { IERC1271, EIP1271_MAGIC_VALUE } from "@modulekit/module-bases/interface
 import { EncodeLib } from "@smartsessions/lib/EncodeLib.sol";
 import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
+import { IdLibV2 } from "@lib/IdLibV2.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
 import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
@@ -26,7 +27,13 @@ import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
-import { PermissionId, SmartSessionMode, PolicyType, Session } from "@smartsessions/DataTypes.sol";
+import {
+    PermissionId,
+    SmartSessionMode,
+    PolicyType,
+    Session,
+    ConfigId
+} from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
@@ -52,6 +59,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using EncodeLib for *;
     using SmartSessionModeLib for *;
     using IdLib for *;
+    using IdLibV2 for *;
     using EnumerableSet for *;
     using ExecutionLib for *;
     using PolicyLib for *;
@@ -260,7 +268,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param emissaryData Data containing the permissionId and ERC-7739 signature
     /// @param lockTag The lock tag associated with the claim
     /// @return result The verifyClaim selector if valid, otherwise 0xffffffff
-    function _verifyDigestSmartSession(
+    function _verifyClaimSmartSession(
         address sponsor,
         bytes32 claimHash,
         bytes calldata emissaryData,
@@ -480,7 +488,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             hash: hash,
             signature: signature,
             permissionId: permissionId,
-            configId: permissionId.toErc1271PolicyId().toConfigId(),
+            configId: permissionId.toErc1271PolicyId().toConfigId(sponsor),
             minPoliciesToEnforce: 1
         });
 

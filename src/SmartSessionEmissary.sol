@@ -70,16 +70,16 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         // Mode-based dispatch for claim verification
         if (mode == EMISSARY_STATELESS_VALIDATOR) {
             // Stateless Validator mode
-            return _verifyDigestStatelessValidator(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyClaimStatelessValidator(sponsor, digest, emissaryData[1:], lockTag);
         } else if (mode == EMISSARY_ECDSA) {
             // ECDSA mode
-            return _verifyDigestECDSA(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyClaimECDSA(sponsor, digest, emissaryData[1:], lockTag);
         } else if (mode == EMISSARY_PASSKEY) {
             // Passkey mode
-            return _verifyDigestPasskey(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyClaimPasskey(sponsor, digest, emissaryData[1:], lockTag);
         } else if (mode == EMISSARY_SMART_SESSION) {
             // SmartSession mode
-            return _verifyDigestSmartSession(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyClaimSmartSession(sponsor, digest, emissaryData[1:], lockTag);
         }
 
         // Default case for unsupported modes
