@@ -87,7 +87,6 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
         // Parse the recipient address from the initData
         address recipient = abi.decode(initData, (address));
         $recipientConfig[configId][msg.sender][account] = recipient;
-        console.log("multiplexer:", msg.sender);
         console.logBytes32(ConfigId.unwrap(configId));
         console.log("MultiChainClaimRecipientPolicy initialized for account:", account);
         console.log("Recipient address set to:", recipient);
