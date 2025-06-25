@@ -236,12 +236,17 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     {
         // Increment nonce to prevent replay attacks
         uint256 nonce = $emissaryNonce[account][lockTag]++;
-        /*//////////////////////////////////////////////////////////////
-                                  TODO
-        //////////////////////////////////////////////////////////////*/
 
-        // bytes32 hash =
-        //     disableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter, allocator);
+        // Get the hash for the disable operation
+        bytes32 hash = disableData.getAndVerifyDigest(
+            permissionId, account, nonce, expires, lockTag, arbiter, allocator
+        );
+
+        // Verify the user and allocator signatures
+        hash.verifySignatures(account, allocator, allocatorSig, userSig);
+
+        // Remove the session from the smart session config
+        _removeSession(permissionId, account, lockTag, arbiter);
     }
 
     /*//////////////////////////////////////////////////////////////

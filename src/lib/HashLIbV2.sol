@@ -14,9 +14,10 @@ import {
     FALLBACK_TARGET_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG_PERMITTED_TO_CALL_SMARTSESSION,
-    ChainDigest
+    ChainDigest,
+    PermissionId
 } from "@smartsessions/DataTypes.sol";
-import { EnableSession, Session } from "@types/DataTypes.sol";
+import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                             TYPEHASHES
@@ -70,6 +71,30 @@ bytes32 constant _MULTICHAIN_DOMAIN_TYPEHASH =
 // keccak256("1")));
 bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
     0x057501e891776d1482927e5f094ae44049a4d893ba2d7b334dd7db8d38d3a0e1; // TODO: Recalculate this hash
+
+// forgefmt: disable-next-item
+/*
+ * SignedPermissionDisable(
+ *     address account, // User account address
+ *     permissionId permissionId, // Permission ID to disable
+ *     bytes12 lockTag, // Lock tag for the session
+ *     address arbiter, // Arbiter address   
+ *     address allocator, // Allocator address
+ *     uint256 expires, // Expiration timestamp
+ *     uint256 nonce // Nonce value
+ * )
+*/
+
+bytes32 constant SIGNED_PERMISSION_DISABLE_TYPEHASH =
+    0xd44896e3cb83d70abc949a38dd6f9f75e675dc329dfe958617f066f79ff88f05; // TODO: Recalculate this
+    // hash
+
+// ChainDisable(uint64 chainId, SignedPermissionDisable disable)
+bytes32 constant CHAIN_DISABLE_TYPEHASH =
+    0x1ea7e4bc398fa0ccd68d92b5d8931a3fd93eebe1cf0391b4ba28935801af7c80; // TODO: Recalculate this hash
+// MultiChainDisable(ChainDisable[] disablesAndChainIds)
+bytes32 constant MULTICHAIN_DISABLE_TYPEHASH =
+    0x0c9d02fb89a1da34d66ea2088dc9ee6a58efee71cef6f1bb849ed74fc6003d98; // TODO: Recalculate this hash
 
 /// @dev An extended version of HashLib from SmartSessions that includes additional data from
 ///      emissary configurations when computing the session digest.
@@ -219,6 +244,47 @@ library HashLibV2 {
     }
 
     /*//////////////////////////////////////////////////////////////
+                                DISABLE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Computes the digest for disabling a permission
+    /// @param permissionId The ID of the permission to disable
+    /// @param account The account address for which the permission is being disabled
+    /// @param nonce The nonce value for the disable signature
+    /// @param expires The expiration timestamp for the disable signature
+    /// @param lockTag The lock tag for session to disable
+    /// @param arbiter The arbiter address for the session to disable
+    /// @param allocator The allocator address for the session to disable
+    /// @return digest The computed digest for the session to disable
+    function disableDigest(
+        PermissionId permissionId,
+        address account,
+        uint256 nonce,
+        uint256 expires,
+        bytes12 lockTag,
+        address arbiter,
+        address allocator
+    )
+        internal
+        pure
+        returns (bytes32 digest)
+    {
+        digest = keccak256(
+            abi.encode(
+                SIGNED_PERMISSION_DISABLE_TYPEHASH, // Typehash for the SignedPermissionDisable
+                    // struct
+                account, // User account address (sponsor)
+                permissionId, // Permission ID to disable
+                lockTag, // Lock tag for the session
+                arbiter, // Arbiter address
+                allocator, // Allocator address
+                expires, // Expiration timestamp
+                nonce // Nonce value
+            )
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                MULTICHAIN
     //////////////////////////////////////////////////////////////*/
 
@@ -308,5 +374,48 @@ library HashLibV2 {
         }
 
         digest = enableData.hashesAndChainIds.multichainDigest();
+    }
+
+    /// @notice Computes the digest for disable data and verifies it against the provided data
+    /// @param disableData The DisableSession data containing the chainIds and digests
+    /// @param permissionId The ID of the permission to disable
+    /// @param account The account address for which the permission is being disabled
+    /// @param nonce The nonce value for the disable signature
+    /// @param expires The expiration timestamp for the disable signature
+    /// @param lockTag The lock tag for the session to disable
+    /// @param arbiter The arbiter address for the session to disable
+    /// @param allocator The allocator address for the session to disable
+    function getAndVerifyDigest(
+        DisableSession memory disableData,
+        PermissionId permissionId,
+        address account,
+        uint256 nonce,
+        uint256 expires,
+        bytes12 lockTag,
+        address arbiter,
+        address allocator
+    )
+        internal
+        view
+        returns (bytes32 digest)
+    {
+        bytes32 computedHash =
+            disableDigest(permissionId, account, nonce, expires, lockTag, arbiter, allocator);
+
+        uint64 providedChainId = disableData.hashesAndChainIds[disableData.chainDigestIndex].chainId;
+        bytes32 providedHash =
+            disableData.hashesAndChainIds[disableData.chainDigestIndex].sessionDigest;
+
+        if (providedChainId != block.chainid) {
+            revert ChainIdMismatch(providedChainId);
+        }
+
+        // ensure digest we've built from the sessionToEnable is included into
+        // the list of digests that were signed
+        if (providedHash != computedHash) {
+            revert HashMismatch(providedHash, computedHash);
+        }
+
+        digest = disableData.hashesAndChainIds.multichainDigest();
     }
 }
