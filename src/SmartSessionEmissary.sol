@@ -59,11 +59,6 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         view
         returns (bytes4)
     {
-        // ERC-7739 support detection
-        if (digest == 0x7739773977397739773977397739773977397739773977397739773977397739) {
-            return bytes4(0x77390001);
-        }
-
         // Extract mode from first byte of emissaryData
         EmissaryMode mode = emissaryData.decodeMode();
 

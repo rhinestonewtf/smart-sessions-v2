@@ -31,8 +31,6 @@ import {
     PolicyType,
     EMPTY_PERMISSIONID,
     Policy,
-    EnumerableERC7739Config,
-    ERC7739ContextHashes,
     SmartSessionMode,
     PolicyData,
     ConfigId
@@ -64,8 +62,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     EnumerableActionPolicy internal $actionPolicies;
     /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
     Policy internal $erc1271Policies;
-    /// @notice Mapping of enabled erc7739 configurations per user address
-    EnumerableERC7739Config internal $enabledERC7739;
     /// @notice Mapping of session validators organized by permission IDs and smart account
     ///         addresses
     mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf)) internal
@@ -111,9 +107,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 useRegistry: useRegistry,
                 account: account
             });
-            $enabledERC7739.enable(
-                session.erc7739Policies.allowedERC7739Content, permissionId, account
-            );
 
             // Enable Action policies
             $actionPolicies.enable({
@@ -368,26 +361,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         return $erc1271Policies.policyList[permissionId].contains(account, policy);
     }
 
-    /// @notice Check if an ERC7739 content is enabled for a specific account and permission ID
-    /// @param account The account address
-    /// @param permissionId The permission ID
-    /// @param appDomainSeparator The app domain separator for the ERC7739 content
-    /// @param content The content string to check
-    function isERC7739ContentEnabled(
-        address account,
-        PermissionId permissionId,
-        bytes32 appDomainSeparator,
-        string memory content
-    )
-        external
-        view
-        returns (bool)
-    {
-        return $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(
-            account, content.hashERC7739Content()
-        );
-    }
-
     /*//////////////////////////////////////////////////////////////
                               GETTERS
     //////////////////////////////////////////////////////////////*/
@@ -437,28 +410,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         returns (bytes32[] memory)
     {
         return $actionPolicies.enabledActionIds[permissionId].values(account);
-    }
-
-    /// @notice Get all enabled ERC7739 content for an account and permission ID
-    /// @param account The account address
-    /// @param permissionId The permission ID
-    /// @return enabledERC7739ContentHashes An array of ERC7739ContextHashes
-    function getEnabledERC7739Content(
-        address account,
-        PermissionId permissionId
-    )
-        external
-        view
-        returns (ERC7739ContextHashes[] memory enabledERC7739ContentHashes)
-    {
-        uint256 length = $enabledERC7739.enabledDomainSeparators[permissionId].length(account);
-        enabledERC7739ContentHashes = new ERC7739ContextHashes[](length);
-        for (uint256 i; i < length; i++) {
-            enabledERC7739ContentHashes[i].appDomainSeparator =
-                $enabledERC7739.enabledDomainSeparators[permissionId].at(account, i);
-            enabledERC7739ContentHashes[i].contentNameHashes = $enabledERC7739.enabledContentNames[permissionId][enabledERC7739ContentHashes[i]
-                .appDomainSeparator].values(account);
-        }
     }
 
     /// @notice Get the session validator and its configuration

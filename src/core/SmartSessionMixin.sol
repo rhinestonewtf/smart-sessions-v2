@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
-import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
@@ -51,7 +50,7 @@ import { EnableSession, DisableSession, INVALID_RETURN } from "@types/DataTypes.
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
 /// @dev Bridges lockTag-based emissary system with permissionId-based SmartSession system
-abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 {
+abstract contract SmartSessionMixin is SmartSessionManager {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -178,13 +177,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         hash.verifySignatures(account, allocator, allocatorSig, userSig);
 
         // Enable ERC1271 policies
-        $enabledERC7739.enable({
-            contexts: enableData.sessionToEnable.erc7739Policies.allowedERC7739Content,
-            permissionId: permissionId,
-            account: account
-        });
-
-        // Enable ERC1271 policies
         $erc1271Policies.enable({
             policyType: PolicyType.ERC1271,
             permissionId: permissionId,
@@ -279,8 +271,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         virtual
         returns (bytes4 result)
     {
-        bool success = _erc1271IsValidSignatureViaNestedEIP712(
-            msg.sender, claimHash, _erc1271UnwrapSignature(emissaryData), sponsor, lockTag
+        bool success = _erc1271IsValidSignatureNowCalldata(
+            msg.sender, claimHash, emissaryData, sponsor, lockTag
         );
         /// @solidity memory-safe-assembly
         assembly {
@@ -436,37 +428,28 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         });
     }
 
-    /// @notice Validates an ERC-1271 signature with additional ERC-7739 content checks
+    /// @notice Validates an ERC-1271 signature
     /// @dev This function performs several checks to validate the signature:
     ///      1. Verifies that the permissionId is enabled for the sender
-    ///      2. Ensures the ERC-7739 content is enabled for the given permissionId
     ///      3. Checks the ERC-1271 policy
     ///      4. Validates the signature using ISessionValidator
     /// @dev This function returns false if a permissionId supplied within the signature is not
     /// enabled
-    /// @dev This function returns false if the ERC-7739 content is not enabled for the given
-    /// permissionId
     /// @param sender The address initiating the signature validation
     /// @param hash The hash of the data to be signed
     /// @param signature The signature to be validated (first 32 bytes contain the permissionId)
-    /// @param contents The ERC-7739 content to be validated
     /// @return valid Boolean indicating whether the signature is valid
     function _erc1271IsValidSignatureNowCalldata(
         address sender,
         bytes32 hash,
         bytes calldata signature,
-        bytes32 appDomainSeparator,
-        bytes calldata contents,
         address sponsor,
         bytes12 lockTag
     )
         internal
         view
-        virtual
-        override
         returns (bool)
     {
-        bytes32 contentHash = string(contents).hashERC7739Content();
         // isolate the PermissionId and actual signature from the supplied signature param
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
         signature = signature[32:];
@@ -476,9 +459,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             // return false if permissionId is not enabled for lockTag and sender
              !$smartSessionConfig[sender][lockTag].contains(
                 sponsor, PermissionId.unwrap(permissionId)
-            ) || 
-            // return false if the content is not enabled
-             !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(sponsor, contentHash)
+            )
         ) return false;
 
         // check the ERC-1271 policy
