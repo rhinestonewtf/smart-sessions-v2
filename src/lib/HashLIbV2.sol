@@ -46,7 +46,7 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
  *     uint256 expires,                                  // Expiration timestamp
  *     bytes12 lockTag,                                  // Lock tag for the session
  *     address arbiter,                                  // Arbiter address
- *     address allocator,                                // Allocator address
+ *     address allocator                                 // Allocator address
  * )
  */
 bytes32 constant SESSION_TYPEHASH =
@@ -76,7 +76,7 @@ bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
 /*
  * SignedPermissionDisable(
  *     address account, // User account address
- *     permissionId permissionId, // Permission ID to disable
+ *     PermissionId permissionId, // Permission ID to disable
  *     bytes12 lockTag, // Lock tag for the session
  *     address arbiter, // Arbiter address   
  *     address allocator, // Allocator address

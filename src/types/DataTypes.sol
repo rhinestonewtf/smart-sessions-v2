@@ -7,12 +7,7 @@ import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.s
 
 // Types
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
-import {
-    PermissionId,
-    ChainDigest,
-    ActionData,
-    PolicyData
-} from "@smartsessions/DataTypes.sol";
+import { PermissionId, ChainDigest, ActionData, PolicyData } from "@smartsessions/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                             CONSTANTS
