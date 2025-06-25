@@ -8,7 +8,6 @@ import {
     PermissionId,
     ActionId,
     ActionData,
-    Session,
     SmartSessionMode,
     SignerConf,
     EnumerableActionPolicy,
@@ -16,6 +15,7 @@ import {
     EMPTY_PERMISSIONID,
     Policy
 } from "@smartsessions/DataTypes.sol";
+import { Session } from "@types/DataTypes.sol";
 
 /// @dev Extended SmartSessionEmissary with helpers for testing purposes.
 contract SmartSessionEmissaryMock is SmartSessionEmissary {

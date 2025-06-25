@@ -10,7 +10,7 @@ import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
 import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { IdLibV2 } from "@lib/IdLibV2.sol";
-import { HashLib } from "@smartsessions/lib/HashLib.sol";
+import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
@@ -24,7 +24,6 @@ import {
     PermissionId,
     ActionId,
     ActionData,
-    Session,
     SmartSessionMode,
     SignerConf,
     EnumerableActionPolicy,
@@ -35,6 +34,7 @@ import {
     PolicyData,
     ConfigId
 } from "@smartsessions/DataTypes.sol";
+import { Session } from "@types/DataTypes.sol";
 
 abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
@@ -46,7 +46,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     using ConfigLibV2 for *;
     using IdLib for *;
     using IdLibV2 for *;
-    using HashLib for *;
+    using HashLibV2 for *;
     using PolicyLib for *;
     using FlatBytesLib for *;
 
@@ -103,7 +103,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 policyType: PolicyType.ERC1271,
                 permissionId: permissionId,
                 configId: permissionId.toErc1271PolicyId().toConfigId(account),
-                policyDatas: session.erc7739Policies.erc1271Policies,
+                policyDatas: session.erc1271Policies,
                 useRegistry: useRegistry,
                 account: account
             });
@@ -185,15 +185,25 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @return The session digest
     function getSessionDigest(
         address account,
+        Session memory data,
         bytes12 lockTag,
-        Session memory data
+        uint256 expires,
+        address arbiter,
+        address allocator
     )
         public
         view
         returns (bytes32)
     {
         uint256 nonce = $emissaryNonce[account][lockTag];
-        return data.sessionDigest({ account: account, mode: SmartSessionMode.ENABLE, nonce: nonce });
+        return data.sessionDigest({
+            account: account,
+            lockTag: lockTag,
+            expires: expires,
+            nonce: nonce,
+            arbiter: arbiter,
+            allocator: allocator
+        });
     }
 
     /// @notice Get the permission ID from a session

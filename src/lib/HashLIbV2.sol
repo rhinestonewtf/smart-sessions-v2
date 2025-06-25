@@ -120,7 +120,7 @@ library HashLibV2 {
     /// @param arbiter The arbiter address for the session
     /// @param allocator The allocator address for the session
     /// @return digest The computed digest for the session
-    function sessionDigest(
+    function _sessionDigest(
         Session memory session,
         address account,
         uint256 nonce,
@@ -154,7 +154,24 @@ library HashLibV2 {
         }
     }
 
-    /// @notice Adjusted hashPermissions function to exclude unused fields from SmartSessions
+    /// @dev Adjusted sessionDigest function to work with the new Session type
+    function sessionDigest(
+        Session memory session,
+        address account,
+        uint256 nonce,
+        uint256 expires,
+        bytes12 lockTag,
+        address arbiter,
+        address allocator
+    )
+        internal
+        view
+        returns (bytes32)
+    {
+        return _sessionDigest(session, account, nonce, expires, lockTag, arbiter, allocator);
+    }
+
+    /// @dev Adjusted hashPermissions function to exclude unused fields from SmartSessions
     function hashPermissions(Session memory session) internal pure returns (bytes32) {
         (bool permitFallback, bytes32 actionDataArrayHash) = session.actions.hashActionDataArray();
         return keccak256(
@@ -171,7 +188,7 @@ library HashLibV2 {
                                  ACTION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Adjusted hashActionDataArray function to only include relevant fields
+    /// @dev Adjusted hashActionDataArray function to only include relevant fields
     function hashActionDataArray(ActionData[] memory actionDataArray)
         internal
         pure

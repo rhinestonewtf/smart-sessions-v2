@@ -10,7 +10,6 @@ import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
 import {
     PermissionId,
     ChainDigest,
-    ERC7739Data,
     ActionData,
     PolicyData
 } from "@smartsessions/DataTypes.sol";

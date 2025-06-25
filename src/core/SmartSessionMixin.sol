@@ -26,13 +26,7 @@ import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
-import {
-    PermissionId,
-    SmartSessionMode,
-    PolicyType,
-    Session,
-    ConfigId
-} from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode, PolicyType, ConfigId } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
@@ -45,7 +39,7 @@ import {
     CALLTYPE_SINGLE,
     EXECTYPE_DEFAULT
 } from "erc7579/lib/ModeLib.sol";
-import { EnableSession, DisableSession, INVALID_RETURN } from "@types/DataTypes.sol";
+import { EnableSession, DisableSession, INVALID_RETURN, Session } from "@types/DataTypes.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
@@ -181,7 +175,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             policyType: PolicyType.ERC1271,
             permissionId: permissionId,
             configId: permissionId.toErc1271PolicyId().toConfigId(),
-            policyDatas: enableData.sessionToEnable.erc7739Policies.erc1271Policies,
+            policyDatas: enableData.sessionToEnable.erc1271Policies,
             useRegistry: false,
             account: account
         });
@@ -257,7 +251,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @notice Verifies digests using SmartSession (mode 2)
     /// @param sponsor The sponsor account associated with the claim
     /// @param claimHash The hash of the claim being verified
-    /// @param emissaryData Data containing the permissionId and ERC-7739 signature
+    /// @param emissaryData Data containing the permissionId and signature
     /// @param lockTag The lock tag associated with the claim
     /// @return result The verifyClaim selector if valid, otherwise 0xffffffff
     function _verifyClaimSmartSession(

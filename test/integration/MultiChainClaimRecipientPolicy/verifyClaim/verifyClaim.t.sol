@@ -17,14 +17,8 @@ import { ModuleKitHelpers } from "@modulekit/ModuleKit.sol";
 import { LibZip } from "solady/utils/LibZip.sol";
 
 // Types
-import {
-    Session,
-    PolicyData,
-    ActionData,
-    PermissionId,
-    ERC7739Data,
-    ERC7739Context
-} from "@smartsessions/DataTypes.sol";
+import { PolicyData, ActionData, PermissionId } from "@smartsessions/DataTypes.sol";
+import { Session } from "@types/DataTypes.sol";
 import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 
 contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
@@ -49,8 +43,7 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
     bytes32 testDigest;
     bytes32 appDomainSeparator;
     string constant TEST_CONTENT = "TestContent(string data)";
-    string constant TEST_CONTENT_NAME = "TestContent";
-    bytes mockERC7739Signature;
+    bytes mockSignature;
 
     address constant TEST_RECIPIENT = 0x0000000000000000000000000000000000000B0b;
     address constant TEST_ARBITER = 0xa1B1710000000000000000000000000000000000;
@@ -90,7 +83,7 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
 
     function test_verifyClaim_SmartSessionMode_Success() public withEnabledClaimSession {
         // Arrange
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockERC7739Signature);
+        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockSignature);
 
         // Act
         bytes4 result = smartSessionEmissary.verifyClaim(
@@ -113,17 +106,11 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
         // Prank to account
         vm.prank(instance.account);
 
-        // Setup ERC-7739 content policies
+        // Setup policies
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({
             policy: address(multiChainClaimRecipient),
             initData: abi.encode(address(0xb0b))
-        });
-
-        // Create ERC-7739 data with the test content enabled
-        ERC7739Data memory erc7739Data = ERC7739Data({
-            allowedERC7739Content: _createAllowedContent(),
-            erc1271Policies: policyDatas
         });
 
         // Setup session
@@ -131,10 +118,8 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
             sessionValidator: ISessionValidator(address(yesSessionValidator)),
             salt: keccak256("claimSalt"),
             sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: erc7739Data,
-            actions: new ActionData[](0),
-            permitERC4337Paymaster: false
+            erc1271Policies: policyDatas,
+            actions: new ActionData[](0)
         });
 
         // Enable session
@@ -149,8 +134,8 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
         // Generate the permission ID
         testPermissionId = smartSessionEmissary.getPermissionId(session);
 
-        //_ Create mock ERC-7739 signature
-        _createMockERC7739Signature();
+        //_ Create mock signature
+        _createMockSignature();
 
         // Continue with the test
         _;
@@ -169,15 +154,6 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
         returns (bytes memory)
     {
         return abi.encodePacked(emissaryMode, signatureData);
-    }
-
-    function _createAllowedContent() internal view returns (ERC7739Context[] memory) {
-        ERC7739Context[] memory contexts = new ERC7739Context[](1);
-        string[] memory contentNames = new string[](1);
-        contentNames[0] = string(abi.encodePacked(TEST_CONTENT, TEST_CONTENT_NAME));
-        contexts[0] =
-            ERC7739Context({ appDomainSeparator: appDomainSeparator, contentNames: contentNames });
-        return contexts;
     }
 
     function _createMockMultichainCompact() internal returns (bytes memory) {
@@ -225,7 +201,7 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
         return abi.encode(multichainCompact);
     }
 
-    function _createMockERC7739Signature() internal {
+    function _createMockSignature() internal {
         // Create mock signature components (r, s, v)
         bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
@@ -233,9 +209,7 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
 
         // Create contents and contentsDescription
         bytes32 contents = keccak256(abi.encode("testData", TEST_CONTENT));
-        bytes memory contentsDescription = abi.encodePacked(TEST_CONTENT, TEST_CONTENT_NAME);
-
-        // Construct the signature following ERC-7739 format
+        // Construct the signature
         bytes memory sessionSignature = abi.encodePacked(
             r,
             s,
@@ -245,7 +219,7 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
 
         // Prepend the permissionId and extraStuff to the session signature
         bytes memory extraStuff = _createMockMultichainCompact();
-        mockERC7739Signature = abi.encodePacked(
+        mockSignature = abi.encodePacked(
             testPermissionId, bytes32(extraStuff.length), extraStuff, sessionSignature
         );
     }

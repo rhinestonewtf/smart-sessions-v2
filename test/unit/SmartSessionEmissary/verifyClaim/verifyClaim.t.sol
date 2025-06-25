@@ -15,14 +15,8 @@ import { ModuleKitHelpers } from "@modulekit/ModuleKit.sol";
 import { LibZip } from "solady/utils/LibZip.sol";
 
 // Types
-import {
-    Session,
-    PolicyData,
-    ActionData,
-    PermissionId,
-    ERC7739Data,
-    ERC7739Context
-} from "@smartsessions/DataTypes.sol";
+import { PolicyData, ActionData, PermissionId } from "@smartsessions/DataTypes.sol";
+import { Session } from "@types/DataTypes.sol";
 import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 
 contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test {
@@ -42,10 +36,8 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
     bytes12 testLockTag;
     bytes32 testClaimHash;
     bytes32 testDigest;
-    bytes32 appDomainSeparator;
     string constant TEST_CONTENT = "TestContent(string data)";
-    string constant TEST_CONTENT_NAME = "TestContent";
-    bytes mockERC7739Signature;
+    bytes mockSignature;
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
@@ -60,17 +52,6 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         testDigest = keccak256("testDigest");
         testLockTag = bytes12(keccak256("testLockTag"));
 
-        // Setup app domain separator (mimicking an external app)
-        appDomainSeparator = keccak256(
-            abi.encodePacked(
-                "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)",
-                keccak256("TestApp"),
-                keccak256("1"),
-                block.chainid,
-                address(0x1234567890123456789012345678901234567890)
-            )
-        );
-
         // Deploy the account instance
         instance.deployAccount();
     }
@@ -79,24 +60,9 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_verifyClaim_ERC7739SupportDetection() public view {
-        // Arrange
-        bytes32 erc7739DetectionHash =
-            0x7739773977397739773977397739773977397739773977397739773977397739;
-        bytes memory emptyData = "";
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
-            instance.account, erc7739DetectionHash, bytes32(0), emptyData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0x77390001), "Should return ERC-7739 support indicator");
-    }
-
     function test_verifyClaim_SmartSessionMode_Success() public withEnabledClaimSession {
         // Arrange
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockERC7739Signature);
+        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockSignature);
 
         // Act
         bytes4 result = smartSessionEmissary.verifyClaim(
@@ -116,7 +82,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         withEnabledClaimSessionWithFailingValidator
     {
         // Arrange
-        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockERC7739Signature);
+        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockSignature);
 
         // Act
         bytes4 result = smartSessionEmissary.verifyClaim(
@@ -156,17 +122,15 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         public
         withEnabledClaimSession
     {
-        // Arrange - Create malformed ERC-7739 signature (too short)
-        bytes memory malformedSignature = abi.encodePacked(testPermissionId, "shortSig");
+        // Arrange - Create malformed signature (too short)
+        bytes memory malformedSignature = abi.encodePacked("shortSig");
         bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, malformedSignature);
 
         // Act
-        bytes4 result = smartSessionEmissary.verifyClaim(
+        vm.expectRevert();
+        smartSessionEmissary.verifyClaim(
             instance.account, testDigest, testClaimHash, emissaryData, testLockTag
         );
-
-        // Assert
-        assertEq(result, bytes4(0xffffffff), "Should return failure code for malformed signature");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -177,25 +141,17 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Prank to account
         vm.prank(instance.account);
 
-        // Setup ERC-7739 content policies
+        // Setup policies
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
-
-        // Create ERC-7739 data with the test content enabled
-        ERC7739Data memory erc7739Data = ERC7739Data({
-            allowedERC7739Content: _createAllowedContent(),
-            erc1271Policies: policyDatas
-        });
 
         // Setup session
         Session memory session = Session({
             sessionValidator: ISessionValidator(address(yesSessionValidator)),
             salt: keccak256("claimSalt"),
             sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: erc7739Data,
-            actions: new ActionData[](0),
-            permitERC4337Paymaster: false
+            erc1271Policies: policyDatas,
+            actions: new ActionData[](0)
         });
 
         // Enable session
@@ -210,8 +166,8 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Generate the permission ID
         testPermissionId = smartSessionEmissary.getPermissionId(session);
 
-        //_ Create mock ERC-7739 signature
-        _createMockERC7739Signature();
+        //_ Create mock signature
+        _createMockSignature();
 
         // Continue with the test
         _;
@@ -221,25 +177,17 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Prank to account
         vm.prank(instance.account);
 
-        // Setup ERC-7739 content policies
+        // Setup  policies
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
-
-        // Create ERC-7739 data with the test content enabled
-        ERC7739Data memory erc7739Data = ERC7739Data({
-            allowedERC7739Content: _createAllowedContent(),
-            erc1271Policies: policyDatas
-        });
 
         // Setup session with failing validator
         Session memory session = Session({
             sessionValidator: ISessionValidator(address(noSessionValidator)),
             salt: keccak256("failingClaimSalt"),
             sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: erc7739Data,
-            actions: new ActionData[](0),
-            permitERC4337Paymaster: false
+            erc1271Policies: policyDatas,
+            actions: new ActionData[](0)
         });
 
         // Set a mock lockTag for testing
@@ -252,8 +200,8 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
             smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
         testPermissionId = testPermissionIds[0];
 
-        //_ Create mock ERC-7739 signature
-        _createMockERC7739Signature();
+        //_ Create mock signature
+        _createMockSignature();
 
         // Continue with the test
         _;
@@ -274,16 +222,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         return abi.encodePacked(emissaryMode, signatureData);
     }
 
-    function _createAllowedContent() internal view returns (ERC7739Context[] memory) {
-        ERC7739Context[] memory contexts = new ERC7739Context[](1);
-        string[] memory contentNames = new string[](1);
-        contentNames[0] = string(abi.encodePacked(TEST_CONTENT, TEST_CONTENT_NAME));
-        contexts[0] =
-            ERC7739Context({ appDomainSeparator: appDomainSeparator, contentNames: contentNames });
-        return contexts;
-    }
-
-    function _createMockERC7739Signature() internal {
+    function _createMockSignature() internal {
         // Create mock signature components (r, s, v)
         bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
@@ -291,20 +230,16 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
 
         // Create contents and contentsDescription
         bytes32 contents = keccak256(abi.encode("testData", TEST_CONTENT));
-        bytes memory contentsDescription = abi.encodePacked(TEST_CONTENT, TEST_CONTENT_NAME);
 
-        // Construct the signature following ERC-7739 format
+        // Construct the signature
         bytes memory sessionSignature = abi.encodePacked(
             r,
             s,
             v, // Session validator signature
-            appDomainSeparator, // App domain separator
-            contents, // Contents hash
-            contentsDescription, // Contents type + name
-            uint16(contentsDescription.length) // Length of contents description
+            contents // Contents hash
         );
 
         // Prepend the permissionId
-        mockERC7739Signature = abi.encodePacked(testPermissionId, sessionSignature);
+        mockSignature = abi.encodePacked(testPermissionId, sessionSignature);
     }
 }

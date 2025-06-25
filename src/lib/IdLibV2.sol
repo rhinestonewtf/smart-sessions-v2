@@ -6,6 +6,7 @@ import { IdLib } from "@smartsessions/lib/IdLib.sol";
 
 // Types
 import { PermissionId, ActionId, ConfigId, Erc1271PolicyId } from "@smartsessions/DataTypes.sol";
+import { Session } from "@types/DataTypes.sol";
 
 library IdLibV2 {
     /*//////////////////////////////////////////////////////////////
@@ -29,5 +30,31 @@ library IdLibV2 {
         returns (ConfigId _id)
     {
         _id = permissionId.toActionPolicyId(actionId).toConfigId(account);
+    }
+
+    /// @dev Adjusted toPermissionId to work with the new Session type
+    function toPermissionIdMemory(Session memory session)
+        internal
+        pure
+        returns (PermissionId permissionId)
+    {
+        permissionId = PermissionId.wrap(
+            keccak256(
+                abi.encode(session.sessionValidator, session.sessionValidatorInitData, session.salt)
+            )
+        );
+    }
+
+    /// @dev Adjusted toPermissionId to work with the new Session type
+    function toPermissionId(Session calldata session)
+        internal
+        pure
+        returns (PermissionId permissionId)
+    {
+        permissionId = PermissionId.wrap(
+            keccak256(
+                abi.encode(session.sessionValidator, session.sessionValidatorInitData, session.salt)
+            )
+        );
     }
 }

@@ -15,7 +15,7 @@ import { console } from "@forge-std/console.sol";
 
 /// @title MultiChainClaimRecipientPolicy
 /// @notice A policy that allows enforcing rules on the claim recipient of a MultiChainClaim struct
-///         The ERC7739 hash of the MultiChainClaim struct hash is reconstructed using the EIP-712
+///         The hash of the MultiChainClaim struct hash is reconstructed using the EIP-712
 ///         standard and passed data within the signature
 contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
     /*//////////////////////////////////////////////////////////////
@@ -98,7 +98,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
 
     function check1271SignedAction(
         ConfigId id,
-        address sender,
+        address, /*sender*/
         address account,
         bytes32 hash,
         bytes calldata signature

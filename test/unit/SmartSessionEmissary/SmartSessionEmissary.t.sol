@@ -12,13 +12,8 @@ import { SmartSessionEmissaryMock } from "@test/mock/SmartSessionEmissaryMock.so
 import { IntegrationEncodeLib } from "@smartsessions-test/utils/lib/IntegrationEncodeLib.sol";
 
 // Types
-import {
-    SmartSessionMode,
-    PermissionId,
-    Session,
-    EnableSession,
-    ChainDigest
-} from "@smartsessions/DataTypes.sol";
+import { SmartSessionMode, PermissionId, ChainDigest } from "@smartsessions/DataTypes.sol";
+import { Session, EnableSession } from "@types/DataTypes.sol";
 
 contract SmartSessionEmissary_Unit_Test is Base_Test {
     /*//////////////////////////////////////////////////////////////
@@ -45,8 +40,11 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
 
     function makeMultiChainEnableData(
         Session memory session,
-        address validator,
-        bytes12 lockTag
+        address, /*validator*/
+        bytes12 lockTag,
+        uint256 expires,
+        address arbiter,
+        address allocator
     )
         internal
         view
@@ -55,7 +53,10 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         bytes32 sessionDigest = smartSessionEmissary.getSessionDigest({
             lockTag: lockTag,
             account: instance.account,
-            data: session
+            data: session,
+            expires: expires,
+            allocator: allocator,
+            arbiter: arbiter
         });
 
         ChainDigest[] memory chainDigests = IntegrationEncodeLib.encodeHashesAndChainIds(
@@ -66,8 +67,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         enableData = EnableSession({
             chainDigestIndex: 1,
             hashesAndChainIds: chainDigests,
-            sessionToEnable: session,
-            permissionEnableSig: abi.encodePacked(validator, hex"42069420")
+            sessionToEnable: session
         });
     }
 }

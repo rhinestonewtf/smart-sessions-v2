@@ -26,7 +26,7 @@ import { Solarray } from "solarray/Solarray.sol";
 
 // Types
 import { AccountInstance } from "@modulekit/ModuleKit.sol";
-import { ERC7739Data, PolicyData, ERC7739Context, EIP712Domain } from "@smartsessions/DataTypes.sol";
+import { PolicyData, EIP712Domain } from "@smartsessions/DataTypes.sol";
 import { Execution, ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
 import {
     ExecType,
@@ -137,41 +137,6 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(admin, ECDSA.toEthSignedMessageHash(_hash));
         // Return the signature.
         return abi.encodePacked(r, s, v);
-    }
-
-    /// @notice Get the empty ERC7739 data.
-    function _getEmptyERC7739Data(
-        string memory content,
-        PolicyData[] memory erc1271Policies
-    )
-        internal
-        pure
-        returns (ERC7739Data memory)
-    {
-        ERC7739Context[] memory contents = new ERC7739Context[](1);
-        contents[0].contentNames = Solarray.strings(content);
-        contents[0].appDomainSeparator = hash(
-            EIP712Domain({
-                name: "Forge",
-                version: "1",
-                chainId: 1,
-                verifyingContract: address(0x6605F8785E09a245DD558e55F9A0f4A508434503)
-            })
-        );
-        return ERC7739Data({ allowedERC7739Content: contents, erc1271Policies: erc1271Policies });
-    }
-
-    /// @notice Hash the EIP712 domain.
-    function hash(EIP712Domain memory erc7739Data) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                EIP712_DOMAIN_TYPEHASH,
-                keccak256(bytes(erc7739Data.name)),
-                keccak256(bytes(erc7739Data.version)),
-                erc7739Data.chainId,
-                erc7739Data.verifyingContract
-            )
-        );
     }
 
     function getCallData(

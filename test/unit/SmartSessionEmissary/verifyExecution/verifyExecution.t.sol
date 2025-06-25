@@ -18,7 +18,6 @@ import { LibZip } from "solady/utils/LibZip.sol";
 
 // Types
 import {
-    Session,
     PolicyData,
     ActionData,
     FALLBACK_TARGET_FLAG,
@@ -43,6 +42,7 @@ import {
 } from "erc7579/lib/ModeLib.sol";
 import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 import { MODULE_TYPE_VALIDATOR } from "erc7579/interfaces/IERC7579Module.sol";
+import { Session } from "@types/DataTypes.sol";
 
 contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_Test {
     /*//////////////////////////////////////////////////////////////
@@ -268,15 +268,15 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             actionPolicies: policyDatas
         });
 
+        // Create erc1271
+
         // Setup session
         Session memory session = Session({
             sessionValidator: ISessionValidator(address(yesSessionValidator)),
             salt: keccak256("salt"),
             sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: _getEmptyERC7739Data("0", new PolicyData[](0)),
-            actions: actions,
-            permitERC4337Paymaster: true
+            erc1271Policies: new PolicyData[](0),
+            actions: actions
         });
 
         // Enable session
@@ -317,10 +317,8 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             sessionValidator: ISessionValidator(address(yesSessionValidator)),
             salt: keccak256("batchSalt"),
             sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: _getEmptyERC7739Data("0", new PolicyData[](0)),
-            actions: actions,
-            permitERC4337Paymaster: true
+            erc1271Policies: new PolicyData[](0),
+            actions: actions
         });
 
         // Enable session
@@ -354,10 +352,8 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             sessionValidator: ISessionValidator(address(noSessionValidator)),
             salt: keccak256("failingSalt"),
             sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: _getEmptyERC7739Data("0", new PolicyData[](0)),
-            actions: actions,
-            permitERC4337Paymaster: true
+            erc1271Policies: new PolicyData[](0),
+            actions: actions
         });
 
         // Enable session
@@ -423,10 +419,8 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             sessionValidator: ISessionValidator(address(yesSessionValidator)),
             salt: keccak256("enableSalt"),
             sessionValidatorInitData: "mockInitData",
-            userOpPolicies: new PolicyData[](0),
-            erc7739Policies: _getEmptyERC7739Data("0", new PolicyData[](0)),
-            actions: actions,
-            permitERC4337Paymaster: true
+            erc1271Policies: new PolicyData[](0),
+            actions: actions
         });
 
         // Calculate the permission ID
