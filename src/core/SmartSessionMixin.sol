@@ -164,8 +164,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     {
         // Increment nonce to prevent replay attacks
         uint256 nonce = $emissaryNonce[account][lockTag]++;
-        bytes32 hash =
-            enableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter, allocator);
+        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter);
 
         // Verify the user and allocator signatures
         hash.verifySignatures(account, allocator, allocatorSig, userSig);
@@ -205,7 +204,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         }
 
         // Mark the session as enabled
-        $smartSessionConfig[arbiter][lockTag].add({
+        $smartSessionConfig[arbiter].add({
             account: account,
             value: PermissionId.unwrap(permissionId)
         });
@@ -238,15 +237,14 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         uint256 nonce = $emissaryNonce[account][lockTag]++;
 
         // Get the hash for the disable operation
-        bytes32 hash = disableData.getAndVerifyDigest(
-            permissionId, account, nonce, expires, lockTag, arbiter, allocator
-        );
+        bytes32 hash =
+            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, arbiter);
 
         // Verify the user and allocator signatures
         hash.verifySignatures(account, allocator, allocatorSig, userSig);
 
         // Remove the session from the smart session config
-        _removeSession(permissionId, account, lockTag, arbiter);
+        _removeSession(permissionId, account, arbiter);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -257,22 +255,20 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param sponsor The sponsor account associated with the claim
     /// @param claimHash The hash of the claim being verified
     /// @param emissaryData Data containing the permissionId and signature
-    /// @param lockTag The lock tag associated with the claim
     /// @return result The verifyClaim selector if valid, otherwise 0xffffffff
     function _verifyClaimSmartSession(
         address sponsor,
         bytes32 claimHash,
         bytes calldata emissaryData,
-        bytes12 lockTag
+        bytes12 /*lockTag*/
     )
         internal
         view
         virtual
         returns (bytes4 result)
     {
-        bool success = _erc1271IsValidSignatureNowCalldata(
-            msg.sender, claimHash, emissaryData, sponsor, lockTag
-        );
+        bool success =
+            _erc1271IsValidSignatureNowCalldata(msg.sender, claimHash, emissaryData, sponsor);
         /// @solidity memory-safe-assembly
         assembly {
             // `success ? bytes4(keccak256("verifyClaim(address,bytes32,bytes32,bytes,bytes12)")) :
@@ -290,14 +286,13 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param hash The hash of the user operation
     /// @param emissaryData Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function _verifyExecutionSmartSession(
         address account,
         bytes32 hash,
         bytes calldata emissaryData,
         bytes calldata executions,
-        bytes12 lockTag
+        bytes12 /*lockTag*/
     )
         internal
         virtual
@@ -320,8 +315,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
                 hash: hash,
                 callData: executions,
                 decompressedSignature: packedSig,
-                account: account,
-                lockTag: lockTag
+                account: account
             });
         }
         // if an Unknown mode is provided, the function will revert
@@ -344,25 +338,19 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param callData Execution data for the call
     /// @param decompressedSignature The decompressed signature for validation
     /// @param account The account for which policies are being enforced
-    /// @param lockTag The lock tag associated with the session
     /// @return validSig True if the signature is valid, false otherwise
     function _enforcePolicies(
         PermissionId permissionId,
         bytes32 hash,
         bytes calldata callData,
         bytes memory decompressedSignature,
-        address account,
-        bytes12 lockTag
+        address account
     )
         internal
         returns (bool validSig)
     {
         // ensure that the permissionId is enabled
-        if (
-            !$smartSessionConfig[msg.sender][lockTag].contains(
-                account, PermissionId.unwrap(permissionId)
-            )
-        ) {
+        if (!$smartSessionConfig[msg.sender].contains(account, PermissionId.unwrap(permissionId))) {
             revert InvalidPermissionId(permissionId);
         }
         bytes4 selector = bytes4(callData[0:4]);
@@ -442,8 +430,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         address sender,
         bytes32 hash,
         bytes calldata signature,
-        address sponsor,
-        bytes12 lockTag
+        address sponsor
     )
         internal
         view
@@ -456,7 +443,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         // forgefmt: disable-next-item
         if (
             // return false if permissionId is not enabled for lockTag and sender
-             !$smartSessionConfig[sender][lockTag].contains(
+             !$smartSessionConfig[sender].contains(
                 sponsor, PermissionId.unwrap(permissionId)
             )
         ) return false;

@@ -45,8 +45,7 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
  *     uint256 nonce                                     // Nonce value
  *     uint256 expires,                                  // Expiration timestamp
  *     bytes12 lockTag,                                  // Lock tag for the session
- *     address arbiter,                                  // Arbiter address
- *     address allocator                                 // Allocator address
+ *     address arbiter                                   // Arbiter address
  * )
  */
 bytes32 constant SESSION_TYPEHASH =
@@ -79,7 +78,6 @@ bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
  *     PermissionId permissionId, // Permission ID to disable
  *     bytes12 lockTag, // Lock tag for the session
  *     address arbiter, // Arbiter address   
- *     address allocator, // Allocator address
  *     uint256 expires, // Expiration timestamp
  *     uint256 nonce // Nonce value
  * )
@@ -143,7 +141,6 @@ library HashLibV2 {
     /// @param expires The expiration timestamp for the session
     /// @param lockTag The lock tag for the session
     /// @param arbiter The arbiter address for the session
-    /// @param allocator The allocator address for the session
     /// @return digest The computed digest for the session
     function _sessionDigest(
         Session memory session,
@@ -151,8 +148,7 @@ library HashLibV2 {
         uint256 nonce,
         uint256 expires,
         bytes12 lockTag,
-        address arbiter,
-        address allocator
+        address arbiter
     )
         internal
         view
@@ -172,8 +168,7 @@ library HashLibV2 {
                     nonce, // Session nonce
                     expires, // Expiration timestamp
                     lockTag, // Lock tag for the session
-                    arbiter, // Arbiter address
-                    allocator // Allocator address
+                    arbiter // Arbiter address
                 )
             );
         }
@@ -186,14 +181,13 @@ library HashLibV2 {
         uint256 nonce,
         uint256 expires,
         bytes12 lockTag,
-        address arbiter,
-        address allocator
+        address arbiter
     )
         internal
         view
         returns (bytes32)
     {
-        return _sessionDigest(session, account, nonce, expires, lockTag, arbiter, allocator);
+        return _sessionDigest(session, account, nonce, expires, lockTag, arbiter);
     }
 
     /// @dev Adjusted hashPermissions function to exclude unused fields from SmartSessions
@@ -254,7 +248,6 @@ library HashLibV2 {
     /// @param expires The expiration timestamp for the disable signature
     /// @param lockTag The lock tag for session to disable
     /// @param arbiter The arbiter address for the session to disable
-    /// @param allocator The allocator address for the session to disable
     /// @return digest The computed digest for the session to disable
     function disableDigest(
         PermissionId permissionId,
@@ -262,8 +255,7 @@ library HashLibV2 {
         uint256 nonce,
         uint256 expires,
         bytes12 lockTag,
-        address arbiter,
-        address allocator
+        address arbiter
     )
         internal
         pure
@@ -277,7 +269,6 @@ library HashLibV2 {
                 permissionId, // Permission ID to disable
                 lockTag, // Lock tag for the session
                 arbiter, // Arbiter address
-                allocator, // Allocator address
                 expires, // Expiration timestamp
                 nonce // Nonce value
             )
@@ -340,7 +331,6 @@ library HashLibV2 {
     /// @param expires The expiration timestamp for the session
     /// @param lockTag The lock tag for the session
     /// @param arbiter The arbiter address for the session
-    /// @param allocator The allocator address for the session
     /// @return digest The computed multichain digest for the session
     function getAndVerifyDigest(
         EnableSession memory enableData,
@@ -348,16 +338,14 @@ library HashLibV2 {
         uint256 nonce,
         uint256 expires,
         bytes12 lockTag,
-        address arbiter,
-        address allocator
+        address arbiter
     )
         internal
         view
         returns (bytes32 digest)
     {
-        bytes32 computedHash = enableData.sessionToEnable.sessionDigest(
-            account, nonce, expires, lockTag, arbiter, allocator
-        );
+        bytes32 computedHash =
+            enableData.sessionToEnable.sessionDigest(account, nonce, expires, lockTag, arbiter);
 
         uint64 providedChainId = enableData.hashesAndChainIds[enableData.chainDigestIndex].chainId;
         bytes32 providedHash =
@@ -384,7 +372,6 @@ library HashLibV2 {
     /// @param expires The expiration timestamp for the disable signature
     /// @param lockTag The lock tag for the session to disable
     /// @param arbiter The arbiter address for the session to disable
-    /// @param allocator The allocator address for the session to disable
     function getAndVerifyDigest(
         DisableSession memory disableData,
         PermissionId permissionId,
@@ -392,15 +379,14 @@ library HashLibV2 {
         uint256 nonce,
         uint256 expires,
         bytes12 lockTag,
-        address arbiter,
-        address allocator
+        address arbiter
     )
         internal
         view
         returns (bytes32 digest)
     {
         bytes32 computedHash =
-            disableDigest(permissionId, account, nonce, expires, lockTag, arbiter, allocator);
+            disableDigest(permissionId, account, nonce, expires, lockTag, arbiter);
 
         uint64 providedChainId = disableData.hashesAndChainIds[disableData.chainDigestIndex].chainId;
         bytes32 providedHash =

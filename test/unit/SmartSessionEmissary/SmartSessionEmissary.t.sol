@@ -44,7 +44,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         bytes12 lockTag,
         uint256 expires,
         address arbiter,
-        address allocator
+        address /*allocator*/
     )
         internal
         view
@@ -55,7 +55,6 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
             account: instance.account,
             data: session,
             expires: expires,
-            allocator: allocator,
             arbiter: arbiter
         });
 

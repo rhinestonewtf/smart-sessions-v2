@@ -55,9 +55,8 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Maps lockTag to enabled permissionIds for verifyClaim lookups
-    /// @dev Bridge storage connecting emissary lockTags to SmartSession permissionIds
-    mapping(address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs))
-        internal $smartSessionConfig;
+    /// @dev Bridge storage connecting arbiters to SmartSession permissionIds
+    mapping(address arbiter => EnumerableSet.Bytes32Set permissionIDs) internal $smartSessionConfig;
     /// @notice Mapping of action policies organized by action IDs and permission IDs
     EnumerableActionPolicy internal $actionPolicies;
     /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
@@ -76,14 +75,12 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param account The account address associated with the sessions
     /// @param useRegistry A flag to indicate whether to use a registry check for the policies and
     ///        session validator
-    /// @param lockTag A tag used to lock the session configuration
     /// @param arbiter The address of the arbiter for the session, if applicable
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function _enableSessions(
         Session[] calldata sessions,
         address account,
         bool useRegistry,
-        bytes12 lockTag,
         address arbiter
     )
         internal
@@ -117,7 +114,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             });
 
             // Add the session to the list of enabled sessions for the caller
-            $smartSessionConfig[arbiter][lockTag].add({
+            $smartSessionConfig[arbiter].add({
                 account: account,
                 value: PermissionId.unwrap(permissionId)
             });
@@ -140,14 +137,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Remove a session and all its associated policies
     /// @param permissionId The unique identifier for the session to be removed
     /// @param account The account address associated with the session
-    function _removeSession(
-        PermissionId permissionId,
-        address account,
-        bytes12 lockTag,
-        address arbiter
-    )
-        internal
-    {
+    function _removeSession(PermissionId permissionId, address account, address arbiter) internal {
         if (permissionId == EMPTY_PERMISSIONID) revert InvalidSession(permissionId);
 
         // Remove all ERC1271 policies for this session
@@ -167,7 +157,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
 
         // Remove all ERC1271 policies for this session
-        $smartSessionConfig[arbiter][lockTag].remove({
+        $smartSessionConfig[arbiter].remove({
             account: account,
             value: PermissionId.unwrap(permissionId)
         });
@@ -182,14 +172,15 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param account The account address
     /// @param lockTag The lock tag used to identify the session
     /// @param data The session data
+    /// @param expires The expiration timestamp for the session
+    /// @param arbiter The address of the arbiter for the session, if applicable
     /// @return The session digest
     function getSessionDigest(
         address account,
         Session memory data,
         bytes12 lockTag,
         uint256 expires,
-        address arbiter,
-        address allocator
+        address arbiter
     )
         public
         view
@@ -201,8 +192,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             lockTag: lockTag,
             expires: expires,
             nonce: nonce,
-            arbiter: arbiter,
-            allocator: allocator
+            arbiter: arbiter
         });
     }
 
@@ -254,22 +244,18 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Check if a permission is enabled for an account
     /// @param permissionId The permission ID to check
     /// @param account The account address
-    /// @param lockTag The lock tag used to identify the session
     /// @param arbiter The address of the arbiter for the session, if applicable
     /// @return Boolean indicating whether the permission is enabled
     function isPermissionEnabled(
         PermissionId permissionId,
         address account,
-        bytes12 lockTag,
         address arbiter
     )
         external
         view
         returns (bool)
     {
-        return $smartSessionConfig[arbiter][lockTag].contains(
-            account, PermissionId.unwrap(permissionId)
-        );
+        return $smartSessionConfig[arbiter].contains(account, PermissionId.unwrap(permissionId));
     }
 
     /// @notice Check if ERC1271 policies are enabled for an account
@@ -442,19 +428,17 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     /// @notice Gets all permission IDs for a specific account and lock tag
     /// @param account The address of the account to query
-    /// @param lockTag The lock tag used to identify the session configuration
     /// @param arbiter The address of the arbiter for the session, if applicable
     /// @return permissionIds Array of permission IDs associated with the account
     function getPermissionIDs(
         address account,
-        bytes12 lockTag,
         address arbiter
     )
         external
         view
         returns (PermissionId[] memory permissionIds)
     {
-        bytes32[] memory _permissionIds = $smartSessionConfig[arbiter][lockTag].values(account);
+        bytes32[] memory _permissionIds = $smartSessionConfig[arbiter].values(account);
         assembly {
             permissionIds := _permissionIds
         }
