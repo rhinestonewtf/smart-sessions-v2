@@ -10,7 +10,7 @@ import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/Mes
 import {
     SmartSessionMode,
     ActionData,
-    ERC7739Data,
+    PolicyData,
     FALLBACK_TARGET_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG_PERMITTED_TO_CALL_SMARTSESSION,
@@ -22,18 +22,15 @@ import { EnableSession, Session } from "@types/DataTypes.sol";
                             TYPEHASHES
 //////////////////////////////////////////////////////////////*/
 
+// forgefmt: disable-next-item
 /*
  * SignedSession(
  *     address account,                                  // User account address
  *     SignedPermissions permissions,                    // Signed permissions struct
  *     │   bool  permitGenericPolicy,                    // Allow policy fallback
- *     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
- *     │   ├── ERC7739Context[] allowedERC7739Content    // Allowed content array
- *     │   │   ├── bytes32 appDomainSeparator            // Domain separator
- *     │   │   └── string[] contentName                  // Content identifiers
- *     │   └── PolicyData[] erc1271Policies              // ERC1271 policies array
- *     │       ├── address policy                        // Policy address
- *     │       └── bytes initData                        // Init data
+ *     │   PolicyData[] erc1271Policies                  // ERC1271 policies array
+ *     │   ├── address policy                            // Policy address
+ *     │   └── bytes initData                            // Init data
  *     │   ActionData[] actions                          // Actions array
  *     │   ├── bytes4 actionTargetSelector               // Function selector
  *     │   ├── address actionTarget                      // Target contract
@@ -52,7 +49,8 @@ import { EnableSession, Session } from "@types/DataTypes.sol";
  * )
  */
 bytes32 constant SESSION_TYPEHASH =
-    0xd44896e3cb83d70abc949a38dd6f9f75e675dc329dfe958617f066f79ff88f05; // TODO: Recalculate this hash
+    0xd44896e3cb83d70abc949a38dd6f9f75e675dc329dfe958617f066f79ff88f05; // TODO: Recalculate this
+    // hash
 bytes32 constant SIGNED_PERMISSIONS_TYPEHASH =
     0x871289c05e426554eb0f843c9aa542f9c2bc4eba7742ada6a5c014d3568674d4; // TODO: Recalculate this hash
 
@@ -86,6 +84,7 @@ bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
 ///      - permitAdminAccess: bool
 ///      - permitERC4337Paymaster: bool
 ///      - userOpPolicies: PolicyData[]
+//       - erc7739Policies: ERC7739Data (the nested erc1271Policies field has been kept)
 library HashLibV2 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -93,7 +92,7 @@ library HashLibV2 {
 
     using HashLibV2 for *;
     using HashLib for ActionData;
-    using HashLib for ERC7739Data;
+    using HashLib for PolicyData[];
     using EfficientHashLib for *;
 
     /*//////////////////////////////////////////////////////////////
@@ -162,7 +161,7 @@ library HashLibV2 {
             abi.encode(
                 SIGNED_PERMISSIONS_TYPEHASH,
                 permitFallback, // permitGenericPolicy
-                session.erc7739Policies.hashERC7739Data(), // erc7739Policies
+                session.erc1271Policies.hashPolicyDataArray(), // erc1271Policies
                 actionDataArrayHash // actions
             )
         );
