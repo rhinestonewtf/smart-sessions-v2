@@ -12,6 +12,7 @@ import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
 import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
+import { HashLib } from "@smartsessions/lib/HashLib.sol";
 
 // Types
 import {
@@ -30,6 +31,10 @@ import {
     PolicyData
 } from "@smartsessions/DataTypes.sol";
 
+import { console } from "@forge-std/console.sol";
+
+/// @dev Extended ConfigLib library from SmartSessions to allow passing an address instead of
+///      msg.sender for different enable functions.
 library ConfigLibV2 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -40,6 +45,7 @@ library ConfigLibV2 {
     using EnumerableSet for *;
     using ConfigLib for *;
     using ConfigLibV2 for *;
+    using HashLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                  ENABLE
@@ -157,6 +163,9 @@ library ConfigLibV2 {
 
             // Add the policy to the list for the given permission and smart account
             $policy.policyList[permissionId].add({ account: account, value: policy });
+
+            console.log("Enabling policy:", policy);
+            console.logBytes32(ConfigId.unwrap(configId));
 
             // Initialize the policy with the provided configuration
             // overwrites the config
