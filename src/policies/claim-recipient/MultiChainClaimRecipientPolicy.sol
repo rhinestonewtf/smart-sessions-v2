@@ -213,7 +213,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
         }
 
         // Hash the complete MultichainCompact
-        return keccak256(
+        bytes32 hash = keccak256(
             abi.encode(
                 TYPEHASH_COMPACT,
                 multichainCompact.sponsor,
@@ -222,6 +222,11 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
                 keccak256(abi.encodePacked(allElements))
             )
         );
+
+        console.log("Recomputed MultichainCompact hash:");
+        console.logBytes32(hash);
+
+        return hash;
     }
 
     function _hashTargetAttributes(

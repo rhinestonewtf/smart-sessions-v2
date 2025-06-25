@@ -3,7 +3,9 @@ pragma solidity >=0.8.27;
 
 // Dependencies
 import { MultiChainClaimRecipient_Unit_Test } from
-    "@test/integration/MuliChainClaimRecipientPolicy/MultiChainClaimRecipient.t.sol";
+    "@test/integration/MultiChainClaimRecipientPolicy/MultiChainClaimRecipient.t.sol";
+import { MultiChainClaimRecipientPolicy } from
+    "@policies/claim-recipient/MultiChainClaimRecipientPolicy.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -26,7 +28,8 @@ import {
 import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 
 contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
-    MultiChainClaimRecipient_Unit_Test
+    MultiChainClaimRecipient_Unit_Test,
+    MultiChainClaimRecipientPolicy
 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -35,39 +38,6 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
     using ModuleKitHelpers for *;
     using LibZip for bytes;
     using HashLib for *;
-
-    /*//////////////////////////////////////////////////////////////
-                                STRUCTS
-    //////////////////////////////////////////////////////////////*/
-
-    struct Target {
-        address recipient;
-        bytes32 tokenOut;
-        uint256 targetChain;
-        uint256 fillExpires;
-    }
-
-    struct Mandate {
-        Target target;
-        bytes32 preClaimOps;
-        bytes32 targetOps;
-        bytes32 q;
-    }
-
-    struct Element {
-        address arbiter;
-        uint256 chainId;
-        bytes32 commitments;
-        Mandate mandate;
-    }
-
-    struct MultichainCompact {
-        address sponsor;
-        uint256 nonce;
-        uint256 expires;
-        Element notarizedElement;
-        bytes32[] otherElements;
-    }
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -210,7 +180,7 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
         return contexts;
     }
 
-    function _createMockMultichainCompact() internal view returns (bytes memory) {
+    function _createMockMultichainCompact() internal returns (bytes memory) {
         // Create mock target
         Target memory target = Target({
             recipient: TEST_RECIPIENT,
@@ -249,6 +219,8 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
             otherElements: otherElements
         });
 
+        testDigest = _rehashMultichainCompact(multichainCompact);
+
         // Encode and return the struct
         return abi.encode(multichainCompact);
     }
@@ -268,10 +240,7 @@ contract MultiChainClaimRecipient_verifyClaim_Integration_Test is
             r,
             s,
             v, // Session validator signature
-            appDomainSeparator, // App domain separator
-            contents, // Contents hash
-            contentsDescription, // Contents type + name
-            uint16(contentsDescription.length) // Length of contents description
+            contents
         );
 
         // Prepend the permissionId and extraStuff to the session signature
