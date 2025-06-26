@@ -8,8 +8,18 @@ import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
 // Contracts
 import { EIP712TypeHash } from "@compact-utils/types/EIP712TypeHash.sol";
 
+// Libraries
+import { ArgPolicyTreeLib } from
+    "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
+
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
+import {
+    ActionConfig,
+    ParamRules,
+    ParamRule
+} from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol"; // TODO: remove Limit from
+    // paramrules
 
 /// @title MultiChainClaimPolicy
 /// @notice A policy that allows enforcing rules on specific fields of a MultiChainClaim struct:
@@ -54,11 +64,6 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
         uint128 maxAmount; // Maximum amount (type(uint128).max for no maximum)
     }
 
-    struct PreclaimExecutionsConfig {
-        // Use actionconfig from uniaction here?
-        bytes32 hash;
-    }
-
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -95,8 +100,8 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
     ) internal $recipientConfig;
 
     /// @notice Mapping to store pre-claim operations configurations
-    mapping(ConfigId id => mapping(address msgSender => PreclaimExecutionsConfig preClaimOpsConfig))
-        internal $preClaimOpsConfig;
+    mapping(ConfigId id => mapping(address msgSender => ActionConfig preClaimOpsConfig)) internal
+        $preClaimOpsConfig;
 
     /*//////////////////////////////////////////////////////////////
                                 CONSTANTS
