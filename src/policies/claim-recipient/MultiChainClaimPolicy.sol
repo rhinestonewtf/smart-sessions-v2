@@ -30,6 +30,7 @@ import {
 ///         - recipient + targetChainId: compare with input
 ///         - tokenIn/amount: per chainId mapping
 ///         - tokenOut/amount: per targetChainId mapping
+///         - qualification: compare with input
 ///         Uses a bitmap configuration with separate storage for each condition
 contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
     /*//////////////////////////////////////////////////////////////
@@ -81,6 +82,10 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
     /// @notice Mapping to store pre-claim operations configurations
     mapping(ConfigId id => mapping(address msgSender => ParamRules preClaimOpsConfig)) internal
         $preClaimOpsConfig;
+
+    /// @notice Mapping to store qualification params
+    mapping(ConfigId id => mapping(address msgSender => ParamRules qualificationConfig)) internal
+        $qualificationConfig;
 
     /*//////////////////////////////////////////////////////////////
                                 CONSTANTS
@@ -186,6 +191,15 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
                 $tokenOutConfig[configId][msg.sender][tokenOutConfig.targetChainId] =
                     tokenOutConfig.config;
             }
+        }
+
+        // (5) qualification
+        if (configBitmap.hasCheckQualification()) {
+            // Decode qualification configuration
+            ParamRules memory qualificationConfig;
+            (qualificationConfig, configData) = configData.decodeQualificationConfig();
+            // Store the qualification configuration
+            $qualificationConfig[configId][msg.sender] = qualificationConfig;
         }
 
         // Store the bitmap configuration

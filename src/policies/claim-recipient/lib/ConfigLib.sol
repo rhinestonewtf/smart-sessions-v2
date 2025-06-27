@@ -41,6 +41,7 @@ library ConfigLib {
         // 2 - CHECK_RECIPIENT_AND_TARGET_CHAIN
         // 3 - CHECK_TOKEN_IN
         // 4 - CHECK_TOKEN_OUT
+        // 5 - CHECK_QUALIFICATIONS
         uint8 conditionsBitmap;
         // CHECK_HAS_EXECUTIONS (condition 0)
         // No additional data needed for this condition
@@ -58,6 +59,9 @@ library ConfigLib {
         // CHECK_TOKEN_OUT (condition 4)
         // Can have multiple tokenOut configurations per target chain
         TokenOutConfig[] tokenOutConfigs;
+        // CHECK_QUALIFICATIONS (condition 5)
+        // Qualification data configuration
+        ParamRules qualificationConfig;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -92,6 +96,12 @@ library ConfigLib {
     /// @return true if the tokenOut condition is set, false otherwise
     function hasCheckTokenOut(PolicyConfig config) internal pure returns (bool) {
         return PolicyConfig.unwrap(config) & 16 != 0;
+    }
+
+    /// @notice Returns if the bitmap has the qualifications condition set
+    /// @return true if the qualifications condition is set, false otherwise
+    function hasCheckQualification(PolicyConfig config) internal pure returns (bool) {
+        return PolicyConfig.unwrap(config) & 32 != 0;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -156,6 +166,46 @@ library ConfigLib {
 
     /// @notice Decodes the preClaimOps configuration from the initialization data
     function decodePreClaimOpsConfig(bytes calldata initData)
+        internal
+        pure
+        returns (ParamRules memory rules, bytes calldata data)
+    {
+        // Decode the root node index
+        uint8 rootNodeIndex = uint8(initData[0]);
+        // Decode the number of rules
+        uint256 ruleCount = uint256(bytes32(initData[1:33]));
+        ParamRule[] memory paramRules = new ParamRule[](ruleCount);
+        uint256 offset = 33; // Start after rootNodeIndex and ruleCount
+
+        for (uint256 i = 0; i < ruleCount; i++) {
+            paramRules[i] = ParamRule({
+                condition: ParamCondition(uint8(initData[offset])),
+                offset: uint64(bytes8(initData[offset + 1:offset + 9])),
+                isLimited: initData[offset + 9] != 0,
+                ref: bytes32(initData[offset + 10:offset + 42])
+            });
+            offset += 42; // Move to the next rule (1 byte condition + 8 bytes offset + 1 byte
+                // isLimited + 32 bytes ref)
+        }
+
+        // Decode packed nodes
+        uint256 packedNodesLength = (initData.length - offset) / 32;
+        uint256[] memory packedNodes = new uint256[](packedNodesLength);
+        for (uint256 i = 0; i < packedNodesLength; i++) {
+            packedNodes[i] = uint256(bytes32(initData[offset + i * 32:offset + (i + 1) * 32]));
+        }
+
+        rules = ParamRules({
+            rootNodeIndex: rootNodeIndex,
+            rules: paramRules,
+            packedNodes: packedNodes
+        });
+
+        data = initData[offset + packedNodesLength * 32:]; // Remaining data after decoding
+    }
+
+    /// @notice Decodes the qualification configuration from the initialization data
+    function decodeQualificationConfig(bytes calldata initData)
         internal
         pure
         returns (ParamRules memory rules, bytes calldata data)
