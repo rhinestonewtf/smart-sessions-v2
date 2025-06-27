@@ -19,10 +19,16 @@ import {
 type PolicyConfig is uint8; // Bitmap to determine which conditions to check
 
 using { neQConfig as != } for PolicyConfig global;
+using { eqConfig as == } for PolicyConfig global;
 
 /// @notice Checks if the current config does not match the given config
 function neQConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
     return PolicyConfig.unwrap(self) != PolicyConfig.unwrap(config);
+}
+
+/// @notice Checks if the current config matches the given config
+function eqConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
+    return PolicyConfig.unwrap(self) == PolicyConfig.unwrap(config);
 }
 
 /// @title Config Library
