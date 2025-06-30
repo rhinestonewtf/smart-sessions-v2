@@ -50,24 +50,43 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
                                 STRUCTS
     //////////////////////////////////////////////////////////////*/
 
+    struct Token {
+        address token;
+        uint256 amount;
+    }
+
+    struct Op {
+        bytes data;
+    }
+
+    struct Qualification {
+        bytes data;
+    }
+
     struct Target {
         address recipient;
-        bytes32 tokenOut;
+        Token[] tokenOut;
         uint256 targetChain;
         uint256 fillExpires;
     }
 
+    struct Lock {
+        bytes12 lockTag;
+        address token;
+        uint256 amount;
+    }
+
     struct Mandate {
         Target target;
-        bytes32 preClaimOps;
-        bytes32 targetOps;
-        bytes32 q;
+        Op[] preClaimOps;
+        Op[] targetOps;
+        Qualification q;
     }
 
     struct Element {
         address arbiter;
         uint256 chainId;
-        bytes32 commitments;
+        Lock[] commitments;
         Mandate mandate;
     }
 
@@ -492,7 +511,7 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
         // TODO: Implement ArgPolicy validation
         // ParamRules storage rules = $preClaimOpsConfig[id][msg.sender];
         // return ArgPolicyTreeLib.evaluateExpressionTree(rules, preClaimOpsData);
-        console.log("PreClaimOps check - ArgPolicy integration pending");
+        console.log("PreClaimOps check");
         return true; // Placeholder
     }
 
@@ -576,7 +595,7 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
         // TODO: Implement ArgPolicy validation for qualification data
         // ParamRules storage rules = $qualificationConfig[id][msg.sender];
         // return ArgPolicyTreeLib.evaluateExpressionTree(rules, qualificationData);
-        console.log("Qualification check - ArgPolicy integration pending");
+        console.log("Qualification check");
         return true; // Placeholder
     }
 

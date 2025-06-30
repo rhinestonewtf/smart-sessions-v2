@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 /*//////////////////////////////////////////////////////////////
-                            STRUCTS
+                            POLICY
 //////////////////////////////////////////////////////////////*/
 
 /// @notice Token amount configuration for checking per chain
@@ -48,4 +48,56 @@ struct TokenInConfig {
 struct TokenOutConfig {
     uint256 targetChainId;
     TokenAmountConfig config;
+}
+
+/*//////////////////////////////////////////////////////////////
+                        MULITCHAINCOMPACT
+//////////////////////////////////////////////////////////////*/
+
+struct Token {
+    address token;
+    uint256 amount;
+}
+
+struct Op {
+    bytes data;
+}
+
+struct Qualification {
+    bytes data;
+}
+
+struct Target {
+    address recipient;
+    Token[] tokenOut;
+    uint256 targetChain;
+    uint256 fillExpires;
+}
+
+struct Lock {
+    bytes12 lockTag;
+    address token;
+    uint256 amount;
+}
+
+struct Mandate {
+    Target target;
+    Op[] preClaimOps;
+    Op[] targetOps;
+    Qualification q;
+}
+
+struct Element {
+    address arbiter;
+    uint256 chainId;
+    Lock[] commitments;
+    Mandate mandate;
+}
+
+struct MultichainCompact {
+    address sponsor;
+    uint256 nonce;
+    uint256 expires;
+    Element notarizedElement;
+    bytes32[] otherElements;
 }
