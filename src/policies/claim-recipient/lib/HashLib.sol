@@ -54,13 +54,29 @@ library HashLib {
     //////////////////////////////////////////////////////////////*/
 
     function hashCommitments(Lock[] memory commitments) internal pure returns (bytes32) {
-        // TODO: Implement proper EIP712 commitment hashing
-        return keccak256(abi.encode(commitments));
+        bytes32[] memory commitmentHashes = new bytes32[](commitments.length);
+
+        for (uint256 i = 0; i < commitments.length; i++) {
+            commitmentHashes[i] = keccak256(
+                abi.encode(
+                    TYPEHASH_LOCK,
+                    commitments[i].lockTag,
+                    commitments[i].token,
+                    commitments[i].amount
+                )
+            );
+        }
+        return keccak256(abi.encodePacked(commitmentHashes));
     }
 
     function hashTokenOut(Token[] memory tokens) internal pure returns (bytes32) {
-        // TODO: Implement proper EIP712 token hashing
-        return keccak256(abi.encode(tokens));
+        bytes32[] memory tokenHashes = new bytes32[](tokens.length);
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            tokenHashes[i] =
+                keccak256(abi.encode(TYPEHASH_TOKEN, tokens[i].token, tokens[i].amount));
+        }
+        return keccak256(abi.encodePacked(tokenHashes));
     }
 
     function hashOps(Op[] memory ops) internal pure returns (bytes32) {
@@ -83,8 +99,9 @@ library HashLib {
         pure
         returns (bytes32)
     {
-        // TODO: Implement proper EIP712 target hashing
-        return keccak256(abi.encode(recipient, tokenOutHash, targetChain, fillExpires));
+        return keccak256(
+            abi.encode(TYPEHASH_TARGET, recipient, tokenOutHash, targetChain, fillExpires)
+        );
     }
 
     function hashMandate(
@@ -97,8 +114,11 @@ library HashLib {
         pure
         returns (bytes32)
     {
-        // TODO: Implement proper EIP712 mandate hashing
-        return keccak256(abi.encode(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash));
+        return keccak256(
+            abi.encode(
+                TYPEHASH_MANDATE, targetHash, preClaimOpsHash, targetOpsHash, qualificationHash
+            )
+        );
     }
 
     function hashElement(
@@ -111,8 +131,8 @@ library HashLib {
         pure
         returns (bytes32)
     {
-        // TODO: Implement proper EIP712 element hashing
-        return keccak256(abi.encode(arbiter, chainId, commitmentsHash, mandateHash));
+        return
+            keccak256(abi.encode(TYPEHASH_ELEMENT, arbiter, chainId, commitmentsHash, mandateHash));
     }
 
     function hashCompact(
@@ -126,14 +146,15 @@ library HashLib {
         pure
         returns (bytes32)
     {
-        // TODO: Implement proper EIP712 compact hashing
+        bytes32[] memory allElements = new bytes32[](otherElements.length + 1);
+        allElements[0] = notarizedElementHash;
+        for (uint256 i = 0; i < otherElements.length; i++) {
+            allElements[i + 1] = otherElements[i];
+        }
+
         return keccak256(
             abi.encode(
-                sponsor,
-                nonce,
-                expires,
-                notarizedElementHash,
-                keccak256(abi.encodePacked(otherElements))
+                TYPEHASH_COMPACT, sponsor, nonce, expires, keccak256(abi.encodePacked(allElements))
             )
         );
     }
