@@ -473,6 +473,7 @@ library DecodeLib {
         }
 
         // TODO: ArgPolicy validation goes here
+        preClaimOpsConfig;
 
         // Calculate preClaimOps hash
         preClaimOpsHash = HashLib.hashOps(ops);
@@ -509,6 +510,7 @@ library DecodeLib {
         ParamRules memory qualificationConfig = $.qualificationConfig[configId][account][msg.sender];
 
         // TODO: ArgPolicy validation goes here
+        qualificationConfig;
 
         // Calculate qualification hash
         qualificationHash = HashLib.hashQualification(qualificationData);

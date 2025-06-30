@@ -5,9 +5,6 @@ pragma solidity ^0.8.28;
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
 
-// Contracts
-import { EIP712TypeHash } from "@compact-utils/types/EIP712TypeHash.sol";
-
 // Libraries
 import { ArgPolicyTreeLib } from
     "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
@@ -37,7 +34,7 @@ import { console } from "@forge-std/console.sol";
 ///         - tokenOut/amount: per targetChainId mapping
 ///         - qualification: compare with input
 ///         Uses a bitmap configuration with separate storage for each condition
-contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
+contract MultiChainClaimPolicy is I1271Policy {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -167,7 +164,7 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
         }
 
         // Store the bitmap configuration
-        $.policyConfig[configId][msg.sender][msg.sender] = configBitmap;
+        $.policyConfig[configId][msg.sender][account] = configBitmap;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -236,12 +233,4 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
             interfaceID == type(IERC165).interfaceId || interfaceID == type(I1271Policy).interfaceId
         );
     }
-
-    function __QUALIFIER_EIP712Hash(bytes calldata data)
-        public
-        view
-        virtual
-        override
-        returns (bytes32)
-    { }
 }
