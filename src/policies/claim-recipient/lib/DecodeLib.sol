@@ -82,7 +82,7 @@ library DecodeLib {
 
         // Decode and validate notarized element
         (bool elementValid, bytes32 elementHash) =
-            _validateElement(data, notarizedElementOffset, config, configId, account);
+            _validateNotarizedElement(data, notarizedElementOffset, config, configId, account);
         if (!elementValid) {
             return (false, bytes32(0));
         }
@@ -100,7 +100,7 @@ library DecodeLib {
     /// @param account The account to validate against
     /// @return valid True if the element is valid, false otherwise
     /// @return elementHash The hash of the validated notarized element
-    function _validateElement(
+    function _validateNotarizedElement(
         bytes calldata data,
         uint256 offset,
         PolicyConfig config,
