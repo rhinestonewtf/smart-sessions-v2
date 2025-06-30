@@ -12,15 +12,18 @@ import { EIP712TypeHash } from "@compact-utils/types/EIP712TypeHash.sol";
 import { ArgPolicyTreeLib } from
     "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
+import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
+import { DecodeLib } from "@policies/claim-recipient/lib/DecodeLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
-    TokenInConfig,
-    TokenOutConfig,
     ParamRules,
     ParamRule,
-    TokenAmountConfig
+    TokenAmountConfig,
+    MultichainCompact,
+    TokenInConfig,
+    TokenOutConfig
 } from "@policies/claim-recipient/types/DataTypes.sol";
 
 import { console } from "@forge-std/console.sol";
@@ -41,132 +44,11 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
 
     using ConfigLib for PolicyConfig;
     using ConfigLib for bytes;
+    using DecodeLib for bytes;
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
-
-    /*//////////////////////////////////////////////////////////////
-                                STRUCTS
-    //////////////////////////////////////////////////////////////*/
-
-    struct Token {
-        address token;
-        uint256 amount;
-    }
-
-    struct Op {
-        bytes data;
-    }
-
-    struct Qualification {
-        bytes data;
-    }
-
-    struct Target {
-        address recipient;
-        Token[] tokenOut;
-        uint256 targetChain;
-        uint256 fillExpires;
-    }
-
-    struct Lock {
-        bytes12 lockTag;
-        address token;
-        uint256 amount;
-    }
-
-    struct Mandate {
-        Target target;
-        Op[] preClaimOps;
-        Op[] targetOps;
-        Qualification q;
-    }
-
-    struct Element {
-        address arbiter;
-        uint256 chainId;
-        Lock[] commitments;
-        Mandate mandate;
-    }
-
-    struct MultichainCompact {
-        address sponsor;
-        uint256 nonce;
-        uint256 expires;
-        Element notarizedElement;
-        bytes32[] otherElements;
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                STORAGE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Mapping to store the policy configuration for each account and config ID
-    mapping(
-        ConfigId id
-            => mapping(
-                address msgSender => mapping(address userOpSender => PolicyConfig conditionsBitmap)
-            )
-    ) internal $policyConfig;
-
-    /// @notice Mapping to store token amount configurations per chain id
-    mapping(
-        ConfigId id
-            => mapping(
-                address msgSender
-                    => mapping(
-                        address userOpSender
-                            => mapping(uint256 chainId => TokenAmountConfig tokenInConfig)
-                    )
-            )
-    ) internal $tokenInConfig;
-
-    /// @notice Mapping to store token amount configurations per target chain id
-    mapping(
-        ConfigId id
-            => mapping(
-                address msgSender
-                    => mapping(
-                        address userOpSender
-                            => mapping(uint256 targetChainId => TokenAmountConfig tokenOutConfig)
-                    )
-            )
-    ) internal $tokenOutConfig;
-
-    /// @notice Mapping to recipient configurations per chain target chain id
-    mapping(
-        ConfigId id
-            => mapping(
-                address msgSender
-                    => mapping(
-                        address userOpSender => mapping(uint256 targetChainId => address recipient)
-                    )
-            )
-    ) internal $recipientConfig;
-
-    /// @notice Mapping to store pre-claim operations configurations
-    mapping(
-        ConfigId id
-            => mapping(
-                address msgSender => mapping(address userOpSender => ParamRules preClaimOpsConfig)
-            )
-    ) internal $preClaimOpsConfig;
-
-    /// @notice Mapping to store qualification params
-    mapping(
-        ConfigId id
-            => mapping(
-                address msgSender => mapping(address userOpSender => ParamRules qualificationConfig)
-            )
-    ) $qualificationConfig;
-
-    /*//////////////////////////////////////////////////////////////
-                                CONSTANTS
-    //////////////////////////////////////////////////////////////*/
-
-    bytes32 private constant EMPTY_EXECUTIONS_HASH =
-        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     /*//////////////////////////////////////////////////////////////
                                   INIT
@@ -194,8 +76,10 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
             // We only need to load the fields at the offset that are set in the bitmap
             setConfig(account, configId, config, initData);
         } else {
+            // Get policy storage pointer
+            PolicyStorage storage $ = StorageLib.getPolicyStorage();
             // Store the sudo configuration
-            $policyConfig[configId][msg.sender][account] = config;
+            $.policyConfig[configId][msg.sender][account] = config;
         }
     }
 
@@ -225,13 +109,16 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
         ///    This condition doesn't need any additional data
         // }
 
+        // Get policy storage pointer
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+
         // (1) preClaimOps
         if (configBitmap.hasCheckPreClaimOps()) {
             // Decode preClaimOps configuration
             ParamRules memory preClaimOpsConfig;
             (preClaimOpsConfig, configData) = configData.decodePreClaimOpsConfig();
             // Store the preClaimOps configuration
-            $preClaimOpsConfig[configId][msg.sender][account] = preClaimOpsConfig;
+            $.preClaimOpsConfig[configId][msg.sender][account] = preClaimOpsConfig;
         }
 
         // (2) recipient and targetChainId
@@ -241,7 +128,7 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
             address recipient;
             (targetChainId, recipient, configData) = configData.decodeRecipientAndTargetChain();
             // Store recipient and target chain configuration
-            $recipientConfig[configId][msg.sender][account][targetChainId] = recipient;
+            $.recipientConfig[configId][msg.sender][account][targetChainId] = recipient;
         }
 
         // (3) tokenIn
@@ -252,7 +139,7 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
             // Store the tokenIn configurations
             for (uint256 i = 0; i < tokenInConfigs.length; i++) {
                 TokenInConfig memory tokenInConfig = tokenInConfigs[i];
-                $tokenInConfig[configId][msg.sender][account][tokenInConfig.chainId] =
+                $.tokenInConfig[configId][msg.sender][account][tokenInConfig.chainId] =
                     tokenInConfig.config;
             }
         }
@@ -265,7 +152,7 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
             // Store the tokenOut configurations
             for (uint256 i = 0; i < tokenOutConfigs.length; i++) {
                 TokenOutConfig memory tokenOutConfig = tokenOutConfigs[i];
-                $tokenOutConfig[configId][msg.sender][account][tokenOutConfig.targetChainId] =
+                $.tokenOutConfig[configId][msg.sender][account][tokenOutConfig.targetChainId] =
                     tokenOutConfig.config;
             }
         }
@@ -276,17 +163,28 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
             ParamRules memory qualificationConfig;
             (qualificationConfig, configData) = configData.decodeQualificationConfig();
             // Store the qualification configuration
-            $qualificationConfig[configId][account][msg.sender] = qualificationConfig;
+            $.qualificationConfig[configId][account][msg.sender] = qualificationConfig;
         }
 
         // Store the bitmap configuration
-        $policyConfig[configId][msg.sender][msg.sender] = configBitmap;
+        $.policyConfig[configId][msg.sender][msg.sender] = configBitmap;
     }
 
     /*//////////////////////////////////////////////////////////////
                                  CHECK
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Checks if the action is allowed based on the MultiChainClaim struct and the policy
+    ///         configuration, the function uses the raw data from the signature to reconstruct
+    ///         the MultiChainClaim struct and recalculate its hash. If either the struct params
+    ///         or the hash match don't match the policy configuration, the action is not allowed.
+    /// @param id The configuration ID for the policy
+    /// @param account The account to check the action for
+    /// @param hash The hash of the action to check
+    /// @param signature The signature of the action to check, containing the actual signature and
+    /// additional data used to reconstruct the MultiChainClaim struct
+    /// @dev The signature is expected to be in the format:
+    ///      [actual_sig_length][actual_signature][raw_multichain_claim_data]
     function check1271SignedAction(
         ConfigId id,
         address, /*sender*/
@@ -299,8 +197,11 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
         override
         returns (bool)
     {
+        // Get policy storage pointer
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+
         // Load the policy configuration bitmap
-        PolicyConfig config = $policyConfig[id][msg.sender][account];
+        PolicyConfig config = $.policyConfig[id][msg.sender][account];
 
         console.log("Checking MultiChainClaimPolicy for account:", account);
         console.log("Conditions bitmap:", PolicyConfig.unwrap(config));
@@ -311,292 +212,18 @@ contract MultiChainClaimPolicy is I1271Policy, EIP712TypeHash {
             return true;
         }
 
-        // Extract and decode the MultichainCompact from signature
-        MultichainCompact memory multichainCompact = _extractMultichainCompact(signature);
+        // Extract the hash and validate the parameters from the signature
+        // using the raw data and the stored configuration for the account
+        (bool isValid, bytes32 recomputedHash) = signature.extractAndValidate(config, id, account);
 
-        // Verify hash integrity first
-        bytes32 recomputedHash = _rehashMultichainCompact(multichainCompact);
-        if (recomputedHash != hash) {
-            console.log("Hash mismatch!");
-            console.log("Expected:");
-            console.logBytes32(hash);
-            console.log("Computed:");
-            console.logBytes32(recomputedHash);
-            return false;
-        }
-        console.log("Hash verification passed");
+        console.log("Recomputed hash:");
+        console.logBytes32(recomputedHash);
+        console.log("Original hash:");
+        console.logBytes32(hash);
+        console.log("Is valid:", isValid);
 
-        // Check each enabled condition
-        return _checkAllConditions(id, account, config, multichainCompact);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                INTERNAL
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Extracts MultichainCompact struct from signature
-    function _extractMultichainCompact(bytes calldata signature)
-        internal
-        pure
-        returns (MultichainCompact memory)
-    {
-        // Extract extraStuff length (first 32 bytes)
-        uint256 extraStuffLength;
-        assembly {
-            extraStuffLength := calldataload(signature.offset)
-        }
-
-        // Extract extraStuff
-        bytes memory extraStuff = new bytes(extraStuffLength);
-        assembly {
-            calldatacopy(add(extraStuff, 0x20), add(signature.offset, 0x20), extraStuffLength)
-        }
-
-        console.log("Extracted extraStuff length:", extraStuffLength);
-        console.logBytes(extraStuff);
-
-        // Decode the extraStuff to get the MultichainCompact struct
-        return abi.decode(extraStuff, (MultichainCompact));
-    }
-
-    /// @notice Checks all enabled conditions based on the bitmap configuration
-    function _checkAllConditions(
-        ConfigId id,
-        address account,
-        PolicyConfig config,
-        MultichainCompact memory multichainCompact
-    )
-        internal
-        view
-        returns (bool)
-    {
-        // (0) CHECK_HAS_EXECUTIONS
-        if (config.hasCheckHasExecutions()) {
-            if (!_checkHasExecutions(multichainCompact)) {
-                console.log("Has executions check failed");
-                return false;
-            }
-            console.log("Has executions check passed");
-        }
-
-        // (1) CHECK_PRE_CLAIM_OPS
-        if (config.hasCheckPreClaimOps()) {
-            if (!_checkPreClaimOps(id, multichainCompact)) {
-                console.log("PreClaimOps check failed");
-                return false;
-            }
-            console.log("PreClaimOps check passed");
-        }
-
-        // (2) CHECK_RECIPIENT_AND_TARGET_CHAIN
-        if (config.hasCheckRecipientAndTargetChain()) {
-            if (!_checkRecipientAndTargetChain(id, multichainCompact, account)) {
-                console.log("Recipient and target chain check failed");
-                return false;
-            }
-            console.log("Recipient and target chain check passed");
-        }
-
-        // (3) CHECK_TOKEN_IN
-        if (config.hasCheckTokenIn()) {
-            if (!_checkTokenIn(id, multichainCompact, account)) {
-                console.log("TokenIn check failed");
-                return false;
-            }
-            console.log("TokenIn check passed");
-        }
-
-        // (4) CHECK_TOKEN_OUT
-        if (config.hasCheckTokenOut()) {
-            if (!_checkTokenOut(id, multichainCompact, account)) {
-                console.log("TokenOut check failed");
-                return false;
-            }
-            console.log("TokenOut check passed");
-        }
-
-        // (5) CHECK_QUALIFICATION
-        if (config.hasCheckQualification()) {
-            if (!_checkQualification(id, multichainCompact)) {
-                console.log("Qualification check failed");
-                return false;
-            }
-            console.log("Qualification check passed");
-        }
-
-        console.log("All enabled condition checks passed!");
-        return true;
-    }
-
-    /// @notice Rehashes the MultichainCompact to verify integrity
-    function _rehashMultichainCompact(MultichainCompact memory multichainCompact)
-        internal
-        view
-        returns (bytes32)
-    {
-        // Hash the target attributes
-        bytes32 targetHash = _hashTargetAttributes(
-            multichainCompact.notarizedElement.mandate.target.recipient,
-            multichainCompact.notarizedElement.mandate.target.tokenOut,
-            multichainCompact.notarizedElement.mandate.target.targetChain,
-            multichainCompact.notarizedElement.mandate.target.fillExpires
-        );
-
-        // Hash the mandate
-        bytes32 mandateHash = _hashMandateRaw(
-            targetHash,
-            multichainCompact.notarizedElement.mandate.preClaimOps,
-            multichainCompact.notarizedElement.mandate.targetOps,
-            multichainCompact.notarizedElement.mandate.q
-        );
-
-        // Hash the notarized element
-        bytes32 notarizedElementHash = _hashElementRaw(
-            multichainCompact.notarizedElement.arbiter,
-            multichainCompact.notarizedElement.chainId,
-            multichainCompact.notarizedElement.commitments,
-            mandateHash
-        );
-
-        // Create the full elements array (notarized element + other elements)
-        bytes32[] memory allElements = new bytes32[](multichainCompact.otherElements.length + 1);
-        allElements[0] = notarizedElementHash;
-        for (uint256 i = 0; i < multichainCompact.otherElements.length; i++) {
-            allElements[i + 1] = multichainCompact.otherElements[i];
-        }
-
-        // Hash the complete MultichainCompact
-        return keccak256(
-            abi.encode(
-                TYPEHASH_COMPACT,
-                multichainCompact.sponsor,
-                multichainCompact.nonce,
-                multichainCompact.expires,
-                keccak256(abi.encodePacked(allElements))
-            )
-        );
-    }
-
-    function _hashTargetAttributes(
-        address recipient,
-        bytes32 tokenOut,
-        uint256 targetChain,
-        uint256 fillExpires
-    )
-        internal
-        view
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(TYPEHASH_TARGET, recipient, tokenOut, targetChain, fillExpires));
-    }
-
-    /// @notice Checks if executions are not empty
-    function _checkHasExecutions(MultichainCompact memory multichainCompact)
-        internal
-        pure
-        returns (bool)
-    {
-        return multichainCompact.notarizedElement.mandate.targetOps != EMPTY_EXECUTIONS_HASH;
-    }
-
-    /// @notice Checks preClaimOps using ArgPolicy rules
-    function _checkPreClaimOps(
-        ConfigId id,
-        MultichainCompact memory multichainCompact
-    )
-        internal
-        view
-        returns (bool)
-    {
-        // TODO: Implement ArgPolicy validation
-        // ParamRules storage rules = $preClaimOpsConfig[id][msg.sender];
-        // return ArgPolicyTreeLib.evaluateExpressionTree(rules, preClaimOpsData);
-        console.log("PreClaimOps check");
-        return true; // Placeholder
-    }
-
-    /// @notice Checks recipient and target chain match expected values
-    function _checkRecipientAndTargetChain(
-        ConfigId id,
-        MultichainCompact memory multichainCompact,
-        address account
-    )
-        internal
-        view
-        returns (bool)
-    {
-        address actualRecipient = multichainCompact.notarizedElement.mandate.target.recipient;
-        uint256 actualTargetChain = multichainCompact.notarizedElement.mandate.target.targetChain;
-
-        address expectedRecipient = $recipientConfig[id][msg.sender][account][actualTargetChain];
-
-        console.log("Checking recipient and target chain:");
-        console.log("  Expected recipient:", expectedRecipient);
-        console.log("  Actual recipient:", actualRecipient);
-        console.log("  Target chain:", actualTargetChain);
-
-        return actualRecipient == expectedRecipient;
-    }
-
-    /// @notice Checks tokenIn amounts per chain
-    function _checkTokenIn(
-        ConfigId id,
-        MultichainCompact memory multichainCompact,
-        address account
-    )
-        internal
-        view
-        returns (bool)
-    {
-        // TODO:
-        uint256 chainId = multichainCompact.notarizedElement.chainId;
-        TokenAmountConfig storage config = $tokenInConfig[id][msg.sender][account][chainId];
-
-        console.log("Checking tokenIn for chain:", chainId);
-        console.log("  Config token:", config.token);
-        console.log("  Min amount:", uint256(config.minAmount));
-        console.log("  Max amount:", uint256(config.maxAmount));
-
-        return config.token != address(0) || config.minAmount > 0 || config.maxAmount > 0;
-    }
-
-    /// @notice Checks tokenOut amounts per target chain
-    function _checkTokenOut(
-        ConfigId id,
-        MultichainCompact memory multichainCompact,
-        address account
-    )
-        internal
-        view
-        returns (bool)
-    {
-        // TODO:
-        uint256 targetChainId = multichainCompact.notarizedElement.mandate.target.targetChain;
-        TokenAmountConfig storage config = $tokenOutConfig[id][msg.sender][account][targetChainId];
-
-        console.log("Checking tokenOut for target chain:", targetChainId);
-        console.log("  Config token:", config.token);
-        console.log("  Min amount:", uint256(config.minAmount));
-        console.log("  Max amount:", uint256(config.maxAmount));
-
-        // Return true if we have a config (actual token validation would happen here)
-        return config.token != address(0) || config.minAmount > 0 || config.maxAmount > 0;
-    }
-
-    /// @notice Checks qualification using ArgPolicy rules
-    function _checkQualification(
-        ConfigId id,
-        MultichainCompact memory multichainCompact
-    )
-        internal
-        view
-        returns (bool)
-    {
-        // TODO: Implement ArgPolicy validation for qualification data
-        // ParamRules storage rules = $qualificationConfig[id][msg.sender];
-        // return ArgPolicyTreeLib.evaluateExpressionTree(rules, qualificationData);
-        console.log("Qualification check");
-        return true; // Placeholder
+        // If the recomputed hash does not match the provided hash, return false
+        return recomputedHash == hash && isValid;
     }
 
     /*//////////////////////////////////////////////////////////////
