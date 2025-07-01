@@ -214,12 +214,14 @@ library ConfigLib {
     function decodeQualificationConfig(bytes calldata initData)
         internal
         pure
-        returns (ParamRules memory rules, bytes calldata data)
+        returns (ParamRules memory rules, bytes calldata data, bytes32 qualificationTypehash)
     {
+        // Decode qualification typehash from the first 32 bytes
+        qualificationTypehash = bytes32(initData[0:32]);
         // Decode the root node index
-        uint8 rootNodeIndex = uint8(initData[0]);
+        uint8 rootNodeIndex = uint8(initData[32]);
         // Decode the number of rules
-        uint256 ruleCount = uint256(bytes32(initData[1:33]));
+        uint256 ruleCount = uint256(bytes32(initData[33:65]));
         ParamRule[] memory paramRules = new ParamRule[](ruleCount);
         uint256 offset = 33; // Start after rootNodeIndex and ruleCount
 
@@ -235,7 +237,8 @@ library ConfigLib {
         }
 
         // Decode packed nodes
-        uint256 packedNodesLength = (initData.length - offset) / 32;
+        uint256 packedNodesLength = (initData.length - offset) / 32 - 1; // -1 for the
+            // qualificationTypehash
         uint256[] memory packedNodes = new uint256[](packedNodesLength);
         for (uint256 i = 0; i < packedNodesLength; i++) {
             packedNodes[i] = uint256(bytes32(initData[offset + i * 32:offset + (i + 1) * 32]));

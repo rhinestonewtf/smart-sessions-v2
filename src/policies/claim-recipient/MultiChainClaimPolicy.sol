@@ -158,9 +158,12 @@ contract MultiChainClaimPolicy is I1271Policy {
         if (configBitmap.hasCheckQualification()) {
             // Decode qualification configuration
             ParamRules memory qualificationConfig;
-            (qualificationConfig, configData) = configData.decodeQualificationConfig();
+            bytes32 qualificationTypehash;
+            (qualificationConfig, configData, qualificationTypehash) =
+                configData.decodeQualificationConfig();
             // Store the qualification configuration
-            $.qualificationConfig[configId][account][msg.sender] = qualificationConfig;
+            $.qualificationConfig[configId][account][msg.sender][qualificationTypehash] =
+                qualificationConfig;
         }
 
         // Store the bitmap configuration

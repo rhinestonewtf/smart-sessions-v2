@@ -498,16 +498,18 @@ library DecodeLib {
     {
         // Decode qualification header
         uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
+        bytes32 qualificationTypehash = bytes32(data[offset + 32:offset + 64]);
         offset += 32;
 
         // Extract qualification data
-        bytes memory qualificationData = data[offset:offset + dataLength];
+        bytes memory qualificationData = data[offset:offset + dataLength + 32];
 
         // Get storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
         // Load the qualification configuration for the account
-        ParamRules memory qualificationConfig = $.qualificationConfig[configId][account][msg.sender];
+        ParamRules memory qualificationConfig =
+            $.qualificationConfig[configId][account][msg.sender][qualificationTypehash];
 
         // TODO: ArgPolicy validation goes here
         qualificationConfig;

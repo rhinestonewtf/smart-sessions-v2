@@ -66,7 +66,13 @@ struct PolicyStorage {
     mapping(
         ConfigId id
             => mapping(
-                address msgSender => mapping(address userOpSender => ParamRules qualificationConfig)
+                address msgSender
+                    => mapping(
+                        address userOpSender
+                            => mapping(
+                                bytes32 qualificationTypehash => ParamRules qualificationConfig
+                            )
+                    )
             )
     ) qualificationConfig;
 }
