@@ -11,6 +11,7 @@ import { HashLib } from "@policies/claim-recipient/lib/HashLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
+import { Lock, Token } from "@policies/claim-recipient/types/DataTypes.sol";
 
 contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPolicy_Unit_Test {
     /*//////////////////////////////////////////////////////////////
@@ -41,8 +42,12 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /*//////////////////////////////////////////////////////////////
-                              HASEXECUTIONS
+                                 TESTS
     //////////////////////////////////////////////////////////////*/
+
+    //-------------------------------------
+    // 1) EXECUTIONS
+    //-------------------------------------
 
     /// @notice Test check1271SignedAction with hasExecutions condition - should pass when
     ///         executions present
@@ -52,7 +57,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
 
         // Create MultiChainCompact data with executions present (non-empty hash)
         bytes32 nonEmptyTargetOpsHash = keccak256("some executions");
-        bytes memory compactData = _createBasicMultiChainCompactData(nonEmptyTargetOpsHash);
+        bytes memory compactData = _createMultiChainCompactDataWithTargetOps(nonEmptyTargetOpsHash);
 
         // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHash(compactData);
@@ -76,7 +81,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         _initializePolicyWithHasExecutions();
 
         // Create MultiChainCompact data with no executions (empty hash)
-        bytes memory compactData = _createBasicMultiChainCompactData(EMPTY_EXECUTIONS_HASH);
+        bytes memory compactData = _createMultiChainCompactDataWithTargetOps(EMPTY_EXECUTIONS_HASH);
 
         // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHash(compactData);
@@ -104,7 +109,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
 
         // Create MultiChainCompact data with empty executions (should normally fail with
         // hasExecutions condition)
-        bytes memory compactData = _createBasicMultiChainCompactData(EMPTY_EXECUTIONS_HASH);
+        bytes memory compactData = _createMultiChainCompactDataWithTargetOps(EMPTY_EXECUTIONS_HASH);
 
         // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHash(compactData);
@@ -129,7 +134,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
 
         // Create MultiChainCompact data with executions present
         bytes32 nonEmptyTargetOpsHash = keccak256("some executions");
-        bytes memory compactData = _createBasicMultiChainCompactData(nonEmptyTargetOpsHash);
+        bytes memory compactData = _createMultiChainCompactDataWithTargetOps(nonEmptyTargetOpsHash);
 
         // Use a wrong hash (different from the computed one)
         bytes32 wrongHash = keccak256("wrong hash");
@@ -146,39 +151,477 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         assertFalse(result, "Action should fail when hash doesn't match");
     }
 
+    //-------------------------------------
+    // 2) TOKEN IN
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with tokenIn condition - should pass when token and
+    /// amount are valid
+    function test_check1271SignedAction_tokenIn_validTokenAndAmount_shouldPass() public {
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 100;
+        uint128 maxAmount = 1000;
+        uint256 testAmount = 500; // Within range
+
+        // Initialize policy with CHECK_TOKEN_IN
+        _initializePolicyWithTokenIn(testToken, minAmount, maxAmount);
+
+        // Create MultiChainCompact data with valid token and amount
+        bytes memory compactData = _createMultiChainCompactDataWithTokenIn(testToken, testAmount);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertTrue(result, "Action with valid token and amount should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with tokenIn condition - should fail when token address
+    /// is invalid
+    function test_check1271SignedAction_tokenIn_invalidToken_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        address wrongToken = makeAddr("wrongToken");
+        uint128 minAmount = 100;
+        uint128 maxAmount = 1000;
+        uint256 testAmount = 500;
+
+        // Initialize policy with CHECK_TOKEN_IN for testToken
+        _initializePolicyWithTokenIn(testToken, minAmount, maxAmount);
+
+        // Create MultiChainCompact data with wrong token
+        bytes memory compactData = _createMultiChainCompactDataWithTokenIn(wrongToken, testAmount);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with invalid token should be rejected");
+    }
+
+    /// @notice Test check1271SignedAction with tokenIn condition - should fail when amount is below
+    /// minimum
+    function test_check1271SignedAction_tokenIn_amountBelowMin_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 100;
+        uint128 maxAmount = 1000;
+        uint256 testAmount = 50; // Below minimum
+
+        // Initialize policy with CHECK_TOKEN_IN
+        _initializePolicyWithTokenIn(testToken, minAmount, maxAmount);
+
+        // Create MultiChainCompact data with amount below minimum
+        bytes memory compactData = _createMultiChainCompactDataWithTokenIn(testToken, testAmount);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with amount below minimum should be rejected");
+    }
+
+    /// @notice Test check1271SignedAction with tokenIn condition - should fail when amount is above
+    /// maximum
+    function test_check1271SignedAction_tokenIn_amountAboveMax_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 100;
+        uint128 maxAmount = 1000;
+        uint256 testAmount = 1500; // Above maximum
+
+        // Initialize policy with CHECK_TOKEN_IN
+        _initializePolicyWithTokenIn(testToken, minAmount, maxAmount);
+
+        // Create MultiChainCompact data with amount above maximum
+        bytes memory compactData = _createMultiChainCompactDataWithTokenIn(testToken, testAmount);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with amount above maximum should be rejected");
+    }
+
+    /// @notice Test check1271SignedAction with tokenIn condition - should pass with any token when
+    /// address(0) configured
+    function test_check1271SignedAction_tokenIn_anyToken_shouldPass() public {
+        address anyToken = address(0); // address(0) means any token is allowed
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 100;
+        uint128 maxAmount = 1000;
+        uint256 testAmount = 500;
+
+        // Initialize policy with CHECK_TOKEN_IN for any token (address(0))
+        _initializePolicyWithTokenIn(anyToken, minAmount, maxAmount);
+
+        // Create MultiChainCompact data with specific token (should be allowed since any token is
+        // configured)
+        bytes memory compactData = _createMultiChainCompactDataWithTokenIn(testToken, testAmount);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertTrue(result, "Action with any token should be allowed when address(0) is configured");
+    }
+
+    //-------------------------------------
+    // 3) TOKEN OUT
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with tokenOut condition - should pass when token and
+    /// amount are valid
+    function test_check1271SignedAction_tokenOut_validTokenAndAmount_shouldPass() public {
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 200;
+        uint128 maxAmount = 2000;
+        uint256 testAmount = 1000; // Within range
+        uint256 targetChainId = 137; // Polygon
+
+        // Initialize policy with CHECK_TOKEN_OUT
+        _initializePolicyWithTokenOut(testToken, minAmount, maxAmount, targetChainId);
+
+        // Create MultiChainCompact data with valid token and amount
+        bytes memory compactData =
+            _createMultiChainCompactDataWithTokenOut(testToken, testAmount, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertTrue(result, "Action with valid tokenOut should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with tokenOut condition - should fail when token
+    /// address is invalid
+    function test_check1271SignedAction_tokenOut_invalidToken_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        address wrongToken = makeAddr("wrongToken");
+        uint128 minAmount = 200;
+        uint128 maxAmount = 2000;
+        uint256 testAmount = 1000;
+        uint256 targetChainId = 137;
+
+        // Initialize policy with CHECK_TOKEN_OUT for testToken
+        _initializePolicyWithTokenOut(testToken, minAmount, maxAmount, targetChainId);
+
+        // Create MultiChainCompact data with wrong token
+        bytes memory compactData =
+            _createMultiChainCompactDataWithTokenOut(wrongToken, testAmount, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with invalid tokenOut should be rejected");
+    }
+
+    /// @notice Test check1271SignedAction with tokenOut condition - should fail when amount is
+    /// below minimum
+    function test_check1271SignedAction_tokenOut_amountBelowMin_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 200;
+        uint128 maxAmount = 2000;
+        uint256 testAmount = 100; // Below minimum
+        uint256 targetChainId = 137;
+
+        // Initialize policy with CHECK_TOKEN_OUT
+        _initializePolicyWithTokenOut(testToken, minAmount, maxAmount, targetChainId);
+
+        // Create MultiChainCompact data with amount below minimum
+        bytes memory compactData =
+            _createMultiChainCompactDataWithTokenOut(testToken, testAmount, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with tokenOut amount below minimum should be rejected");
+    }
+
+    /// @notice Test check1271SignedAction with tokenOut condition - should fail when amount is
+    /// above maximum
+    function test_check1271SignedAction_tokenOut_amountAboveMax_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 200;
+        uint128 maxAmount = 2000;
+        uint256 testAmount = 3000; // Above maximum
+        uint256 targetChainId = 137;
+
+        // Initialize policy with CHECK_TOKEN_OUT
+        _initializePolicyWithTokenOut(testToken, minAmount, maxAmount, targetChainId);
+
+        // Create MultiChainCompact data with amount above maximum
+        bytes memory compactData =
+            _createMultiChainCompactDataWithTokenOut(testToken, testAmount, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with tokenOut amount above maximum should be rejected");
+    }
+
+    /// @notice Test check1271SignedAction with tokenOut condition - should pass with any token
+    /// when address(0) configured
+    function test_check1271SignedAction_tokenOut_anyToken_shouldPass() public {
+        address anyToken = address(0); // address(0) means any token is allowed
+        address testToken = makeAddr("testToken");
+        uint128 minAmount = 200;
+        uint128 maxAmount = 2000;
+        uint256 testAmount = 1000;
+        uint256 targetChainId = 137;
+
+        // Initialize policy with CHECK_TOKEN_OUT for any token (address(0))
+        _initializePolicyWithTokenOut(anyToken, minAmount, maxAmount, targetChainId);
+
+        // Create MultiChainCompact data with specific token (should be allowed since any token
+        //  is
+        // configured)
+        bytes memory compactData =
+            _createMultiChainCompactDataWithTokenOut(testToken, testAmount, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertTrue(
+            result, "Action with any tokenOut should be allowed when address(0) is configured"
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                                  HELPERS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Helper function to create a basic MultiChainCompact data structure
-    function _createBasicMultiChainCompactData(bytes32 targetOpsHash)
+    function _createMultiChainCompactDataWithTargetOps(bytes32 targetOpsHash)
         internal
         view
         returns (bytes memory)
     {
-        // Create basic MultiChainCompact data with minimal required fields
-        // Structure: sponsor(20) + nonce(32) + expires(32) + otherElements(32+0) +
-        //           arbiter(20) + reserved(12) + chainId(32) + commitmentsHash(32) +
-        //           targetHash(32) + preClaimOpsHash(32) + targetOpsHash(32) +
-        //           qualificationHash(32)
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader();
+        bytes memory mandateData = _createMandateData(targetOpsHash);
 
-        bytes memory data = abi.encodePacked(
-            address(0x1234567890123456789012345678901234567890), // sponsor (20 bytes)
-            uint256(1), // nonce (32 bytes)
-            uint256(block.timestamp + 3600), // expires (32 bytes)
-            uint256(0), // otherElements length (32 bytes)
-            // No otherElements data since length is 0
-            address(0x9876543210987654321098765432109876543210), // arbiter (20 bytes)
-            bytes12(0), // reserved space (12 bytes)
-            uint256(1), // chainId (32 bytes)
-            keccak256("commitments"), // commitmentsHash (32 bytes)
-            keccak256("target"), // targetHash (32 bytes)
-            keccak256("preClaimOps"), // preClaimOpsHash (32 bytes)
-            targetOpsHash, // targetOpsHash (32 bytes)
-            keccak256("qualification") // qualificationHash (32 bytes)
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Helper function to create MultiChainCompact data with tokenIn (Lock structs)
+    function _createMultiChainCompactDataWithTokenIn(
+        address token,
+        uint256 amount
+    )
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader();
+        bytes memory lockData = _createLockData(token, amount);
+        bytes memory mandateData = _createMandateData();
+
+        return abi.encodePacked(header, elementHeader, uint256(1), lockData, mandateData);
+    }
+
+    /// @notice Helper function to create MultiChainCompact data with tokenOut
+    function _createMultiChainCompactDataWithTokenOut(
+        address token,
+        uint256 amount,
+        uint256 targetChainId
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader();
+        bytes memory targetData = _createTargetData(token, amount, targetChainId);
+        bytes memory mandateFooter = _createMandateFooter();
+
+        return abi.encodePacked(
+            header, elementHeader, keccak256("commitments"), targetData, mandateFooter
+        );
+    }
+
+    /// @notice Create Lock struct data
+    function _createLockData(address token, uint256 amount) private pure returns (bytes memory) {
+        bytes12 lockTag = bytes12("test_lock");
+        return abi.encodePacked(lockTag, token, amount);
+    }
+
+    /// @notice Create mandate data with custom targetOpsHash
+    function _createMandateData(bytes32 targetOpsHash) private pure returns (bytes memory) {
+        return abi.encodePacked(
+            keccak256("target"), // targetHash
+            keccak256("preClaimOps"), // preClaimOpsHash
+            targetOpsHash, // targetOpsHash (custom)
+            keccak256("qualification") // qualificationHash
+        );
+    }
+
+    /// @notice Create mandate data for tokenIn tests
+    function _createMandateData() private pure returns (bytes memory) {
+        return abi.encodePacked(
+            keccak256("target"), // targetHash
+            keccak256("preClaimOps"), // preClaimOpsHash
+            keccak256("targetOps"), // targetOpsHash
+            keccak256("qualification") // qualificationHash
+        );
+    }
+
+    /// @notice Create the compact header (sponsor + nonce + expires + otherElements)
+    function _createCompactHeader() private view returns (bytes memory) {
+        return abi.encodePacked(
+            address(0x1234567890123456789012345678901234567890), // sponsor
+            uint256(1), // nonce
+            uint256(block.timestamp + 3600), // expires
+            uint256(0) // otherElements length
+        );
+    }
+
+    /// @notice Create the element header (arbiter + reserved + chainId)
+    function _createElementHeader() private pure returns (bytes memory) {
+        return abi.encodePacked(
+            address(0x9876543210987654321098765432109876543210), // arbiter
+            bytes12(0), // reserved
+            uint256(1) // chainId
+        );
+    }
+
+    /// @notice Create the target data (recipient + reserved + targetChain + fillExpires + tokenOut)
+    function _createTargetData(
+        address token,
+        uint256 amount,
+        uint256 targetChainId
+    )
+        private
+        returns (bytes memory)
+    {
+        address recipient = makeAddr("recipient");
+        return abi.encodePacked(
+            recipient, // recipient (20 bytes)
+            bytes12(0), // reserved (12 bytes)
+            targetChainId, // targetChain (32 bytes)
+            uint256(block.timestamp + 7200), // fillExpires (32 bytes)
+            uint256(1), // tokenOut length (32 bytes)
+            token, // token address (20 bytes)
+            amount // token amount (32 bytes)
+        );
+    }
+
+    /// @notice Create the mandate footer (preClaimOps + targetOps + qualification hashes)
+    function _createMandateFooter() private pure returns (bytes memory) {
+        return abi.encodePacked(
+            keccak256("preClaimOps"), // preClaimOpsHash
+            keccak256("targetOps"), // targetOpsHash
+            keccak256("qualification") // qualificationHash
+        );
+    }
+
+    /// @notice Helper function to initialize policy with tokenOut condition
+    function _initializePolicyWithTokenOut(
+        address token,
+        uint128 minAmount,
+        uint128 maxAmount,
+        uint256 targetChainId
+    )
+        internal
+    {
+        // Create policy config with only CHECK_TOKEN_OUT enabled (bit 4)
+        uint8 conditionsBitmap = 16; // Binary: 00010000
+
+        // Create tokenOut configuration
+        // Format: bitmap + tokenOutConfigs count + (targetChainId + token + minAmount + maxAmount)
+        // per config
+        bytes memory initData = abi.encodePacked(
+            conditionsBitmap,
+            uint256(1), // tokenOutConfigs count
+            targetChainId, // targetChainId
+            token, // token address (20 bytes)
+            minAmount, // minAmount (16 bytes)
+            maxAmount // maxAmount (16 bytes)
         );
 
-        return data;
+        // Initialize the policy
+        multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
     /// @notice Helper function to initialize policy with hasExecutions condition
@@ -193,7 +636,35 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Helper function to compute the expected hash for the MultiChainCompact
+    /// @notice Helper function to initialize policy with tokenIn condition
+    function _initializePolicyWithTokenIn(
+        address token,
+        uint128 minAmount,
+        uint128 maxAmount
+    )
+        internal
+    {
+        // Create policy config with only CHECK_TOKEN_IN enabled (bit 3)
+        uint8 conditionsBitmap = 8; // Binary: 00001000
+
+        // Create tokenIn configuration
+        // Format: bitmap + tokenInConfigs count + (chainId + token + minAmount + maxAmount) per
+        // config
+        bytes memory initData = abi.encodePacked(
+            conditionsBitmap,
+            uint256(1), // tokenInConfigs count
+            uint256(1), // chainId
+            token, // token address (20 bytes)
+            minAmount, // minAmount (16 bytes)
+            maxAmount // maxAmount (16 bytes)
+        );
+
+        // Initialize the policy
+        multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Helper function to compute the expected hash for the MultiChainCompact using proper
+    /// EIP712 hashing
     function computeExpectedHash(bytes calldata compactData) public pure returns (bytes32) {
         // Parse the compact data to extract individual fields
         address sponsor = address(bytes20(compactData[0:20]));
@@ -218,18 +689,153 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         offset += 32;
         bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
 
-        // Hash the mandate
+        // Hash the mandate using proper EIP712 hashing
         bytes32 mandateHash =
             HashLib.hashMandate(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
 
-        // Hash the element
+        // Hash the element using proper EIP712 hashing
         bytes32 notarizedElementHash =
             HashLib.hashElement(arbiter, chainId, commitmentsHash, mandateHash);
 
         // Create empty otherElements array
         bytes32[] memory otherElements = new bytes32[](0);
 
-        // Hash the compact
+        // Hash the compact using proper EIP712 hashing
+        return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
+    }
+
+    /// @notice Helper function to compute the expected hash for MultiChainCompact with tokenOut
+    /// data
+    function computeExpectedHashWithTokenOut(bytes calldata compactData)
+        public
+        pure
+        returns (bytes32)
+    {
+        // Parse the compact data to extract individual fields
+        address sponsor = address(bytes20(compactData[0:20]));
+        uint256 nonce = uint256(bytes32(compactData[20:52]));
+        uint256 expires = uint256(bytes32(compactData[52:84]));
+
+        // Skip otherElements (length is 0, so just 32 bytes for length)
+        uint256 offset = 84 + 32; // 116
+
+        // Parse element data
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 32; // Skip arbiter + reserved space (20 + 12 = 32)
+        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        // Parse target data
+        address recipient = address(bytes20(compactData[offset:offset + 20]));
+        offset += 32; // Skip recipient + reserved space (20 + 12 = 32)
+        uint256 targetChain = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        uint256 fillExpires = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+
+        // Parse tokenOut (Token structs)
+        uint256 tokenOutLength = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+
+        // Create Token structs array and parse the data
+        Token[] memory tokens = new Token[](tokenOutLength);
+        for (uint256 i = 0; i < tokenOutLength; i++) {
+            tokens[i] = Token({
+                token: address(bytes20(compactData[offset:offset + 20])),
+                amount: uint256(bytes32(compactData[offset + 20:offset + 52]))
+            });
+            offset += 52; // Each Token struct is 52 bytes (20 + 32)
+        }
+
+        // Hash the tokenOut using proper EIP712 hashing
+        bytes32 tokenOutHash = HashLib.hashTokenOut(tokens);
+
+        // Hash the target using proper EIP712 hashing
+        bytes32 targetHash = HashLib.hashTarget(recipient, tokenOutHash, targetChain, fillExpires);
+
+        // Continue parsing the rest of the data
+        bytes32 preClaimOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 targetOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
+
+        // Hash the mandate using proper EIP712 hashing
+        bytes32 mandateHash =
+            HashLib.hashMandate(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
+
+        // Hash the element using proper EIP712 hashing
+        bytes32 notarizedElementHash =
+            HashLib.hashElement(arbiter, chainId, commitmentsHash, mandateHash);
+
+        // Create empty otherElements array
+        bytes32[] memory otherElements = new bytes32[](0);
+
+        // Hash the compact using proper EIP712 hashing
+        return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
+    }
+
+    /// @notice Helper function to compute the expected hash for MultiChainCompact with tokenIn data
+    function computeExpectedHashWithTokenIn(bytes calldata compactData)
+        public
+        pure
+        returns (bytes32)
+    {
+        // Parse the compact data to extract individual fields
+        address sponsor = address(bytes20(compactData[0:20]));
+        uint256 nonce = uint256(bytes32(compactData[20:52]));
+        uint256 expires = uint256(bytes32(compactData[52:84]));
+
+        // Skip otherElements (length is 0, so just 32 bytes for length)
+        uint256 offset = 84 + 32; // 116
+
+        // Parse element data
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 32; // Skip arbiter + reserved space (20 + 12 = 32)
+        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+
+        // Parse commitments (Lock structs)
+        uint256 commitmentsLength = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+
+        // Create Lock structs array and parse the data
+        Lock[] memory locks = new Lock[](commitmentsLength);
+        for (uint256 i = 0; i < commitmentsLength; i++) {
+            locks[i] = Lock({
+                lockTag: bytes12(compactData[offset:offset + 12]),
+                token: address(bytes20(compactData[offset + 12:offset + 32])),
+                amount: uint256(bytes32(compactData[offset + 32:offset + 64]))
+            });
+            offset += 64; // Each Lock struct is 64 bytes (12 + 20 + 32)
+        }
+
+        // Hash the commitments using proper EIP712 hashing
+        bytes32 commitmentsHash = HashLib.hashCommitments(locks);
+
+        // Continue parsing the rest of the data
+        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 preClaimOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 targetOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
+
+        // Hash the mandate using proper EIP712 hashing
+        bytes32 mandateHash =
+            HashLib.hashMandate(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
+
+        // Hash the element using proper EIP712 hashing
+        bytes32 notarizedElementHash =
+            HashLib.hashElement(arbiter, chainId, commitmentsHash, mandateHash);
+
+        // Create empty otherElements array
+        bytes32[] memory otherElements = new bytes32[](0);
+
+        // Hash the compact using proper EIP712 hashing
         return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
     }
 }
