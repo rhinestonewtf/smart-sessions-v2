@@ -80,10 +80,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         // Setup mock execution data for a single call
         mockTargetSelector = bytes4(keccak256("testFunction()"));
         bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
-        ModeCode mode = ModeLib.encodeSimpleSingle();
-        mockExecData = abi.encodeCall(
-            IERC7579Account.execute, (mode, ExecutionLib.encodeSingle(target, value, callData))
-        );
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({ target: target, value: value, callData: callData });
+        mockExecData = abi.encode(executions);
 
         // Setup testValidator as default validator
         testValidator = address(instance.defaultValidator);
@@ -96,7 +95,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_verifyExecution_UseMode_Success() public withEnabledSudoSession {
+    function test_verifyExecution_Success() public withEnabledSudoSession {
         // Arrange
         bytes memory data =
             packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
@@ -114,7 +113,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    function test_verifyExecution_UseMode_InvalidPermissionId() public {
+    function test_verifyExecution_InvalidPermissionId() public {
         // Arrange
         PermissionId invalidPermissionId = PermissionId.wrap(keccak256("invalid"));
         bytes memory data = packData(
@@ -132,77 +131,12 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    function test_verifyExecution_UseMode_UnsupportedSelector() public withEnabledSudoSession {
-        // Arrange
-        bytes memory data =
-            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
-
-        // Create mock data with an unsupported selector
-        bytes memory unsupportedExecData =
-            abi.encodeWithSelector(bytes4(keccak256("unsupportedFunction()")), "data");
-
-        // Act/Assert
-        vm.expectRevert(ISmartSessionEmissary.UnsupportedSelector.selector);
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, unsupportedExecData, testLockTag
-        );
-    }
-
-    function test_verifyExecution_UseMode_UnsupportedExecutionType_TryExec()
-        public
-        withEnabledSudoSession
-    {
-        // Arrange
-        bytes memory data =
-            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
-
-        // Setup mock execution data with TRY execution type
-        bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
-        ModeCode mode =
-            ModeLib.encode(CALLTYPE_SINGLE, EXECTYPE_TRY, MODE_DEFAULT, ModePayload.wrap(0x00));
-        bytes memory tryExecData = abi.encodeCall(
-            IERC7579Account.execute, (mode, ExecutionLib.encodeSingle(target, value, callData))
-        );
-
-        // Act/Assert
-        vm.expectRevert(ISmartSessionEmissary.UnsupportedExecutionType.selector);
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, tryExecData, testLockTag
-        );
-    }
-
-    function test_verifyExecution_UseMode_UnsupportedExecutionType_DelegateCall()
-        public
-        withEnabledSudoSession
-    {
-        // Arrange
-        bytes memory data =
-            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
-
-        // Setup mock execution data with DELEGATE call type
-        bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
-        ModeCode mode = ModeLib.encode(
-            CALLTYPE_DELEGATECALL, EXECTYPE_DEFAULT, MODE_DEFAULT, ModePayload.wrap(0x00)
-        );
-        bytes memory delegateExecData = abi.encodeCall(
-            IERC7579Account.execute, (mode, ExecutionLib.encodeSingle(target, value, callData))
-        );
-
-        // Act/Assert
-        vm.expectRevert(ISmartSessionEmissary.UnsupportedExecutionType.selector);
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, delegateExecData, testLockTag
-        );
-    }
-
-    function test_verifyExecution_UseMode_BatchCall_Success() public withEnabledBatchSudoSession {
+    function test_verifyExecution_BatchCall_Success() public withEnabledBatchSudoSession {
         // Arrange
         bytes memory data =
             packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
 
         // Create mock batch execution data
-        ModeCode mode = ModeLib.encodeSimpleBatch();
-
         Execution[] memory executions = new Execution[](2);
 
         executions[0] = Execution({
@@ -217,8 +151,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             callData: abi.encodeWithSelector(bytes4(keccak256("anotherFunction()")))
         });
 
-        bytes memory batchExecData =
-            abi.encodeCall(IERC7579Account.execute, (mode, ExecutionLib.encodeBatch(executions)));
+        bytes memory batchExecData = ExecutionLib.encodeBatch(executions);
 
         // Act
         bytes4 result = smartSessionEmissary.verifyExecution(
@@ -233,7 +166,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    function test_verifyExecution_UseMode_InvalidSignature()
+    function test_verifyExecution_InvalidSignature()
         public
         withEnabledSessionWithFailingValidator
     {
