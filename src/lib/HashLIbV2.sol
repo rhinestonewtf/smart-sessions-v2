@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.28;
 
+// Interfaces
+import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
+
 // Libraries
 import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
@@ -93,6 +96,11 @@ bytes32 constant CHAIN_DISABLE_TYPEHASH =
 // MultiChainDisable(ChainDisable[] disablesAndChainIds)
 bytes32 constant MULTICHAIN_DISABLE_TYPEHASH =
     0x0c9d02fb89a1da34d66ea2088dc9ee6a58efee71cef6f1bb849ed74fc6003d98; // TODO: Recalculate this hash
+
+// TODO: Recalculate this hash
+bytes32 constant CONFIG_TYPEHASH = keccak256(
+    "SetConfig(address sponsor,address validator,uint8 configId,bytes12 lockTag,uint256 expires,bytes config,uint256 nonce,uint256[] chainIds)"
+);
 
 /// @dev An extended version of HashLib from SmartSessions that includes additional data from
 ///      emissary configurations when computing the session digest.
@@ -402,5 +410,48 @@ library HashLibV2 {
         }
 
         digest = disableData.hashesAndChainIds.multichainDigest();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             BASE EMISSARY
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Computes the hash for a base emissary configuration
+    /// @param sponsor The sponsor address for the configuration
+    /// @param validator The stateless validator contract address
+    /// @param configId The configuration ID for the emissary
+    /// @param expires The expiration timestamp for the configuration
+    /// @param lockTag The lock tag for the configuration
+    /// @param nonce The nonce value for the configuration
+    /// @param validatorConfig The configuration data for the stateless validator
+    /// @param chainIds The array of chain IDs for which the configuration is valid
+    /// @return hash The computed hash for the emissary configuration
+    function hashConfig(
+        address sponsor,
+        IStatelessValidator validator,
+        uint8 configId,
+        uint256 expires,
+        bytes12 lockTag,
+        uint256 nonce,
+        bytes calldata validatorConfig,
+        uint256[] calldata chainIds
+    )
+        internal
+        pure
+        returns (bytes32 hash)
+    {
+        hash = keccak256(
+            abi.encode(
+                CONFIG_TYPEHASH,
+                sponsor,
+                validator,
+                configId,
+                lockTag,
+                expires,
+                keccak256(validatorConfig),
+                nonce,
+                keccak256(abi.encodePacked(chainIds))
+            )
+        );
     }
 }
