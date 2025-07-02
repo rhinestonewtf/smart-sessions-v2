@@ -363,53 +363,18 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         ) {
             revert InvalidPermissionId(permissionId);
         }
-        bytes4 selector = bytes4(callData[0:4]);
 
         /*//////////////////////////////////////////////////////////////
                                 HANDLE EXECUTIONS
         //////////////////////////////////////////////////////////////*/
 
-        // if the selector indicates that the userOp is an execution,
-        // action policies have to be checked
-        if (selector == IERC7579Account.execute.selector) {
-            // Decode ERC7579 execution mode
-            (CallType callType, ExecType execType) = callData.get7579ExecutionTypes();
-            // ERC7579 allows for different execution types, but SmartSession only supports the
-            // default execution type
-            if (ExecType.unwrap(execType) != ExecType.unwrap(EXECTYPE_DEFAULT)) {
-                revert UnsupportedExecutionType();
-            }
-            // DEFAULT EXEC & BATCH CALL
-            else if (callType == CALLTYPE_BATCH) {
-                $actionPolicies.actionPolicies.checkBatch7579Exec({
-                    callData: callData,
-                    permissionId: permissionId,
-                    minPolicies: 1, // minimum of one actionPolicy must be set.
-                    account: account
-                });
-            }
-            // DEFAULT EXEC & SINGLE CALL
-            else if (callType == CALLTYPE_SINGLE) {
-                (address target, uint256 value, bytes calldata decodedCallData) =
-                    callData.decodeUserOpCallData().decodeSingle();
-                $actionPolicies.actionPolicies.checkSingle7579Exec({
-                    permissionId: permissionId,
-                    target: target,
-                    value: value,
-                    callData: decodedCallData,
-                    minPolicies: 1, // minimum of one actionPolicy must be set.
-                    account: account
-                });
-            }
-            // DelegateCalls are not supported by SmartSessionExecutionVerifier
-            else {
-                revert UnsupportedExecutionType();
-            }
-        }
-        // All other executions are not supported
-        else {
-            revert UnsupportedSelector();
-        }
+        // Check action policies for the given permissionId and batch execution
+        $actionPolicies.actionPolicies.checkBatch7579Exec({
+            callData: callData,
+            permissionId: permissionId,
+            minPolicies: 1, // minimum of one actionPolicy must be set.
+            account: account
+        });
 
         /*//////////////////////////////////////////////////////////////
                                 CHECK SESSION KEY
