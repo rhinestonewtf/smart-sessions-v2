@@ -11,6 +11,7 @@ import { ArgPolicyTreeLib } from
 import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
 import { DecodeLib } from "@policies/claim-recipient/lib/DecodeLib.sol";
+import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeLibV2.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -42,6 +43,7 @@ contract MultiChainClaimPolicy is I1271Policy {
     using ConfigLib for PolicyConfig;
     using ConfigLib for bytes;
     using DecodeLib for bytes;
+    using ArgPolicyTreeLibV2 for ParamRules;
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -115,7 +117,7 @@ contract MultiChainClaimPolicy is I1271Policy {
             ParamRules memory preClaimOpsConfig;
             (preClaimOpsConfig, configData) = configData.decodePreClaimOpsConfig();
             // Store the preClaimOps configuration
-            $.preClaimOpsConfig[configId][msg.sender][account] = preClaimOpsConfig;
+            $.preClaimOpsConfig[configId][msg.sender][account].fill(preClaimOpsConfig);
         }
 
         // (2) recipient and targetChainId
@@ -162,8 +164,9 @@ contract MultiChainClaimPolicy is I1271Policy {
             (qualificationConfig, configData, qualificationTypehash) =
                 configData.decodeQualificationConfig();
             // Store the qualification configuration
-            $.qualificationConfig[configId][account][msg.sender][qualificationTypehash] =
-                qualificationConfig;
+            $.qualificationConfig[configId][account][msg.sender][qualificationTypehash].fill(
+                qualificationConfig
+            );
         }
 
         // Store the bitmap configuration

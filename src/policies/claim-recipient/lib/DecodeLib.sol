@@ -5,6 +5,7 @@ pragma solidity ^0.8.28;
 import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
 import { HashLib } from "@policies/claim-recipient/lib/HashLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
+import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeLibV2.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -23,6 +24,7 @@ library DecodeLib {
     //////////////////////////////////////////////////////////////*/
 
     using ConfigLib for PolicyConfig;
+    using ArgPolicyTreeLibV2 for ParamRules;
 
     /*//////////////////////////////////////////////////////////////
                                 CONSTANTS
@@ -284,7 +286,7 @@ library DecodeLib {
                 $.recipientConfig[configId][msg.sender][account][targetChain];
 
             if (recipient != expectedRecipient) {
-                return (false, bytes32(0), offset);
+                return (false, bytes32(0), 0);
             }
         }
 
@@ -297,7 +299,7 @@ library DecodeLib {
             (tokenOutValid, tokenOutHash, offset) =
                 _validateTokenOut(data, offset, configId, account, targetChain);
             if (!tokenOutValid) {
-                return (false, bytes32(0), offset);
+                return (false, bytes32(0), 0);
             }
         }
         // If not enabled, read tokenOutHash directly
@@ -357,7 +359,7 @@ library DecodeLib {
                 $.tokenInConfig[configId][msg.sender][account][chainId].token != address(0)
                     && $.tokenInConfig[configId][msg.sender][account][chainId].token != locks[i].token
             ) {
-                return (false, bytes32(0), offset);
+                return (false, bytes32(0), 0);
             }
             // Validate amount against min and max limits
             if (
@@ -365,7 +367,7 @@ library DecodeLib {
                     || locks[i].amount
                         > $.tokenInConfig[configId][msg.sender][account][chainId].maxAmount
             ) {
-                return (false, bytes32(0), offset);
+                return (false, bytes32(0), 0);
             }
         }
 
@@ -415,7 +417,7 @@ library DecodeLib {
                 $.tokenOutConfig[configId][msg.sender][account][chainId].token != address(0)
                     && $.tokenOutConfig[configId][msg.sender][account][chainId].token != tokens[i].token
             ) {
-                return (false, bytes32(0), offset);
+                return (false, bytes32(0), 0);
             }
             // Validate amount against min and max limits
             if (
@@ -424,7 +426,7 @@ library DecodeLib {
                     || tokens[i].amount
                         > $.tokenOutConfig[configId][msg.sender][account][chainId].maxAmount
             ) {
-                return (false, bytes32(0), offset);
+                return (false, bytes32(0), 0);
             }
         }
 
@@ -462,12 +464,16 @@ library DecodeLib {
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
         // Load the preClaimOps configuration for the account
-        ParamRules memory preClaimOpsConfig = $.preClaimOpsConfig[configId][account][msg.sender];
+        ParamRules storage preClaimOpsConfig = $.preClaimOpsConfig[configId][account][msg.sender];
 
         // Parse each Op struct
         for (uint256 i = 0; i < length; i++) {
             uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
             offset += 32;
+            // Validate Op data against preClaimOpsConfig, if it fails, return false
+            if (!preClaimOpsConfig.evaluateExpressionTree(data[offset:offset + dataLength])) {
+                return (false, bytes32(0), 0);
+            }
             ops[i] = Op({ data: data[offset:offset + dataLength] });
             offset += dataLength;
         }
@@ -501,21 +507,20 @@ library DecodeLib {
         bytes32 qualificationTypehash = bytes32(data[offset + 32:offset + 64]);
         offset += 32;
 
-        // Extract qualification data
-        bytes memory qualificationData = data[offset:offset + dataLength + 32];
-
         // Get storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
         // Load the qualification configuration for the account
-        ParamRules memory qualificationConfig =
+        ParamRules storage qualificationConfig =
             $.qualificationConfig[configId][account][msg.sender][qualificationTypehash];
 
-        // TODO: ArgPolicy validation goes here
-        qualificationConfig;
+        // Validate qualification data against the qualificationConfig
+        if (!qualificationConfig.evaluateExpressionTree(data[offset:offset + dataLength + 32])) {
+            return (false, bytes32(0), 0);
+        }
 
         // Calculate qualification hash
-        qualificationHash = HashLib.hashQualification(qualificationData);
+        qualificationHash = HashLib.hashQualification(data[offset:offset + dataLength + 32]);
         return (true, qualificationHash, offset + dataLength);
     }
 

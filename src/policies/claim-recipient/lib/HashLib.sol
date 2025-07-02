@@ -80,12 +80,15 @@ library HashLib {
     }
 
     function hashOps(Op[] memory ops) internal pure returns (bytes32) {
-        // TODO: Implement proper EIP712 ops hashing
-        return keccak256(abi.encode(ops));
+        bytes32[] memory opHashes = new bytes32[](ops.length);
+        for (uint256 i = 0; i < ops.length; i++) {
+            // ops[i] is already abi.encode(to, value, data)
+            opHashes[i] = keccak256(abi.encodePacked(TYPEHASH_OP, ops[i].data));
+        }
+        return keccak256(abi.encodePacked(opHashes));
     }
 
     function hashQualification(bytes memory data) internal pure returns (bytes32) {
-        // TODO: Implement proper EIP712 qualification hashing
         return keccak256(data);
     }
 
