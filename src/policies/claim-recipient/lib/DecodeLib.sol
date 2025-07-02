@@ -186,23 +186,9 @@ library DecodeLib {
             offset += 32;
         }
 
-        // Init preClaimOpsHash
-        bytes32 preClaimOpsHash;
-
-        // If checkPreClaimOps is enabled, validate preClaimOps and recalculate preClaimOpsHash
-        if (config.hasCheckPreClaimOps()) {
-            bool preClaimValid;
-            (preClaimValid, preClaimOpsHash, offset) =
-                _validatePreClaimOps(data, offset, configId, account);
-            if (!preClaimValid) {
-                return (false, bytes32(0));
-            }
-        }
-        // If not enabled, read preClaimOpsHash directly
-        else {
-            preClaimOpsHash = bytes32(data[offset:offset + 32]);
-            offset += 32;
-        }
+        // Read preClaimOpsHash directly
+        bytes32 preClaimOpsHash = bytes32(data[offset:offset + 32]);
+        offset += 32;
 
         // Init targetOpsHash
         bytes32 targetOpsHash;
@@ -433,65 +419,6 @@ library DecodeLib {
         // Calculate Token structs hash
         tokenOutHash = HashLib.hashTokenOut(tokens);
         return (true, tokenOutHash, offset);
-    }
-
-    /// @notice Validates the preClaimOps Op structs and returns their hash
-    /// @param data The MultiChainCompact data to validate
-    /// @param offset The offset in the data where the preClaimOps starts
-    /// @param configId The configuration ID for the policy
-    /// @param account The account to validate against
-    /// @return valid True if the preClaimOps are valid, false otherwise
-    /// @return preClaimOpsHash The hash of the validated preClaimOps
-    /// @return newOffset The new offset after reading the preClaimOps data
-    function _validatePreClaimOps(
-        bytes calldata data,
-        uint256 offset,
-        ConfigId configId,
-        address account
-    )
-        private
-        view
-        returns (bool valid, bytes32 preClaimOpsHash, uint256 newOffset)
-    {
-        console.log("Validating preClaimOps for account:", account);
-        // Decode preClaimOps header
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        console.log("PreClaimOps length:", length);
-        offset += 32;
-
-        // Init Op array
-        Op[] memory ops = new Op[](length);
-
-        // Get storage pointer
-        PolicyStorage storage $ = StorageLib.getPolicyStorage();
-
-        // Load the preClaimOps configuration for the account
-        ParamRules storage preClaimOpsConfig = $.preClaimOpsConfig[configId][msg.sender][account];
-        console.log("PreClaimOps config loaded for account:", account);
-        console.log("PreClaimOps config rules length:", preClaimOpsConfig.rules.length);
-        console.log("PreClaimOps config packedNodes length:", preClaimOpsConfig.packedNodes.length);
-        console.log("PreClaimOps config rootNodeIndex:", preClaimOpsConfig.rootNodeIndex);
-
-        // Parse each Op struct
-        for (uint256 i = 0; i < length; i++) {
-            uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
-            offset += 32;
-            console.log("Op data:");
-            console.logBytes(data[offset:offset + dataLength]);
-            // Validate Op data against preClaimOpsConfig, if it fails, return false
-            if (!preClaimOpsConfig.evaluateExpressionTree(data[offset:offset + dataLength])) {
-                return (false, bytes32(0), 0);
-            }
-            ops[i] = Op({ data: data[offset:offset + dataLength] });
-            console.log("Op data length:", dataLength);
-            console.log("Op data:");
-            console.logBytes(ops[i].data);
-            offset += dataLength;
-        }
-
-        // Calculate preClaimOps hash
-        preClaimOpsHash = HashLib.hashOps(ops);
-        return (true, preClaimOpsHash, offset);
     }
 
     /// @notice Validates the Qualification struct and returns its hash

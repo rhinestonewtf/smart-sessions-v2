@@ -473,59 +473,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     //-------------------------------------
-    // 4) PRE CLAIM OPS
-    //-------------------------------------
-
-    /// @notice Test check1271SignedAction with preClaimOps condition - should pass when ops match
-    /// rules
-    function test_check1271SignedAction_preClaimOps_validOps_shouldPass() public {
-        // Initialize policy with CHECK_PRE_CLAIM_OPS
-        _initializePolicyWithPreClaimOps();
-
-        // Create MultiChainCompact data with valid preClaimOps (matching selector)
-        bytes memory compactData = _createMultiChainCompactDataWithPreClaimOps(true);
-
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHashWithPreClaimOps(compactData);
-
-        // Check the action
-        bool result = multiChainClaimPolicy.check1271SignedAction(
-            testConfigId,
-            admin.addr, // sender
-            testAccount,
-            expectedHash,
-            compactData
-        );
-
-        assertTrue(result, "Action with valid preClaimOps should be allowed");
-    }
-
-    /// @notice Test check1271SignedAction with preClaimOps condition - should fail when ops don't
-    /// match rules
-    function test_check1271SignedAction_preClaimOps_invalidOps_shouldFail() public {
-        // Initialize policy with CHECK_PRE_CLAIM_OPS
-        _initializePolicyWithPreClaimOps();
-
-        // Create MultiChainCompact data with invalid preClaimOps (non-matching selector)
-        bytes memory compactData = _createMultiChainCompactDataWithPreClaimOps(false);
-
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHashWithPreClaimOps(compactData);
-
-        // Check the action
-        bool result = multiChainClaimPolicy.check1271SignedAction(
-            testConfigId,
-            admin.addr, // sender
-            testAccount,
-            expectedHash,
-            compactData
-        );
-
-        assertFalse(result, "Action with invalid preClaimOps should be rejected");
-    }
-
-    //-------------------------------------
-    // 5) QUALIFICATION
+    // 4) QUALIFICATION
     //-------------------------------------
 
     /// @notice Test check1271SignedAction with qualification condition - should pass when
@@ -887,25 +835,10 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Helper function to initialize policy with preClaimOps condition
-    function _initializePolicyWithPreClaimOps() internal {
-        // Create policy config with only CHECK_PRE_CLAIM_OPS enabled (bit 1)
-        uint8 conditionsBitmap = 2; // Binary: 00000010
-
-        // Create preClaimOps configuration with selector validation rules
-        ParamRules memory rules = _createSelectorParamRules();
-        bytes memory rulesData = _encodeParamRules(rules);
-
-        bytes memory initData = abi.encodePacked(conditionsBitmap, rulesData);
-
-        // Initialize the policy
-        multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
-    }
-
     /// @notice Helper function to initialize policy with qualification condition
     function _initializePolicyWithQualification() internal {
-        // Create policy config with only CHECK_QUALIFICATIONS enabled (bit 5)
-        uint8 conditionsBitmap = 32; // Binary: 00100000
+        // Create policy config with only CHECK_QUALIFICATIONS enabled (bit 2)
+        uint8 conditionsBitmap = 2; // Binary: 00000010
 
         // Create qualification configuration with parameter validation rules
         ParamRules memory rules = _createQualificationParamRules();
@@ -1154,61 +1087,6 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
     }
 
-    /// @notice Helper function to compute expected hash with preClaimOps
-    function computeExpectedHashWithPreClaimOps(bytes calldata compactData)
-        public
-        pure
-        returns (bytes32)
-    {
-        // Parse the compact data to extract individual fields
-        address sponsor = address(bytes20(compactData[0:20]));
-        uint256 nonce = uint256(bytes32(compactData[20:52]));
-        uint256 expires = uint256(bytes32(compactData[52:84]));
-
-        // Skip otherElements (length is 0, so just 32 bytes for length)
-        uint256 offset = 84 + 32; // 116
-
-        // Parse element data
-        address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // Skip arbiter + reserved space (20 + 12 = 32)
-        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-
-        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-
-        // Parse preClaimOps data and hash it
-        bytes32 preClaimOpsHash = _parseAndHashPreClaimOps(compactData, offset);
-
-        // Skip preClaimOps data to get to remaining mandate data
-        uint256 opsLength = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-        for (uint256 i = 0; i < opsLength; i++) {
-            uint256 opDataLength = uint256(bytes32(compactData[offset:offset + 32]));
-            offset += 32 + opDataLength;
-        }
-
-        bytes32 targetOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash the mandate using proper EIP712 hashing
-        bytes32 mandateHash =
-            HashLib.hashMandate(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
-
-        // Hash the element using proper EIP712 hashing
-        bytes32 notarizedElementHash =
-            HashLib.hashElement(arbiter, chainId, commitmentsHash, mandateHash);
-
-        // Create empty otherElements array
-        bytes32[] memory otherElements = new bytes32[](0);
-
-        // Hash the compact using proper EIP712 hashing
-        return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
-    }
-
     /// @notice Helper function to compute expected hash with qualification
     function computeExpectedHashWithQualification(bytes calldata compactData)
         public
@@ -1254,30 +1132,6 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
 
         // Hash the compact using proper EIP712 hashing
         return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
-    }
-
-    /// @notice Parse and hash preClaimOps data
-    function _parseAndHashPreClaimOps(
-        bytes calldata data,
-        uint256 offset
-    )
-        private
-        pure
-        returns (bytes32)
-    {
-        uint256 opsLength = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
-
-        // Create Op structs array and parse the data
-        Op[] memory ops = new Op[](opsLength);
-        for (uint256 i = 0; i < opsLength; i++) {
-            uint256 opDataLength = uint256(bytes32(data[offset:offset + 32]));
-            offset += 32;
-            ops[i] = Op({ data: data[offset:offset + opDataLength] });
-            offset += opDataLength;
-        }
-
-        return HashLib.hashOps(ops);
     }
 
     /// @notice Parse and hash qualification data

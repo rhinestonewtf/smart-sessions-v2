@@ -29,7 +29,6 @@ import { console } from "@forge-std/console.sol";
 /// @title MultiChainClaimPolicy
 /// @notice A policy that allows enforcing rules on specific fields of a MultiChainClaim struct:
 ///         - hasExecutions: executions != empty executions hash
-///         - preClaimOps: compare with input (allow specific addresses, data, etc)
 ///         - recipient + targetChainId: compare with input
 ///         - tokenIn/amount: per chainId mapping
 ///         - tokenOut/amount: per targetChainId mapping
@@ -111,13 +110,19 @@ contract MultiChainClaimPolicy is I1271Policy {
         // Get policy storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
-        // (1) preClaimOps
-        if (configBitmap.hasCheckPreClaimOps()) {
-            // Decode preClaimOps configuration
-            ParamRules memory preClaimOpsConfig;
-            (preClaimOpsConfig, configData) = configData.decodePreClaimOpsConfig();
-            // Store the preClaimOps configuration
-            $.preClaimOpsConfig[configId][msg.sender][account].fill(preClaimOpsConfig);
+        // (1) qualification
+        if (configBitmap.hasCheckQualification()) {
+            // Decode qualification configuration
+            ParamRules memory qualificationConfig;
+            bytes32 qualificationTypehash;
+            (qualificationConfig, configData, qualificationTypehash) =
+                configData.decodeQualificationConfig();
+            console.log("Qualification typehash:");
+            console.logBytes32(qualificationTypehash);
+            // Store the qualification configuration
+            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash].fill(
+                qualificationConfig
+            );
         }
 
         // (2) recipient and targetChainId
@@ -154,21 +159,6 @@ contract MultiChainClaimPolicy is I1271Policy {
                 $.tokenOutConfig[configId][msg.sender][account][tokenOutConfig.targetChainId] =
                     tokenOutConfig.config;
             }
-        }
-
-        // (5) qualification
-        if (configBitmap.hasCheckQualification()) {
-            // Decode qualification configuration
-            ParamRules memory qualificationConfig;
-            bytes32 qualificationTypehash;
-            (qualificationConfig, configData, qualificationTypehash) =
-                configData.decodeQualificationConfig();
-            console.log("Qualification typehash:");
-            console.logBytes32(qualificationTypehash);
-            // Store the qualification configuration
-            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash].fill(
-                qualificationConfig
-            );
         }
 
         // Store the bitmap configuration

@@ -92,7 +92,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             account,
             enableData.session,
             config.permissionId,
-            config.arbiter,
+            config.sender,
             lockTag,
             enableData.expires,
             config.allocator,
@@ -128,7 +128,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             account,
             disableData.session,
             config.permissionId,
-            config.arbiter,
+            config.sender,
             lockTag,
             disableData.expires,
             config.allocator,
@@ -145,7 +145,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param account The address of the account for which policies are being enabled
     /// @param enableData The data containing session and policy information to be enabled
     /// @param permissionId The unique identifier for the permission set
-    /// @param arbiter The address of the arbiter for the session
+    /// @param sender The address of the sender for the session
     /// @param lockTag The lock tag associated with the session
     /// @param allocator The address of the allocator for the session
     /// @param allocatorSig The signature from the allocator authorizing the session
@@ -153,7 +153,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         address account,
         EnableSession memory enableData,
         PermissionId permissionId,
-        address arbiter,
+        address sender,
         bytes12 lockTag,
         uint256 expires,
         address allocator,
@@ -164,7 +164,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     {
         // Increment nonce to prevent replay attacks
         uint256 nonce = $emissaryNonce[account][lockTag]++;
-        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter);
+        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, expires, lockTag, sender);
 
         // Verify the user and allocator signatures
         hash.verifySignatures(account, allocator, allocatorSig, userSig);
@@ -204,7 +204,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         }
 
         // Mark the session as enabled
-        $smartSessionConfig[arbiter][lockTag].add({
+        $smartSessionConfig[sender][lockTag].add({
             account: account,
             value: PermissionId.unwrap(permissionId)
         });
@@ -215,7 +215,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param account The address of the account for which policies are being disabled
     /// @param disableData The data containing session and policy information to be disabled
     /// @param permissionId The unique identifier for the permission set
-    /// @param arbiter The address of the arbiter for the session
+    /// @param sender The address of the sender for the session
     /// @param lockTag The lock tag associated with the session
     /// @param allocator The address of the allocator for the session
     /// @param allocatorSig The signature from the allocator authorizing the session
@@ -224,7 +224,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         address account,
         DisableSession memory disableData,
         PermissionId permissionId,
-        address arbiter,
+        address sender,
         bytes12 lockTag,
         uint256 expires,
         address allocator,
@@ -238,13 +238,13 @@ abstract contract SmartSessionMixin is SmartSessionManager {
 
         // Get the hash for the disable operation
         bytes32 hash =
-            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, arbiter);
+            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
 
         // Verify the user and allocator signatures
         hash.verifySignatures(account, allocator, allocatorSig, userSig);
 
         // Remove the session from the smart session config
-        _removeSession(permissionId, account, lockTag, arbiter);
+        _removeSession(permissionId, account, lockTag, sender);
     }
 
     /*//////////////////////////////////////////////////////////////

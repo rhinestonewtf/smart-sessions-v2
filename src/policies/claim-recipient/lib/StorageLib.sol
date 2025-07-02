@@ -55,13 +55,6 @@ struct PolicyStorage {
                     )
             )
     ) recipientConfig;
-    // Mapping to store pre-claim operations configurations
-    mapping(
-        ConfigId id
-            => mapping(
-                address msgSender => mapping(address userOpSender => ParamRules preClaimOpsConfig)
-            )
-    ) preClaimOpsConfig;
     // Mapping to store qualification params
     mapping(
         ConfigId id

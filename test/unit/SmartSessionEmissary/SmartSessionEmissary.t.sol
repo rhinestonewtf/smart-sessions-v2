@@ -43,7 +43,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         address, /*validator*/
         bytes12 lockTag,
         uint256 expires,
-        address arbiter,
+        address sender,
         address /*allocator*/
     )
         internal
@@ -55,7 +55,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
             account: instance.account,
             data: session,
             expires: expires,
-            arbiter: arbiter
+            sender: sender
         });
 
         ChainDigest[] memory chainDigests = IntegrationEncodeLib.encodeHashesAndChainIds(

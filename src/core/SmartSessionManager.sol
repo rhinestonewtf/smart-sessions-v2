@@ -76,14 +76,14 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param account The account address associated with the sessions
     /// @param useRegistry A flag to indicate whether to use a registry check for the policies and
     ///        session validator
-    /// @param arbiter The address of the arbiter for the session, if applicable
+    /// @param sender The address of the sender for the session, if applicable
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function _enableSessions(
         Session[] calldata sessions,
         address account,
         bool useRegistry,
         bytes12 lockTag,
-        address arbiter
+        address sender
     )
         internal
         returns (PermissionId[] memory permissionIds)
@@ -116,7 +116,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             });
 
             // Add the session to the list of enabled sessions for the caller
-            $smartSessionConfig[arbiter][lockTag].add({
+            $smartSessionConfig[sender][lockTag].add({
                 account: account,
                 value: PermissionId.unwrap(permissionId)
             });
@@ -139,11 +139,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Remove a session and all its associated policies
     /// @param permissionId The unique identifier for the session to be removed
     /// @param account The account address associated with the session
+    /// @param lockTag The lock tag used to identify the session
+    /// @param sender The address of the sender for the session, if applicable
     function _removeSession(
         PermissionId permissionId,
         address account,
         bytes12 lockTag,
-        address arbiter
+        address sender
     )
         internal
     {
@@ -166,7 +168,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
 
         // Remove all ERC1271 policies for this session
-        $smartSessionConfig[arbiter][lockTag].remove({
+        $smartSessionConfig[sender][lockTag].remove({
             account: account,
             value: PermissionId.unwrap(permissionId)
         });
@@ -182,14 +184,14 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param lockTag The lock tag used to identify the session
     /// @param data The session data
     /// @param expires The expiration timestamp for the session
-    /// @param arbiter The address of the arbiter for the session, if applicable
+    /// @param sender The address of the sender for the session, if applicable
     /// @return The session digest
     function getSessionDigest(
         address account,
         Session memory data,
         bytes12 lockTag,
         uint256 expires,
-        address arbiter
+        address sender
     )
         public
         view
@@ -201,7 +203,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             lockTag: lockTag,
             expires: expires,
             nonce: nonce,
-            arbiter: arbiter
+            sender: sender
         });
     }
 
@@ -254,19 +256,19 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param permissionId The permission ID to check
     /// @param account The account address
     /// @param lockTag The lock tag used to identify the session
-    /// @param arbiter The address of the arbiter for the session, if applicable
+    /// @param sender The address of the sender for the session, if applicable
     /// @return Boolean indicating whether the permission is enabled
     function isPermissionEnabled(
         PermissionId permissionId,
         bytes12 lockTag,
         address account,
-        address arbiter
+        address sender
     )
         external
         view
         returns (bool)
     {
-        return $smartSessionConfig[arbiter][lockTag].contains(
+        return $smartSessionConfig[sender][lockTag].contains(
             account, PermissionId.unwrap(permissionId)
         );
     }
@@ -442,18 +444,18 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Gets all permission IDs for a specific account and lock tag
     /// @param account The address of the account to query
     /// @param lockTag The lock tag used to identify the session configuration
-    /// @param arbiter The address of the arbiter for the session, if applicable
+    /// @param sender The address of the sender for the session, if applicable
     /// @return permissionIds Array of permission IDs associated with the account
     function getPermissionIDs(
         address account,
         bytes12 lockTag,
-        address arbiter
+        address sender
     )
         external
         view
         returns (PermissionId[] memory permissionIds)
     {
-        bytes32[] memory _permissionIds = $smartSessionConfig[arbiter][lockTag].values(account);
+        bytes32[] memory _permissionIds = $smartSessionConfig[sender][lockTag].values(account);
         assembly {
             permissionIds := _permissionIds
         }

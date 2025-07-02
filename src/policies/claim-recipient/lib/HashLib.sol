@@ -79,15 +79,6 @@ library HashLib {
         return keccak256(abi.encodePacked(tokenHashes));
     }
 
-    function hashOps(Op[] memory ops) internal pure returns (bytes32) {
-        bytes32[] memory opHashes = new bytes32[](ops.length);
-        for (uint256 i = 0; i < ops.length; i++) {
-            // ops[i] is already abi.encode(to, value, data)
-            opHashes[i] = keccak256(abi.encodePacked(TYPEHASH_OP, ops[i].data));
-        }
-        return keccak256(abi.encodePacked(opHashes));
-    }
-
     function hashQualification(bytes memory data) internal pure returns (bytes32) {
         return keccak256(data);
     }
