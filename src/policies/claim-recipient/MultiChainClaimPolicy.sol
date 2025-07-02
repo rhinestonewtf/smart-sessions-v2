@@ -163,8 +163,10 @@ contract MultiChainClaimPolicy is I1271Policy {
             bytes32 qualificationTypehash;
             (qualificationConfig, configData, qualificationTypehash) =
                 configData.decodeQualificationConfig();
+            console.log("Qualification typehash:");
+            console.logBytes32(qualificationTypehash);
             // Store the qualification configuration
-            $.qualificationConfig[configId][account][msg.sender][qualificationTypehash].fill(
+            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash].fill(
                 qualificationConfig
             );
         }

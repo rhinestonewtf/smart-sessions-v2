@@ -12,6 +12,9 @@ import {
     TokenAmountConfig
 } from "@policies/claim-recipient/types/DataTypes.sol";
 
+// Temp
+import { console } from "@forge-std/console.sol";
+
 /*//////////////////////////////////////////////////////////////
                             TYPES
 //////////////////////////////////////////////////////////////*/
@@ -187,11 +190,11 @@ library ConfigLib {
             paramRules[i] = ParamRule({
                 condition: ParamCondition(uint8(initData[offset])),
                 offset: uint64(bytes8(initData[offset + 1:offset + 9])),
-                isLimited: initData[offset + 9] != 0,
+                length: uint8(initData[offset + 9]),
                 ref: bytes32(initData[offset + 10:offset + 42])
             });
-            offset += 42; // Move to the next rule (1 byte condition + 8 bytes offset + 1 byte
-                // isLimited + 32 bytes ref)
+            offset += 42; // Move to the next rule (1 byte condition + 8 bytes offset +
+                // 1 byte length + 32 bytes ref)
         }
 
         // Decode packed nodes
@@ -223,22 +226,27 @@ library ConfigLib {
         // Decode the number of rules
         uint256 ruleCount = uint256(bytes32(initData[33:65]));
         ParamRule[] memory paramRules = new ParamRule[](ruleCount);
-        uint256 offset = 33; // Start after rootNodeIndex and ruleCount
+        uint256 offset = 65; // Start after rootNodeIndex, ruleCount and qualificationTypehash
 
         for (uint256 i = 0; i < ruleCount; i++) {
             paramRules[i] = ParamRule({
                 condition: ParamCondition(uint8(initData[offset])),
                 offset: uint64(bytes8(initData[offset + 1:offset + 9])),
-                isLimited: initData[offset + 9] != 0,
+                length: uint8(initData[offset + 9]),
                 ref: bytes32(initData[offset + 10:offset + 42])
             });
-            offset += 42; // Move to the next rule (1 byte condition + 8 bytes offset + 1 byte
-                // isLimited + 32 bytes ref)
+            offset += 42; // Move to the next rule (1 byte condition + 8 bytes offset
+                // + 1 byte length + 32 bytes ref)
+            console.log("Rule %d", i);
+            console.log("Condition: %d", uint8(paramRules[i].condition));
+            console.log("Offset: %d", paramRules[i].offset);
+            console.log("Length: %d", paramRules[i].length);
+            console.log("Ref:");
+            console.logBytes32(paramRules[i].ref);
         }
 
         // Decode packed nodes
-        uint256 packedNodesLength = (initData.length - offset) / 32 - 1; // -1 for the
-            // qualificationTypehash
+        uint256 packedNodesLength = (initData.length - offset) / 32;
         uint256[] memory packedNodes = new uint256[](packedNodesLength);
         for (uint256 i = 0; i < packedNodesLength; i++) {
             packedNodes[i] = uint256(bytes32(initData[offset + i * 32:offset + (i + 1) * 32]));

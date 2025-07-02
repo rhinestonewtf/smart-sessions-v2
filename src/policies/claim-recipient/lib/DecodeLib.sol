@@ -453,8 +453,10 @@ library DecodeLib {
         view
         returns (bool valid, bytes32 preClaimOpsHash, uint256 newOffset)
     {
+        console.log("Validating preClaimOps for account:", account);
         // Decode preClaimOps header
         uint256 length = uint256(bytes32(data[offset:offset + 32]));
+        console.log("PreClaimOps length:", length);
         offset += 32;
 
         // Init Op array
@@ -464,22 +466,28 @@ library DecodeLib {
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
         // Load the preClaimOps configuration for the account
-        ParamRules storage preClaimOpsConfig = $.preClaimOpsConfig[configId][account][msg.sender];
+        ParamRules storage preClaimOpsConfig = $.preClaimOpsConfig[configId][msg.sender][account];
+        console.log("PreClaimOps config loaded for account:", account);
+        console.log("PreClaimOps config rules length:", preClaimOpsConfig.rules.length);
+        console.log("PreClaimOps config packedNodes length:", preClaimOpsConfig.packedNodes.length);
+        console.log("PreClaimOps config rootNodeIndex:", preClaimOpsConfig.rootNodeIndex);
 
         // Parse each Op struct
         for (uint256 i = 0; i < length; i++) {
             uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
             offset += 32;
+            console.log("Op data:");
+            console.logBytes(data[offset:offset + dataLength]);
             // Validate Op data against preClaimOpsConfig, if it fails, return false
             if (!preClaimOpsConfig.evaluateExpressionTree(data[offset:offset + dataLength])) {
                 return (false, bytes32(0), 0);
             }
             ops[i] = Op({ data: data[offset:offset + dataLength] });
+            console.log("Op data length:", dataLength);
+            console.log("Op data:");
+            console.logBytes(ops[i].data);
             offset += dataLength;
         }
-
-        // TODO: ArgPolicy validation goes here
-        preClaimOpsConfig;
 
         // Calculate preClaimOps hash
         preClaimOpsHash = HashLib.hashOps(ops);
@@ -502,25 +510,43 @@ library DecodeLib {
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
+        console.log("Validating qualification for account:", account);
         // Decode qualification header
         uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
         bytes32 qualificationTypehash = bytes32(data[offset + 32:offset + 64]);
-        offset += 32;
+        offset += 64;
+
+        console.log("Data length:", dataLength);
+        console.log("Qualification Typehash:");
+        console.logBytes32(qualificationTypehash);
 
         // Get storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
         // Load the qualification configuration for the account
         ParamRules storage qualificationConfig =
-            $.qualificationConfig[configId][account][msg.sender][qualificationTypehash];
+            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash];
+
+        console.log("Qualification config loaded for typehash:");
+        console.logBytes32(qualificationTypehash);
+        console.log("Qualification config rules length:", qualificationConfig.rules.length);
+        console.log(
+            "Qualification config packedNodes length:", qualificationConfig.packedNodes.length
+        );
+        console.log("Qualification config rootNodeIndex:", qualificationConfig.rootNodeIndex);
+        console.log("Qualification config ref value:");
+        console.logBytes32(qualificationConfig.rules[qualificationConfig.rootNodeIndex].ref);
+
+        console.log("Qualification data:");
+        console.logBytes(data[offset:offset + dataLength]);
 
         // Validate qualification data against the qualificationConfig
-        if (!qualificationConfig.evaluateExpressionTree(data[offset:offset + dataLength + 32])) {
+        if (!qualificationConfig.evaluateExpressionTree(data[offset:offset + dataLength])) {
             return (false, bytes32(0), 0);
         }
 
         // Calculate qualification hash
-        qualificationHash = HashLib.hashQualification(data[offset:offset + dataLength + 32]);
+        qualificationHash = HashLib.hashQualification(data[offset:offset + dataLength]);
         return (true, qualificationHash, offset + dataLength);
     }
 

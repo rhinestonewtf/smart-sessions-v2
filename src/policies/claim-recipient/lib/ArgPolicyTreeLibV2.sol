@@ -9,6 +9,9 @@ import { ArgPolicyTreeLib } from
 import { ParamRules, ParamRule } from "@policies/claim-recipient/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
+// Temp
+import { console } from "@forge-std/console.sol";
+
 /// @title ArgPolicyTree Library V2
 /// @notice Adjusted ArgPolicyTreeLib to work with the new ParamRules struct that doesn't have value
 ///         and usage limits (compared to the original ArgPolicyTreeLib).
@@ -24,17 +27,38 @@ library ArgPolicyTreeLibV2 {
                                 VALIDATE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Adjusted check to work with the new ParamRule struct
+    /// @dev Adjusted check to work with the new ParamRule struct and raw bytes data
     function check(ParamRule storage rule, bytes calldata data) internal view returns (bool) {
+        console.log("Checking rule");
+        console.log("Condition:", uint8(rule.condition));
+        console.log("Offset:", rule.offset);
+        console.log("Length:", rule.length);
+        console.log("Reference value:");
+        console.logBytes32(rule.ref);
+        console.log("Data length:", data.length);
+        console.log("Data:");
+        console.logBytes(data);
         // Cache the offset
         uint64 offset = rule.offset;
+        // Cache the length
+        uint8 length = rule.length;
         // Cache the condition
         ParamCondition condition = rule.condition;
         // Cache the reference value
         bytes32 ref = rule.ref;
-        // Extract 32 bytes from calldata at the specified offset
-        // First 4 bytes are the function selector, so we add 4 to the offset
-        bytes32 param = bytes32(data[4 + offset:4 + offset + 32]);
+
+        // Extract the specified number of bytes
+        bytes32 param;
+
+        // ------ This will revert if offset + length > data.length ------ //
+        if (length > 0) {
+            // For non zero length, extract only the specified number of bytes
+            param = bytes32(data[offset:offset + length]);
+        } else {
+            // Otherwise, extract the full 32 bytes
+            param = bytes32(data[offset:offset + 32]);
+        }
+        // -----------------------------------------------------------------//
 
         // CHECK Param Condition
         if (condition == ParamCondition.EQUAL && param != ref) {
@@ -143,6 +167,7 @@ library ArgPolicyTreeLibV2 {
         view
         returns (bool)
     {
+        console.log("Evaluating node at index:", nodeIndex);
         // Load the packed node from storage (single SLOAD operation)
         uint256 node = packedNodes[nodeIndex];
 

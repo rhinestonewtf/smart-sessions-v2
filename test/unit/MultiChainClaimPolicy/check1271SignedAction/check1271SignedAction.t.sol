@@ -8,10 +8,15 @@ import { MultiChainClaimPolicy_Unit_Test } from
 // Libraries
 import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
 import { HashLib } from "@policies/claim-recipient/lib/HashLib.sol";
+import { ArgPolicyTreeLib } from
+    "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { Lock, Token } from "@policies/claim-recipient/types/DataTypes.sol";
+import {
+    Lock, Token, Op, ParamRules, ParamRule
+} from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPolicy_Unit_Test {
     /*//////////////////////////////////////////////////////////////
@@ -50,7 +55,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     //-------------------------------------
 
     /// @notice Test check1271SignedAction with hasExecutions condition - should pass when
-    ///         executions present
+    /// executions present
     function test_check1271SignedAction_hasExecutions_withExecutions_shouldPass() public {
         // Initialize policy with CHECK_HAS_EXECUTIONS
         _initializePolicyWithHasExecutions();
@@ -75,7 +80,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Test check1271SignedAction with hasExecutions condition - should fail when no
-    ///         executions
+    /// executions
     function test_check1271SignedAction_hasExecutions_withoutExecutions_shouldFail() public {
         // Initialize policy with CHECK_HAS_EXECUTIONS
         _initializePolicyWithHasExecutions();
@@ -99,7 +104,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Test check1271SignedAction in sudo mode (no conditions) - should pass regardless of
-    ///         executions
+    /// executions
     function test_check1271SignedAction_sudoMode_shouldAlwaysPass() public {
         // Initialize policy with no conditions (bitmap = 0)
         uint8 conditionsBitmap = 0;
@@ -127,7 +132,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Test check1271SignedAction with hasExecutions condition - should fail when hash
-    ///         mismatch
+    /// mismatch
     function test_check1271SignedAction_hasExecutions_wrongHash_shouldFail() public {
         // Initialize policy with CHECK_HAS_EXECUTIONS
         _initializePolicyWithHasExecutions();
@@ -338,8 +343,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         assertTrue(result, "Action with valid tokenOut should be allowed");
     }
 
-    /// @notice Test check1271SignedAction with tokenOut condition - should fail when token
-    /// address is invalid
+    /// @notice Test check1271SignedAction with tokenOut condition - should fail when token address
+    /// is invalid
     function test_check1271SignedAction_tokenOut_invalidToken_shouldFail() public {
         address testToken = makeAddr("testToken");
         address wrongToken = makeAddr("wrongToken");
@@ -432,8 +437,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         assertFalse(result, "Action with tokenOut amount above maximum should be rejected");
     }
 
-    /// @notice Test check1271SignedAction with tokenOut condition - should pass with any token
-    /// when address(0) configured
+    /// @notice Test check1271SignedAction with tokenOut condition - should pass with any token when
+    /// address(0) configured
     function test_check1271SignedAction_tokenOut_anyToken_shouldPass() public {
         address anyToken = address(0); // address(0) means any token is allowed
         address testToken = makeAddr("testToken");
@@ -445,8 +450,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         // Initialize policy with CHECK_TOKEN_OUT for any token (address(0))
         _initializePolicyWithTokenOut(anyToken, minAmount, maxAmount, targetChainId);
 
-        // Create MultiChainCompact data with specific token (should be allowed since any token
-        //  is
+        // Create MultiChainCompact data with specific token (should be allowed since any token is
         // configured)
         bytes memory compactData =
             _createMultiChainCompactDataWithTokenOut(testToken, testAmount, targetChainId);
@@ -466,6 +470,110 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         assertTrue(
             result, "Action with any tokenOut should be allowed when address(0) is configured"
         );
+    }
+
+    //-------------------------------------
+    // 4) PRE CLAIM OPS
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with preClaimOps condition - should pass when ops match
+    /// rules
+    function test_check1271SignedAction_preClaimOps_validOps_shouldPass() public {
+        // Initialize policy with CHECK_PRE_CLAIM_OPS
+        _initializePolicyWithPreClaimOps();
+
+        // Create MultiChainCompact data with valid preClaimOps (matching selector)
+        bytes memory compactData = _createMultiChainCompactDataWithPreClaimOps(true);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithPreClaimOps(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertTrue(result, "Action with valid preClaimOps should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with preClaimOps condition - should fail when ops don't
+    /// match rules
+    function test_check1271SignedAction_preClaimOps_invalidOps_shouldFail() public {
+        // Initialize policy with CHECK_PRE_CLAIM_OPS
+        _initializePolicyWithPreClaimOps();
+
+        // Create MultiChainCompact data with invalid preClaimOps (non-matching selector)
+        bytes memory compactData = _createMultiChainCompactDataWithPreClaimOps(false);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithPreClaimOps(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with invalid preClaimOps should be rejected");
+    }
+
+    //-------------------------------------
+    // 5) QUALIFICATION
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with qualification condition - should pass when
+    /// qualification matches rules
+    function test_check1271SignedAction_qualification_validData_shouldPass() public {
+        // Initialize policy with CHECK_QUALIFICATION
+        _initializePolicyWithQualification();
+
+        // Create MultiChainCompact data with valid qualification
+        bytes memory compactData = _createMultiChainCompactDataWithQualification(true);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithQualification(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertTrue(result, "Action with valid qualification should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with qualification condition - should fail when
+    /// qualification doesn't match rules
+    function test_check1271SignedAction_qualification_invalidData_shouldFail() public {
+        // Initialize policy with CHECK_QUALIFICATION
+        _initializePolicyWithQualification();
+
+        // Create MultiChainCompact data with invalid qualification
+        bytes memory compactData = _createMultiChainCompactDataWithQualification(false);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithQualification(compactData);
+
+        // Check the action
+        bool result = multiChainClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr, // sender
+            testAccount,
+            expectedHash,
+            compactData
+        );
+
+        assertFalse(result, "Action with invalid qualification should be rejected");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -519,6 +627,145 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         return abi.encodePacked(
             header, elementHeader, keccak256("commitments"), targetData, mandateFooter
         );
+    }
+
+    /// @notice Helper function to create MultiChainCompact data with preClaimOps
+    function _createMultiChainCompactDataWithPreClaimOps(bool isValid)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader();
+        bytes memory preClaimOpsData = _createPreClaimOpsData(isValid);
+        bytes memory mandateWithPreClaimOps = _createMandateDataWithPreClaimOps(preClaimOpsData);
+
+        return abi.encodePacked(
+            header, elementHeader, keccak256("commitments"), mandateWithPreClaimOps
+        );
+    }
+
+    /// @notice Helper function to create MultiChainCompact data with qualification
+    function _createMultiChainCompactDataWithQualification(bool isValid)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader();
+        bytes memory qualificationData = _createQualificationData(isValid);
+        bytes memory mandateWithQualification =
+            _createMandateDataWithQualification(qualificationData);
+
+        return abi.encodePacked(
+            header, elementHeader, keccak256("commitments"), mandateWithQualification
+        );
+    }
+
+    /// @notice Create preClaimOps data for testing - using function selector validation
+    function _createPreClaimOpsData(bool isValid) private pure returns (bytes memory) {
+        // Create function call data with different selectors for valid/invalid cases
+        bytes memory functionCallData = isValid
+            ? abi.encodeWithSignature("allowedFunction(uint256)", uint256(123)) // This selector
+                // will match our rule
+            : abi.encodeWithSignature("forbiddenFunction(uint256)", uint256(123)); // This selector
+            // won't match
+
+        // Encode in abi.encode(to, value, data) format
+        // Layout: [0-31: to][32-63: value][64-95: data.length][96+: functionCallData]
+        // Function selector is at position 96
+        address to = address(0x1234567890123456789012345678901234567890);
+        uint256 value = 0;
+        bytes memory opData = abi.encode(to, value, functionCallData);
+
+        return abi.encodePacked(
+            uint256(1), // ops length
+            uint256(opData.length), // op data length
+            opData // op data
+        );
+    }
+
+    /// @notice Create qualification data for testing
+    function _createQualificationData(bool isValid) private pure returns (bytes memory) {
+        // Create qualification data that will pass or fail validation
+        bytes32 typehash = keccak256("TestQualification(uint256 value)");
+        bytes memory qualData = isValid
+            ? abi.encode(uint256(0x1234567890123456789012345678901234567890123456789012345678901234))
+            : abi.encode(uint256(0x9999999999999999999999999999999999999999999999999999999999999999));
+
+        return abi.encodePacked(
+            uint256(qualData.length), // qualification data length
+            typehash, // qualification typehash
+            qualData // qualification data
+        );
+    }
+
+    /// @notice Create mandate data with preClaimOps
+    function _createMandateDataWithPreClaimOps(bytes memory preClaimOpsData)
+        private
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodePacked(
+            keccak256("target"), // targetHash
+            preClaimOpsData, // preClaimOps data
+            keccak256("targetOps"), // targetOpsHash
+            keccak256("qualification") // qualificationHash
+        );
+    }
+
+    /// @notice Create mandate data with qualification
+    function _createMandateDataWithQualification(bytes memory qualificationData)
+        private
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodePacked(
+            keccak256("target"), // targetHash
+            keccak256("preClaimOps"), // preClaimOpsHash
+            keccak256("targetOps"), // targetOpsHash
+            qualificationData // qualification data
+        );
+    }
+
+    /// @notice Create ParamRules for checking function selectors in encoded ops
+    function _createSelectorParamRules() private pure returns (ParamRules memory) {
+        // Create a rule that checks the function selector in abi.encode(to, value, data) format
+        // The selector is at position 96 in the encoded data (32+32+32 for to,value,dataLength)
+        ParamRule[] memory rules = new ParamRule[](1);
+        rules[0] = ParamRule({
+            condition: ParamCondition.EQUAL,
+            offset: 128, // Direct offset to function selector position
+            length: 4, // Extract only 4 bytes for selector
+            ref: bytes32(bytes4(keccak256("allowedFunction(uint256)"))) // Convert 4-byte selector
+                // to bytes32
+         });
+
+        // Create a simple expression tree with one rule node
+        uint256[] memory packedNodes = new uint256[](1);
+        packedNodes[0] = ArgPolicyTreeLib.createRuleNode(0);
+
+        return ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
+    }
+
+    /// @notice Create ParamRules for checking qualification data
+    function _createQualificationParamRules() private pure returns (ParamRules memory) {
+        // Create a rule that checks the first parameter in qualification data
+        // Qualification format: [dataLength(32)][typehash(32)][actualData...]
+        // So first parameter starts at offset 64
+        ParamRule[] memory rules = new ParamRule[](1);
+        rules[0] = ParamRule({
+            condition: ParamCondition.EQUAL,
+            offset: 0, // Direct offset to first parameter position
+            length: 0, // Use default 32 bytes for parameter
+            ref: bytes32(uint256(0x1234567890123456789012345678901234567890123456789012345678901234))
+        });
+
+        // Create a simple expression tree with one rule node
+        uint256[] memory packedNodes = new uint256[](1);
+        packedNodes[0] = ArgPolicyTreeLib.createRuleNode(0);
+
+        return ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
     }
 
     /// @notice Create Lock struct data
@@ -596,6 +843,24 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         );
     }
 
+    /// @notice Create a simple ParamRules structure for testing
+    function _createSimpleParamRules() private pure returns (ParamRules memory) {
+        // Create a simple rule that checks if first parameter equals specific value
+        ParamRule[] memory rules = new ParamRule[](1);
+        rules[0] = ParamRule({
+            condition: ParamCondition.EQUAL,
+            offset: 0, // Check first parameter (to)
+            length: 0, // Use default 32 bytes for parameter
+            ref: bytes32(uint256(uint160(0x1234567890123456789012345678901234567890)))
+        });
+
+        // Create a simple expression tree with one rule node
+        uint256[] memory packedNodes = new uint256[](1);
+        packedNodes[0] = ArgPolicyTreeLib.createRuleNode(0); // Simple rule node referencing rule 0
+
+        return ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
+    }
+
     /// @notice Helper function to initialize policy with tokenOut condition
     function _initializePolicyWithTokenOut(
         address token,
@@ -609,8 +874,6 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         uint8 conditionsBitmap = 16; // Binary: 00010000
 
         // Create tokenOut configuration
-        // Format: bitmap + tokenOutConfigs count + (targetChainId + token + minAmount + maxAmount)
-        // per config
         bytes memory initData = abi.encodePacked(
             conditionsBitmap,
             uint256(1), // tokenOutConfigs count
@@ -622,6 +885,60 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
 
         // Initialize the policy
         multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Helper function to initialize policy with preClaimOps condition
+    function _initializePolicyWithPreClaimOps() internal {
+        // Create policy config with only CHECK_PRE_CLAIM_OPS enabled (bit 1)
+        uint8 conditionsBitmap = 2; // Binary: 00000010
+
+        // Create preClaimOps configuration with selector validation rules
+        ParamRules memory rules = _createSelectorParamRules();
+        bytes memory rulesData = _encodeParamRules(rules);
+
+        bytes memory initData = abi.encodePacked(conditionsBitmap, rulesData);
+
+        // Initialize the policy
+        multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Helper function to initialize policy with qualification condition
+    function _initializePolicyWithQualification() internal {
+        // Create policy config with only CHECK_QUALIFICATIONS enabled (bit 5)
+        uint8 conditionsBitmap = 32; // Binary: 00100000
+
+        // Create qualification configuration with parameter validation rules
+        ParamRules memory rules = _createQualificationParamRules();
+        bytes memory rulesData = _encodeParamRules(rules);
+        bytes32 typehash = keccak256("TestQualification(uint256 value)");
+
+        bytes memory initData = abi.encodePacked(conditionsBitmap, typehash, rulesData);
+
+        // Initialize the policy
+        multiChainClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Helper to encode ParamRules for initialization
+    function _encodeParamRules(ParamRules memory rules) private pure returns (bytes memory) {
+        bytes memory result = abi.encodePacked(rules.rootNodeIndex, uint256(rules.rules.length));
+
+        // Encode each rule
+        for (uint256 i = 0; i < rules.rules.length; i++) {
+            result = abi.encodePacked(
+                result,
+                uint8(rules.rules[i].condition),
+                rules.rules[i].offset,
+                rules.rules[i].length,
+                rules.rules[i].ref
+            );
+        }
+
+        // Encode packed nodes
+        for (uint256 i = 0; i < rules.packedNodes.length; i++) {
+            result = abi.encodePacked(result, rules.packedNodes[i]);
+        }
+
+        return result;
     }
 
     /// @notice Helper function to initialize policy with hasExecutions condition
@@ -648,8 +965,6 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         uint8 conditionsBitmap = 8; // Binary: 00001000
 
         // Create tokenIn configuration
-        // Format: bitmap + tokenInConfigs count + (chainId + token + minAmount + maxAmount) per
-        // config
         bytes memory initData = abi.encodePacked(
             conditionsBitmap,
             uint256(1), // tokenInConfigs count
@@ -837,5 +1152,145 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
 
         // Hash the compact using proper EIP712 hashing
         return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
+    }
+
+    /// @notice Helper function to compute expected hash with preClaimOps
+    function computeExpectedHashWithPreClaimOps(bytes calldata compactData)
+        public
+        pure
+        returns (bytes32)
+    {
+        // Parse the compact data to extract individual fields
+        address sponsor = address(bytes20(compactData[0:20]));
+        uint256 nonce = uint256(bytes32(compactData[20:52]));
+        uint256 expires = uint256(bytes32(compactData[52:84]));
+
+        // Skip otherElements (length is 0, so just 32 bytes for length)
+        uint256 offset = 84 + 32; // 116
+
+        // Parse element data
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 32; // Skip arbiter + reserved space (20 + 12 = 32)
+        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        // Parse preClaimOps data and hash it
+        bytes32 preClaimOpsHash = _parseAndHashPreClaimOps(compactData, offset);
+
+        // Skip preClaimOps data to get to remaining mandate data
+        uint256 opsLength = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        for (uint256 i = 0; i < opsLength; i++) {
+            uint256 opDataLength = uint256(bytes32(compactData[offset:offset + 32]));
+            offset += 32 + opDataLength;
+        }
+
+        bytes32 targetOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
+
+        // Hash the mandate using proper EIP712 hashing
+        bytes32 mandateHash =
+            HashLib.hashMandate(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
+
+        // Hash the element using proper EIP712 hashing
+        bytes32 notarizedElementHash =
+            HashLib.hashElement(arbiter, chainId, commitmentsHash, mandateHash);
+
+        // Create empty otherElements array
+        bytes32[] memory otherElements = new bytes32[](0);
+
+        // Hash the compact using proper EIP712 hashing
+        return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
+    }
+
+    /// @notice Helper function to compute expected hash with qualification
+    function computeExpectedHashWithQualification(bytes calldata compactData)
+        public
+        pure
+        returns (bytes32)
+    {
+        // Parse the compact data to extract individual fields
+        address sponsor = address(bytes20(compactData[0:20]));
+        uint256 nonce = uint256(bytes32(compactData[20:52]));
+        uint256 expires = uint256(bytes32(compactData[52:84]));
+
+        // Skip otherElements (length is 0, so just 32 bytes for length)
+        uint256 offset = 84 + 32; // 116
+
+        // Parse element data
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 32; // Skip arbiter + reserved space (20 + 12 = 32)
+        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 preClaimOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 targetOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        // Parse qualification data and hash it
+        bytes32 qualificationHash = _parseAndHashQualification(compactData, offset);
+
+        // Hash the mandate using proper EIP712 hashing
+        bytes32 mandateHash =
+            HashLib.hashMandate(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
+
+        // Hash the element using proper EIP712 hashing
+        bytes32 notarizedElementHash =
+            HashLib.hashElement(arbiter, chainId, commitmentsHash, mandateHash);
+
+        // Create empty otherElements array
+        bytes32[] memory otherElements = new bytes32[](0);
+
+        // Hash the compact using proper EIP712 hashing
+        return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
+    }
+
+    /// @notice Parse and hash preClaimOps data
+    function _parseAndHashPreClaimOps(
+        bytes calldata data,
+        uint256 offset
+    )
+        private
+        pure
+        returns (bytes32)
+    {
+        uint256 opsLength = uint256(bytes32(data[offset:offset + 32]));
+        offset += 32;
+
+        // Create Op structs array and parse the data
+        Op[] memory ops = new Op[](opsLength);
+        for (uint256 i = 0; i < opsLength; i++) {
+            uint256 opDataLength = uint256(bytes32(data[offset:offset + 32]));
+            offset += 32;
+            ops[i] = Op({ data: data[offset:offset + opDataLength] });
+            offset += opDataLength;
+        }
+
+        return HashLib.hashOps(ops);
+    }
+
+    /// @notice Parse and hash qualification data
+    function _parseAndHashQualification(
+        bytes calldata data,
+        uint256 offset
+    )
+        private
+        pure
+        returns (bytes32)
+    {
+        uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
+        return HashLib.hashQualification(data[offset + 64:offset + 64 + dataLength]); // Skip length
+            // + typehash, just hash the data
     }
 }

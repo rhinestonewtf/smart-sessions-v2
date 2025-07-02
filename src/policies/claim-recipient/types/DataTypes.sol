@@ -28,13 +28,13 @@ struct ParamRules {
 /// @notice Defines a condition to check against a parameter in calldata
 /// @param condition Type of condition to check
 /// @param offset Offset in calldata to read parameter (bytes)
-/// @param isLimited Whether this parameter has a usage limit
+/// @param length Length of the parameter in bytes (default is 32 bytes)
 /// @param ref Reference value to compare against
 /// @param usage Limit information if isLimited is true
 struct ParamRule {
     ParamCondition condition;
     uint64 offset;
-    bool isLimited;
+    uint8 length;
     bytes32 ref;
 }
 
@@ -53,6 +53,8 @@ struct TokenOutConfig {
 /*//////////////////////////////////////////////////////////////
                         MULITCHAINCOMPACT
 //////////////////////////////////////////////////////////////*/
+
+// TODO: Use latest
 
 struct Token {
     address token;
