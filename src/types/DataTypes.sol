@@ -72,7 +72,6 @@ struct Session {
 ///      a scope, a reset period, and an allocator address.
 struct SmartSessionEmissaryConfig {
     address sender;
-
     Scope scope;
     ResetPeriod resetPeriod;
     address allocator;

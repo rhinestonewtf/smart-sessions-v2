@@ -6,8 +6,7 @@ import { SmartSessionEmissary_Unit_Test } from
     "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
 
 // Contracts
-import { MultiChainClaimRecipientPolicy } from
-    "@policies/claim-recipient/MultiChainClaimRecipientPolicy.sol";
+import { MultiChainClaimRecipientPolicy } from "@mocks/MultiChainClaimRecipientPolicy.sol";
 
 contract MultiChainClaimRecipient_Unit_Test is SmartSessionEmissary_Unit_Test {
     /*//////////////////////////////////////////////////////////////
