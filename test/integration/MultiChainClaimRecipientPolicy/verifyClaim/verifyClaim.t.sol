@@ -4,8 +4,7 @@ pragma solidity >=0.8.27;
 // Dependencies
 import { MultiChainClaimRecipient_Unit_Test } from
     "@test/integration/MultiChainClaimRecipientPolicy/MultiChainClaimRecipient.t.sol";
-import { MultiChainClaimRecipientPolicy } from
-    "@policies/claim-recipient/MultiChainClaimRecipientPolicy.sol";
+import { MultiChainClaimRecipientPolicy } from "@mocks/MultiChainClaimRecipientPolicy.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";

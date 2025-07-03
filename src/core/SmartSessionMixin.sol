@@ -92,7 +92,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             account,
             enableData.session,
             config.permissionId,
-            config.arbiter,
+            config.sender,
             lockTag,
             enableData.expires,
             config.allocator,
@@ -128,7 +128,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             account,
             disableData.session,
             config.permissionId,
-            config.arbiter,
+            config.sender,
             lockTag,
             disableData.expires,
             config.allocator,
@@ -145,7 +145,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param account The address of the account for which policies are being enabled
     /// @param enableData The data containing session and policy information to be enabled
     /// @param permissionId The unique identifier for the permission set
-    /// @param arbiter The address of the arbiter for the session
+    /// @param sender The address of the sender for the session
     /// @param lockTag The lock tag associated with the session
     /// @param allocator The address of the allocator for the session
     /// @param allocatorSig The signature from the allocator authorizing the session
@@ -153,7 +153,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         address account,
         EnableSession memory enableData,
         PermissionId permissionId,
-        address arbiter,
+        address sender,
         bytes12 lockTag,
         uint256 expires,
         address allocator,
@@ -164,8 +164,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     {
         // Increment nonce to prevent replay attacks
         uint256 nonce = $emissaryNonce[account][lockTag]++;
-        bytes32 hash =
-            enableData.getAndVerifyDigest(account, nonce, expires, lockTag, arbiter, allocator);
+        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, expires, lockTag, sender);
 
         // Verify the user and allocator signatures
         hash.verifySignatures(account, allocator, allocatorSig, userSig);
@@ -205,7 +204,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         }
 
         // Mark the session as enabled
-        $smartSessionConfig[arbiter][lockTag].add({
+        $smartSessionConfig[sender][lockTag].add({
             account: account,
             value: PermissionId.unwrap(permissionId)
         });
@@ -216,7 +215,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param account The address of the account for which policies are being disabled
     /// @param disableData The data containing session and policy information to be disabled
     /// @param permissionId The unique identifier for the permission set
-    /// @param arbiter The address of the arbiter for the session
+    /// @param sender The address of the sender for the session
     /// @param lockTag The lock tag associated with the session
     /// @param allocator The address of the allocator for the session
     /// @param allocatorSig The signature from the allocator authorizing the session
@@ -225,7 +224,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         address account,
         DisableSession memory disableData,
         PermissionId permissionId,
-        address arbiter,
+        address sender,
         bytes12 lockTag,
         uint256 expires,
         address allocator,
@@ -238,15 +237,14 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         uint256 nonce = $emissaryNonce[account][lockTag]++;
 
         // Get the hash for the disable operation
-        bytes32 hash = disableData.getAndVerifyDigest(
-            permissionId, account, nonce, expires, lockTag, arbiter, allocator
-        );
+        bytes32 hash =
+            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
 
         // Verify the user and allocator signatures
         hash.verifySignatures(account, allocator, allocatorSig, userSig);
 
         // Remove the session from the smart session config
-        _removeSession(permissionId, account, lockTag, arbiter);
+        _removeSession(permissionId, account, lockTag, sender);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -365,53 +363,18 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         ) {
             revert InvalidPermissionId(permissionId);
         }
-        bytes4 selector = bytes4(callData[0:4]);
 
         /*//////////////////////////////////////////////////////////////
                                 HANDLE EXECUTIONS
         //////////////////////////////////////////////////////////////*/
 
-        // if the selector indicates that the userOp is an execution,
-        // action policies have to be checked
-        if (selector == IERC7579Account.execute.selector) {
-            // Decode ERC7579 execution mode
-            (CallType callType, ExecType execType) = callData.get7579ExecutionTypes();
-            // ERC7579 allows for different execution types, but SmartSession only supports the
-            // default execution type
-            if (ExecType.unwrap(execType) != ExecType.unwrap(EXECTYPE_DEFAULT)) {
-                revert UnsupportedExecutionType();
-            }
-            // DEFAULT EXEC & BATCH CALL
-            else if (callType == CALLTYPE_BATCH) {
-                $actionPolicies.actionPolicies.checkBatch7579Exec({
-                    callData: callData,
-                    permissionId: permissionId,
-                    minPolicies: 1, // minimum of one actionPolicy must be set.
-                    account: account
-                });
-            }
-            // DEFAULT EXEC & SINGLE CALL
-            else if (callType == CALLTYPE_SINGLE) {
-                (address target, uint256 value, bytes calldata decodedCallData) =
-                    callData.decodeUserOpCallData().decodeSingle();
-                $actionPolicies.actionPolicies.checkSingle7579Exec({
-                    permissionId: permissionId,
-                    target: target,
-                    value: value,
-                    callData: decodedCallData,
-                    minPolicies: 1, // minimum of one actionPolicy must be set.
-                    account: account
-                });
-            }
-            // DelegateCalls are not supported by SmartSessionExecutionVerifier
-            else {
-                revert UnsupportedExecutionType();
-            }
-        }
-        // All other executions are not supported
-        else {
-            revert UnsupportedSelector();
-        }
+        // Check action policies for the given permissionId and batch execution
+        $actionPolicies.actionPolicies.checkBatch7579Exec({
+            callData: callData,
+            permissionId: permissionId,
+            minPolicies: 1, // minimum of one actionPolicy must be set.
+            account: account
+        });
 
         /*//////////////////////////////////////////////////////////////
                                 CHECK SESSION KEY
@@ -437,6 +400,8 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @param sender The address initiating the signature validation
     /// @param hash The hash of the data to be signed
     /// @param signature The signature to be validated (first 32 bytes contain the permissionId)
+    /// @param sponsor The address of the account for which the signature is being validated
+    /// @param lockTag The lock tag associated with the session
     /// @return valid Boolean indicating whether the signature is valid
     function _erc1271IsValidSignatureNowCalldata(
         address sender,

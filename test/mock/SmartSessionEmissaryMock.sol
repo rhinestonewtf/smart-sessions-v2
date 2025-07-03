@@ -28,16 +28,16 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
     ///      use the registry
     /// @param sessions An array of Session structures to be enabled
     /// @param lockTag A bytes12 value used to tag the lock
-    /// @param arbiter The address of the arbiter for the sessions
+    /// @param sender The address of the sender for the sessions
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function enableSessions(
         Session[] calldata sessions,
         bytes12 lockTag,
-        address arbiter
+        address sender
     )
         external
         returns (PermissionId[] memory permissionIds)
     {
-        return _enableSessions(sessions, msg.sender, true, lockTag, arbiter);
+        return _enableSessions(sessions, msg.sender, true, lockTag, sender);
     }
 }

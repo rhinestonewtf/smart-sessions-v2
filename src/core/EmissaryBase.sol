@@ -11,7 +11,7 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 // Libraries
 import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
-import { EIP712Hash } from "@lib/EIP712Hash.sol";
+import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { CheckSignatures } from "@checknsignatures/CheckNSignatures.sol";
 import { ECDSA } from "@solady/utils/ECDSA.sol";
@@ -98,7 +98,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
 
         // Calculate EIP-712 hash for configuration
-        bytes32 hash = EIP712Hash.config({
+        bytes32 hash = HashLibV2.hashConfig({
             sponsor: account,
             validator: config.validator,
             configId: config.configId,

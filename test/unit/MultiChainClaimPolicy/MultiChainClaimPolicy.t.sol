@@ -2,19 +2,18 @@
 pragma solidity >=0.8.27;
 
 // Dependencies
-import { SmartSessionEmissary_Unit_Test } from
-    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
+import { Base_Test } from "@test/Base.t.sol";
 
 // Contracts
-import { MultiChainClaimRecipientPolicy } from "@mocks/MultiChainClaimRecipientPolicy.sol";
+import { MultiChainClaimPolicy } from "@policies/claim-recipient/MultiChainClaimPolicy.sol";
 
-contract MultiChainClaimRecipient_Unit_Test is SmartSessionEmissary_Unit_Test {
+contract MultiChainClaimPolicy_Unit_Test is Base_Test {
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice The MultiChainClaimRecipientPolicy contract instance.
-    MultiChainClaimRecipientPolicy internal multiChainClaimRecipient;
+    /// @notice The MultiChainClaimPolicy contract instance.
+    MultiChainClaimPolicy internal multiChainClaimPolicy;
 
     /*//////////////////////////////////////////////////////////////
                                    SETUP
@@ -23,7 +22,7 @@ contract MultiChainClaimRecipient_Unit_Test is SmartSessionEmissary_Unit_Test {
     function setUp() public virtual override {
         // Call the base setup function.
         super.setUp();
-        // Deploy the MultiChainClaimRecipientPolicy contract.
-        multiChainClaimRecipient = new MultiChainClaimRecipientPolicy();
+        // Deploy the MultiChainClaimPolicy contract.
+        multiChainClaimPolicy = new MultiChainClaimPolicy();
     }
 }
