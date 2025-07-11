@@ -88,17 +88,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
 
         // Enable policies
-        _enablePolicies(
-            account,
-            enableData.session,
-            config.permissionId,
-            config.sender,
-            lockTag,
-            enableData.expires,
-            config.allocator,
-            enableData.allocatorSig,
-            enableData.userSig
-        );
+        _enablePolicies(account, enableData, config, lockTag);
 
         // Emit event if the session is enabled
         emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
@@ -144,45 +134,41 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     ///         required signatures.
     /// @param account The address of the account for which policies are being enabled
     /// @param enableData The data containing session and policy information to be enabled
-    /// @param permissionId The unique identifier for the permission set
-    /// @param sender The address of the sender for the session
+    /// @param config The Smart Session Emissary configuration
     /// @param lockTag The lock tag associated with the session
-    /// @param allocator The address of the allocator for the session
-    /// @param allocatorSig The signature from the allocator authorizing the session
     function _enablePolicies(
         address account,
-        EnableSession memory enableData,
-        PermissionId permissionId,
-        address sender,
-        bytes12 lockTag,
-        uint256 expires,
-        address allocator,
-        bytes calldata allocatorSig,
-        bytes calldata userSig
+        SmartSessionEmissaryEnable calldata enableData,
+        SmartSessionEmissaryConfig calldata config,
+        bytes12 lockTag
     )
         internal
     {
         // Increment nonce to prevent replay attacks
         uint256 nonce = $emissaryNonce[account][lockTag]++;
-        bytes32 hash = enableData.getAndVerifyDigest(account, nonce, expires, lockTag, sender);
+        bytes32 hash = enableData.session.getAndVerifyDigest(
+            account, nonce, enableData.expires, lockTag, config.sender
+        );
 
         // Verify the user and allocator signatures
-        hash.verifySignatures(account, allocator, allocatorSig, userSig);
+        hash.verifySignatures(
+            account, config.allocator, enableData.allocatorSig, enableData.userSig
+        );
 
         // Enable ERC1271 policies
         $erc1271Policies.enable({
             policyType: PolicyType.ERC1271,
-            permissionId: permissionId,
-            configId: permissionId.toErc1271PolicyId().toConfigId(),
-            policyDatas: enableData.sessionToEnable.erc1271Policies,
+            permissionId: config.permissionId,
+            configId: config.permissionId.toErc1271PolicyId().toConfigId(),
+            policyDatas: enableData.session.sessionToEnable.erc1271Policies,
             useRegistry: false,
             account: account
         });
 
         // Enable action policies
         $actionPolicies.enable({
-            permissionId: permissionId,
-            actionPolicyDatas: enableData.sessionToEnable.actions,
+            permissionId: config.permissionId,
+            actionPolicyDatas: enableData.session.sessionToEnable.actions,
             useRegistry: false,
             account: account
         });
@@ -193,20 +179,20 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         // b) ISessionValidator is set => just add policies (above)
         // Attention: if the same policy that has already been configured is added again,
         // the policy will be overwritten with the new configuration
-        if (!_isISessionValidatorSet(permissionId, account)) {
+        if (!_isISessionValidatorSet(config.permissionId, account)) {
             $sessionValidators.enable({
-                permissionId: permissionId,
-                sessionValidator: enableData.sessionToEnable.sessionValidator,
-                sessionValidatorConfig: enableData.sessionToEnable.sessionValidatorInitData,
+                permissionId: config.permissionId,
+                sessionValidator: enableData.session.sessionToEnable.sessionValidator,
+                sessionValidatorConfig: enableData.session.sessionToEnable.sessionValidatorInitData,
                 useRegistry: false,
                 account: account
             });
         }
 
         // Mark the session as enabled
-        $smartSessionConfig[sender][lockTag].add({
+        $smartSessionConfig[config.sender][lockTag].add({
             account: account,
-            value: PermissionId.unwrap(permissionId)
+            value: PermissionId.unwrap(config.permissionId)
         });
     }
 
