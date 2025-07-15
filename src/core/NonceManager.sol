@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.25;
 
-// Types
-import { PermissionId } from "@smartsessions/DataTypes.sol";
-
 /// @title Nonce Manager
 /// @dev Abstract contract for managing nonces for smart sessions and emissary configs
 abstract contract NonceManager {
