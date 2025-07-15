@@ -230,21 +230,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                               STATUS CHECKS
     //////////////////////////////////////////////////////////////*/
 
-    // /// @notice Check if a session validator is set
-    // /// @param permissionId The permission ID to check
-    // /// @param account The account address
-    // /// @return Boolean indicating whether the session validator is set
-    // function isISessionValidatorSet(
-    //     PermissionId permissionId,
-    //     address account
-    // )
-    //     external
-    //     view
-    //     returns (bool)
-    // {
-    //     return _isISessionValidatorSet(permissionId, account);
-    // }
-
     /// @notice Check if a permission is enabled for an account
     /// @param permissionId The permission ID to check
     /// @param account The account address
@@ -265,105 +250,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             account, PermissionId.unwrap(permissionId)
         );
     }
-
-    // /// @notice Check if ERC1271 policies are enabled for an account
-    // /// @param account The account address
-    // /// @param permissionId The permission ID
-    // /// @param erc1271Policies The ERC1271 policy data array to check
-    // /// @return Boolean indicating whether the ERC1271 policies are enabled
-    // function areERC1271PoliciesEnabled(
-    //     address account,
-    //     PermissionId permissionId,
-    //     PolicyData[] calldata erc1271Policies
-    // )
-    //     external
-    //     view
-    //     returns (bool)
-    // {
-    //     return $erc1271Policies.areEnabled({
-    //         permissionId: permissionId,
-    //         smartAccount: account,
-    //         policyDatas: erc1271Policies
-    //     });
-    // }
-
-    // /// @notice Check if actions are enabled for an account
-    // /// @param account The account address
-    // /// @param permissionId The permission ID
-    // /// @param actions The action data array to check
-    // /// @return Boolean indicating whether the actions are enabled
-    // function areActionsEnabled(
-    //     address account,
-    //     PermissionId permissionId,
-    //     ActionData[] calldata actions
-    // )
-    //     external
-    //     view
-    //     returns (bool)
-    // {
-    //     return $actionPolicies.areEnabled({
-    //         permissionId: permissionId,
-    //         smartAccount: account,
-    //         actionPolicyDatas: actions
-    //     });
-    // }
-
-    // /// @notice Check if an action policy is enabled
-    // /// @param account The account address
-    // /// @param permissionId The permission ID
-    // /// @param actionId The action ID
-    // /// @param policy The policy address
-    // /// @return Boolean indicating whether the action policy is enabled
-    // function isActionPolicyEnabled(
-    //     address account,
-    //     PermissionId permissionId,
-    //     ActionId actionId,
-    //     address policy
-    // )
-    //     external
-    //     view
-    //     returns (bool)
-    // {
-    //     return $actionPolicies.actionPolicies[actionId].policyList[permissionId].contains(
-    //         account, policy
-    //     );
-    // }
-
-    // /// @notice Check if an action ID is enabled
-    // /// @param account The account address
-    // /// @param permissionId The permission ID
-    // /// @param actionId The action ID
-    // /// @return Boolean indicating whether the action ID is enabled
-    // function isActionIdEnabled(
-    //     address account,
-    //     PermissionId permissionId,
-    //     ActionId actionId
-    // )
-    //     external
-    //     view
-    //     returns (bool)
-    // {
-    //     return $actionPolicies.enabledActionIds[permissionId].contains(
-    //         account, ActionId.unwrap(actionId)
-    //     );
-    // }
-
-    // /// @notice Check if an ERC1271 policy is enabled for a specific account and permission ID
-    // /// @param account The account address
-    // /// @param permissionId The permission ID
-    // /// @param policy The policy address
-    // /// @return Boolean indicating whether the ERC1271 policy is enabled
-    // function isERC1271PolicyEnabled(
-    //     address account,
-    //     PermissionId permissionId,
-    //     address policy
-    // )
-    //     external
-    //     view
-    //     returns (bool)
-    // {
-    //     return $erc1271Policies.policyList[permissionId].contains(account, policy);
-    // }
 
     /*//////////////////////////////////////////////////////////////
                               GETTERS
