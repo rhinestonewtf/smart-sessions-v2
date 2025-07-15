@@ -3,6 +3,9 @@ cache/
 out/
 broadcast
 
+# Editor
+.vscode/
+
 # Docs
 docs/
 
