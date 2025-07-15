@@ -139,9 +139,12 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             account, nonce, enableData.expires, lockTag, config.sender
         );
 
+        // Check if the permissionId is already enabled for the account
+        bool isInit = $smartSessionConfig[config.sender][lockTag].length(account) == 0;
+
         // Verify the user and allocator signatures
         hash.verifySignatures(
-            account, config.allocator, enableData.allocatorSig, enableData.userSig
+            account, config.allocator, enableData.allocatorSig, enableData.userSig, isInit
         );
 
         // Enable ERC1271 policies
@@ -216,7 +219,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
 
         // Verify the user and allocator signatures
-        hash.verifySignatures(account, allocator, allocatorSig, userSig);
+        hash.verifySignatures(account, allocator, allocatorSig, userSig, false);
 
         // Remove the session from the smart session config
         _removeSession(permissionId, account, lockTag, sender);

@@ -145,6 +145,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
     }
 
     function test_setConfig_InvalidAllocatorSignature() public {
+        test_setConfig_Success();
         // Arrange - use a different wallet to create invalid signature
         Vm.Wallet memory wrongWallet = vm.createWallet("wrongAllocator");
         ChainDigest[] memory chainDigests = testEnableData.session.hashesAndChainIds;

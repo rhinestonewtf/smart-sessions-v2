@@ -37,12 +37,14 @@ library SignatureLib {
     /// @param user The address of the user
     /// @param allocatorSignature The signature of the allocator
     /// @param userSignature The signature of the user
+    /// @param isInit Whether this is an initialization call
     function verifySignatures(
         bytes32 hash,
         address allocator,
         address user,
         bytes calldata allocatorSignature,
-        bytes calldata userSignature
+        bytes calldata userSignature,
+        bool isInit
     )
         internal
         view
@@ -55,10 +57,12 @@ library SignatureLib {
             );
         }
 
-        // Verify allocator signature
-        require(
-            allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSignature),
-            InvalidAllocatorSignature()
-        );
+        // If this is not an initialization call, verify the allocator signature
+        if (!isInit) {
+            require(
+                allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSignature),
+                InvalidAllocatorSignature()
+            );
+        }
     }
 }

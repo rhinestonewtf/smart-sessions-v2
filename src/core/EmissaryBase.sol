@@ -111,14 +111,18 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         // Hash the typed data structure (excluding chainId as it's implicitly checked)
         bytes32 digest = _getTypedDataHashSansChainId(hash);
 
+        // Load configuration
+        Compressed.Bytes storage $config =
+            $statelessValidatorConfig[account][config.configId][lockTag][config.validator];
+        // Check if the configuration is already initialized
+        bool isInit = $config.sload().length == 0;
+
         // Verify user and allocator signatures
         digest.verifySignatures(
-            config.allocator, account, enableData.allocatorSig, enableData.userSig
+            config.allocator, account, enableData.allocatorSig, enableData.userSig, isInit
         );
 
         // Store configuration
-        Compressed.Bytes storage $config =
-            $statelessValidatorConfig[account][config.configId][lockTag][config.validator];
         $config.sstore(config.validatorConfig);
 
         // Emit configuration update event
