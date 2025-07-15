@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { NonceManager } from "@core/NonceManager.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 // Libraries
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
@@ -17,22 +16,16 @@ import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
-import { ISmartSession } from "@smartsessions/ISmartSession.sol";
 
 // Types
 import {
     PermissionId,
     ActionId,
-    ActionData,
-    SmartSessionMode,
     SignerConf,
     EnumerableActionPolicy,
     PolicyType,
     EMPTY_PERMISSIONID,
-    Policy,
-    SmartSessionMode,
-    PolicyData,
-    ConfigId
+    Policy
 } from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
 
@@ -456,6 +449,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         returns (PermissionId[] memory permissionIds)
     {
         bytes32[] memory _permissionIds = $smartSessionConfig[sender][lockTag].values(account);
+        // solhint-disable-next-line no-inline-assembly
         assembly {
             permissionIds := _permissionIds
         }

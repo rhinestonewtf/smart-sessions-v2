@@ -6,8 +6,6 @@ import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
 
 // Libraries
-import { ArgPolicyTreeLib } from
-    "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
 import { DecodeLib } from "@policies/claim-recipient/lib/DecodeLib.sol";
@@ -17,13 +15,12 @@ import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeL
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
     ParamRules,
-    ParamRule,
-    TokenAmountConfig,
-    MultichainCompact,
     TokenInConfig,
     TokenOutConfig
 } from "@policies/claim-recipient/types/DataTypes.sol";
 
+// Temp
+// solhint-disable no-console
 import { console } from "@forge-std/console.sol";
 
 /// @title MultiChainClaimPolicy

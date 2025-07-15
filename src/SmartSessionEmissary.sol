@@ -6,9 +6,6 @@ import { EmissaryBase } from "@core/EmissaryBase.sol";
 import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
 
-// Interfaces
-import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
-
 // Libraries
 import {
     ModeLib,
@@ -20,13 +17,7 @@ import {
 } from "@lib/ModeLib.sol";
 
 // Types
-import {
-    INVALID_RETURN,
-    SmartSessionEmissaryConfig,
-    SmartSessionEmissaryEnable,
-    EmissaryConfig,
-    EmissaryEnable
-} from "@types/DataTypes.sol";
+import { INVALID_RETURN } from "@types/DataTypes.sol";
 
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
