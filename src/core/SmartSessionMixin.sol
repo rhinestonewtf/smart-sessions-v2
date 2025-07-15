@@ -4,10 +4,6 @@ pragma solidity ^0.8.28;
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 
-// Interfaces
-import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
-import { IERC1271, EIP1271_MAGIC_VALUE } from "@modulekit/module-bases/interfaces/IERC1271.sol";
-
 // Libraries
 import { EncodeLib } from "@smartsessions/lib/EncodeLib.sol";
 import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol";
@@ -26,20 +22,13 @@ import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
-import { PermissionId, SmartSessionMode, PolicyType, ConfigId } from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode, PolicyType } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable
 } from "@interfaces/ISmartSessionEmissary.sol";
-import {
-    ExecType,
-    CallType,
-    CALLTYPE_BATCH,
-    CALLTYPE_SINGLE,
-    EXECTYPE_DEFAULT
-} from "erc7579/lib/ModeLib.sol";
-import { EnableSession, DisableSession, INVALID_RETURN, Session } from "@types/DataTypes.sol";
+import { DisableSession, INVALID_RETURN } from "@types/DataTypes.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
@@ -258,6 +247,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             msg.sender, claimHash, emissaryData, sponsor, lockTag
         );
         /// @solidity memory-safe-assembly
+        // solhint-disable-next-line no-inline-assembly
         assembly {
             // `success ? bytes4(keccak256("verifyClaim(address,bytes32,bytes32,bytes,bytes12)")) :
             // 0xffffffff`.
