@@ -12,12 +12,11 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
-import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
-import { CheckSignatures } from "@checknsignatures/CheckNSignatures.sol";
+import { SignatureLib } from "@lib/SignatureLib.sol";
+import { ECDSA } from "@solady/utils/ECDSA.sol";
 import { ECDSA } from "@solady/utils/ECDSA.sol";
 import { WebAuthn } from "@webauthn/WebAuthn.sol";
 import { LibSort } from "@solady/utils/LibSort.sol";
-import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
 import {
@@ -36,7 +35,6 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
     //////////////////////////////////////////////////////////////*/
 
     using IdLib for *;
-    using SignatureCheckerLib for *;
     using Compressed for *;
     using LibSort for *;
     using SignatureLib for *;
@@ -374,10 +372,15 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
             return false;
         }
 
-        // recover the signers from the signatures
-        address[] memory signers = CheckSignatures.recoverNSignatures(
-            ECDSA.toEthSignedMessageHash(hash), signature, _threshold
-        );
+        // recover the signers from the signatures using ecrecover
+        uint256 sigCount = signature.length / 65;
+        address[] memory signers = new address[](sigCount);
+        for (uint256 i = 0; i < sigCount; i++) {
+            // recover the signer from the hash and signature
+            address signer = SignatureLib.recoverECDSA(hash, signature[i * 65:(i + 1) * 65]);
+            // store the signer
+            signers[i] = signer;
+        }
 
         // sort and uniquify the signers to make sure a signer is not reused
         signers.sort();
@@ -385,8 +388,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
 
         // check if the signers are owners
         uint256 validSigners;
-        uint256 signersLength = signers.length;
-        for (uint256 i = 0; i < signersLength; i++) {
+        for (uint256 i = 0; i < sigCount; i++) {
             (bool found,) = _owners.searchSorted(signers[i]);
             if (found) {
                 validSigners++;
