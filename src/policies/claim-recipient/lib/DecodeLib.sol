@@ -260,7 +260,8 @@ library DecodeLib {
         address recipient = address(bytes20(data[offset:offset + 20]));
         uint256 targetChain = uint256(bytes32(data[offset + 32:offset + 64]));
         uint256 fillExpires = uint256(bytes32(data[offset + 64:offset + 96]));
-        offset += 96;
+        address claimProofer = address(bytes20(data[offset + 96:offset + 116]));
+        offset += 128;
 
         // Validate recipient and targetChain if required
         if (config.hasCheckRecipientAndTargetChain()) {
@@ -295,7 +296,8 @@ library DecodeLib {
         }
 
         // Calculate Target struct hash
-        targetHash = HashLib.hashTarget(recipient, tokenOutHash, targetChain, fillExpires);
+        targetHash =
+            HashLib.hashTarget(recipient, tokenOutHash, targetChain, fillExpires, claimProofer);
         return (true, targetHash, offset);
     }
 

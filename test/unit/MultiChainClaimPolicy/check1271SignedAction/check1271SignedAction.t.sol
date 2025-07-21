@@ -761,7 +761,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         );
     }
 
-    /// @notice Create the target data (recipient + reserved + targetChain + fillExpires + tokenOut)
+    /// @notice Create the target data (recipient + reserved + targetChain + fillExpires +
+    /// claimHashProofer + tokenOut)
     function _createTargetData(
         address token,
         uint256 amount,
@@ -776,6 +777,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             bytes12(0), // reserved (12 bytes)
             targetChainId, // targetChain (32 bytes)
             uint256(block.timestamp + 7200), // fillExpires (32 bytes)
+            address(0xABcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD), // claimHashProofer (20 bytes)
+            bytes12(0), // reserved (12 bytes)
             uint256(1), // tokenOut length (32 bytes)
             token, // token address (20 bytes)
             amount // token amount (32 bytes)
@@ -982,6 +985,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         offset += 32;
         uint256 fillExpires = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
+        address claimHashProofer = address(bytes20(compactData[offset:offset + 20]));
+        offset += 32; // Skip claimHashProofer + reserved space (20 + 12 = 32)
 
         // Parse tokenOut (Token structs)
         uint256 tokenOutLength = uint256(bytes32(compactData[offset:offset + 32]));
@@ -1001,7 +1006,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         bytes32 tokenOutHash = HashLib.hashTokenOut(tokens);
 
         // Hash the target using proper EIP712 hashing
-        bytes32 targetHash = HashLib.hashTarget(recipient, tokenOutHash, targetChain, fillExpires);
+        bytes32 targetHash =
+            HashLib.hashTarget(recipient, tokenOutHash, targetChain, fillExpires, claimHashProofer);
 
         // Continue parsing the rest of the data
         bytes32 preClaimOpsHash = bytes32(compactData[offset:offset + 32]);
