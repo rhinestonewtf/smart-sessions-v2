@@ -68,7 +68,7 @@ bytes32 constant MULTICHAIN_SESSION_TYPEHASH =
 bytes32 constant _MULTICHAIN_DOMAIN_TYPEHASH =
     0xb03948446334eb9b2196d5eb166f69b9d49403eb4a12f36de8d3f9f3cb8e15c3;
 
-// keccak256(abi.encode(_MULTICHAIN_DOMAIN_TYPEHASH, keccak256("SmartSessionEmissary"),
+// keccak256(abi.encode(_MULTICHAIN_DOMAIN_TYPEHASH,keccak256("SmartSessionEmissary"),
 // keccak256("1")));
 bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
     0xe4b7e03cf1e8e7a6af0eec6f72a68d532e03fdaad0b8326461731cb31803a084;
@@ -86,7 +86,7 @@ bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
 bytes32 constant SIGNED_PERMISSION_DISABLE_TYPEHASH =
     0xbe77f16494275ce0b6e48cb4bfa5492e513269b28d7e3db69722fc165f38345a;
 
-// ChainDisable(uint64 chainId, SignedPermissionDisable disable)
+// ChainDisable(uint64 chainId,SignedPermissionDisable disable)
 bytes32 constant CHAIN_DISABLE_TYPEHASH =
     0x0efb04ccccc3ee314a40813c91dd0a97fa116a827af4767703b8f74697cb0831;
 
