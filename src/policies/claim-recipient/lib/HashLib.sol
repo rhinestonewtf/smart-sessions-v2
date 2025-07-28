@@ -25,7 +25,7 @@ library HashLib {
     /// @notice EIP-712 typehash for the `Target` struct.
     bytes32 internal constant TYPEHASH_TARGET = keccak256(
         bytes(
-            "Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry,address claimProofer)Token(address token,uint256 amount)"
+            "Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry)Token(address token,uint256 amount)"
         )
     );
 
@@ -88,17 +88,14 @@ library HashLib {
         address recipient,
         bytes32 tokenOutHash,
         uint256 targetChain,
-        uint256 fillExpires,
-        address claimProofer
+        uint256 fillExpires
     )
         internal
         pure
         returns (bytes32)
     {
         return keccak256(
-            abi.encode(
-                TYPEHASH_TARGET, recipient, tokenOutHash, targetChain, fillExpires, claimProofer
-            )
+            abi.encode(TYPEHASH_TARGET, recipient, tokenOutHash, targetChain, fillExpires)
         );
     }
 

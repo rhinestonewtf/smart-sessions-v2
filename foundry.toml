@@ -13,6 +13,7 @@ optimizer = true
 optimizer_runs = 1
 dynamic_test_linking = true
 ignored_warnings_from = ["node_modules"]
+via_ir = true
 
 [rpc_endpoints]
 mainnet = "${MAINNET_RPC_URL}" 
