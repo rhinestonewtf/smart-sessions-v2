@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.28;
 
-// Interfaces
-import { IERC1271, EIP1271_MAGIC_VALUE } from "@modulekit/module-bases/interfaces/IERC1271.sol";
-
 // Libraries
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 
@@ -51,16 +48,13 @@ library SignatureLib {
     {
         // Verify user signature if the sender is not the user
         if (msg.sender != user) {
-            require(
-                IERC1271(user).isValidSignature(hash, userSignature) == EIP1271_MAGIC_VALUE,
-                InvalidUserSignature()
-            );
+            require(user.isValidSignatureNowCalldata(hash, userSignature), InvalidUserSignature());
         }
 
         // If this is not an initialization call, verify the allocator signature
         if (!isInit) {
             require(
-                allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSignature),
+                allocator.isValidSignatureNowCalldata(hash, allocatorSignature),
                 InvalidAllocatorSignature()
             );
         }

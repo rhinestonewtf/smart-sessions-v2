@@ -18,7 +18,7 @@ importers:
         specifier: github:rhinestonewtf/checknsignatures
         version: https://codeload.github.com/rhinestonewtf/checknsignatures/tar.gz/f8389c186fb58480a9a42d598adebaa1a557762d
       '@rhinestone/compact-utils':
-        specifier: git+https://github.com/rhinestonewtf/compact-utils.git
+        specifier: github:rhinestonewtf/compact-utils
         version: git+https://git@github.com:rhinestonewtf/compact-utils.git#2add6cdf68a0632b1baffd8f9448c4b0bf9c4f85(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)
       '@rhinestone/flatbytes':
         specifier: github:rhinestonewtf/flatbytes
@@ -29,6 +29,9 @@ importers:
       '@uniswap/permit2':
         specifier: github:Uniswap/permit2
         version: https://codeload.github.com/Uniswap/permit2/tar.gz/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219
+      '@uniswap/the-compact':
+        specifier: github:uniswap/the-compact#v1
+        version: the-compact@https://codeload.github.com/uniswap/the-compact/tar.gz/b9c3b544151106a23b8f9d800751166a6089cf00
       FreshCryptoLib:
         specifier: github:rdubois-crypto/FreshCryptoLib
         version: https://codeload.github.com/rdubois-crypto/FreshCryptoLib/tar.gz/8179e08cac72072bd260796633fec41fdfd5b441
@@ -2166,6 +2169,10 @@ packages:
 
   text-table@0.2.0:
     resolution: {integrity: sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==}
+
+  the-compact@https://codeload.github.com/uniswap/the-compact/tar.gz/b9c3b544151106a23b8f9d800751166a6089cf00:
+    resolution: {tarball: https://codeload.github.com/uniswap/the-compact/tar.gz/b9c3b544151106a23b8f9d800751166a6089cf00}
+    version: 1.0.0
 
   tmp@0.0.33:
     resolution: {integrity: sha512-jRCJlojKnZ3addtTOjdIqoRuPEKBvNXcGYqzO6zWZX8KfKEpnGY5jfggJQ3EjKuu8D4bJRr0y+cYJFmYbImXGw==}
@@ -5299,6 +5306,8 @@ snapshots:
       typical: 2.6.1
 
   text-table@0.2.0: {}
+
+  the-compact@https://codeload.github.com/uniswap/the-compact/tar.gz/b9c3b544151106a23b8f9d800751166a6089cf00: {}
 
   tmp@0.0.33:
     dependencies:

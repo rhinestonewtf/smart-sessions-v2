@@ -113,7 +113,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    function test_verifyExecution_InvalidPermissionId() public {
+    function test_verifyExecution_RevertsWhen_InvalidPermissionId() public {
         // Arrange
         PermissionId invalidPermissionId = PermissionId.wrap(keccak256("invalid"));
         bytes memory data = packData(

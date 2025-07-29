@@ -107,7 +107,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         assertTrue(isEnabled, "Session should be enabled after setConfig");
     }
 
-    function test_setConfig_ExpiredEnableData() public {
+    function test_setConfig_RevertsWhen_ExpiredEnableData() public {
         // Arrange - set expires to past timestamp
         testEnableData.expires = block.timestamp - 1;
 
@@ -117,7 +117,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
     }
 
-    function test_setConfig_ExactlyCurrentTimestamp() public {
+    function test_setConfig_RevertsWhen_ExactlyCurrentTimestamp() public {
         // Arrange - set expires to current timestamp (should fail)
         testEnableData.expires = block.timestamp;
 
@@ -144,7 +144,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         assertTrue(isEnabled, "Session should be enabled with future timestamp");
     }
 
-    function test_setConfig_InvalidAllocatorSignature() public {
+    function test_setConfig_RevertsWhen_InvalidAllocatorSignature() public {
         test_setConfig_Success();
         // Arrange
         testEnableData.allocatorSig = abi.encodePacked(uint256(420), uint256(69), uint8(0));
@@ -155,7 +155,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
     }
 
-    function test_setConfig_InvalidUserSignature() public {
+    function test_setConfig_RevertsWhen_InvalidUserSignature() public {
         // Recalculate lockTag and setup with new sender
         testLockTag =
             testConfig.allocator.toAllocatorId().toLockTag(testConfig.scope, testConfig.resetPeriod);
@@ -190,7 +190,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
     }
 
-    function test_setConfig_DifferentScope() public {
+    function test_setConfig_RevertsWhen_DifferentScope() public {
         // Arrange - use different scope
         Scope differentScope = Scope.Multichain;
         testConfig.scope = differentScope;
