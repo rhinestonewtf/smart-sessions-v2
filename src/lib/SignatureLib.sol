@@ -54,7 +54,7 @@ library SignatureLib {
         // If this is not an initialization call, verify the allocator signature
         if (!isInit) {
             require(
-                allocator.isValidSignatureNowCalldata(hash, allocatorSignature),
+                allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSignature),
                 InvalidAllocatorSignature()
             );
         }
