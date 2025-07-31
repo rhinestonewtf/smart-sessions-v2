@@ -10,7 +10,7 @@ jobs:
     uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-lint.yaml@main"
 
   build:
-    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@main"
+    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@320c168"
 
   test:
     needs: ["lint", "build"]
