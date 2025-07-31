@@ -11,6 +11,9 @@ jobs:
 
   build:
     uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@63fb11abdc79802d2926c5413f7f086e30ae9808"
+    secrets:
+      DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
+
 
   test:
     needs: ["lint", "build"]
