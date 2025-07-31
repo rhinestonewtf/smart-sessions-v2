@@ -10,7 +10,7 @@ jobs:
     uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-lint.yaml@main"
 
   build:
-    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@7cba9fd8408391255ce0465444857b9bc6b15229"
+    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@9b12f11cb285b450c644e1a6b746ac89da940f25"
     secrets:
       DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
 
