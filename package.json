@@ -36,7 +36,7 @@
     "FreshCryptoLib": "github:rdubois-crypto/FreshCryptoLib",
     "erc7579-implementation": "github:erc7579/erc7579-implementation",
     "excessively-safe-call": "github:nomad-xyz/ExcessivelySafeCall",
-    "smartsessions": "github:erc7579/smartsessions#feat/uni-policy-v2",
+    "smartsessions": "github:erc7579/smartsessions",
     "webauthn-sol": "github:rhinestonewtf/webauthn-sol"
   },
   "files": [
