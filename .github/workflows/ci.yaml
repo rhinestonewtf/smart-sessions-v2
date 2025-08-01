@@ -7,17 +7,18 @@ on:
 
 jobs:
   lint:
-    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-lint.yaml@main"
-
-  build:
-    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@3c61415b4482c39b6b75ce0cf5da2c359a78dc93"
+    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-lint.yaml@477facdd655676cbf7aa47b799959080c71bc64b"
     secrets:
       DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
 
+  build:
+    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@477facdd655676cbf7aa47b799959080c71bc64b"
+    secrets:
+      DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
 
   test:
     needs: ["lint", "build"]
-    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-test.yaml@main"
+    uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-test.yaml@477facdd655676cbf7aa47b799959080c71bc64b"
     with:
       foundry-fuzz-runs: 5000
       foundry-profile: "test"
