@@ -31,8 +31,6 @@ import {
     PolicyData
 } from "@smartsessions/DataTypes.sol";
 
-import { console } from "@forge-std/console.sol";
-
 /// @dev Extended ConfigLib library from SmartSessions to allow passing an address instead of
 ///      msg.sender for different enable functions.
 library ConfigLibV2 {
@@ -163,9 +161,6 @@ library ConfigLibV2 {
 
             // Add the policy to the list for the given permission and smart account
             $policy.policyList[permissionId].add({ account: account, value: policy });
-
-            console.log("Enabling policy:", policy);
-            console.logBytes32(ConfigId.unwrap(configId));
 
             // Initialize the policy with the provided configuration
             // overwrites the config

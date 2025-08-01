@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 
 // Types
-import { PermissionId, ActionId, ConfigId, Erc1271PolicyId } from "@smartsessions/DataTypes.sol";
+import { PermissionId, ActionId, ConfigId } from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
 
 library IdLibV2 {

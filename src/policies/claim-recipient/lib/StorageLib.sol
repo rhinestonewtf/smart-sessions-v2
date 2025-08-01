@@ -4,12 +4,7 @@ pragma solidity ^0.8.28;
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
-import {
-    ParamRules,
-    ParamRule,
-    TokenAmountConfig,
-    MultichainCompact
-} from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamRules, TokenAmountConfig } from "@policies/claim-recipient/types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                              STRUCTS
@@ -87,6 +82,7 @@ library StorageLib {
     /// @notice Returns the storage slot for the PolicyStorage struct
     function getPolicyStorage() internal pure returns (PolicyStorage storage ps) {
         bytes32 position = POLICY_STORAGE_POSITION;
+        // solhint-disable-next-line no-inline-assembly
         assembly {
             ps.slot := position
         }

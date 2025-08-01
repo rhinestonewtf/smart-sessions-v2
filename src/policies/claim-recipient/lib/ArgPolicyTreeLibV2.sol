@@ -9,9 +9,6 @@ import { ArgPolicyTreeLib } from
 import { ParamRules, ParamRule } from "@policies/claim-recipient/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
-// Temp
-import { console } from "@forge-std/console.sol";
-
 /// @title ArgPolicyTree Library V2
 /// @notice Adjusted ArgPolicyTreeLib to work with the new ParamRules struct that doesn't have value
 ///         and usage limits (compared to the original ArgPolicyTreeLib).
@@ -28,16 +25,8 @@ library ArgPolicyTreeLibV2 {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev Adjusted check to work with the new ParamRule struct and raw bytes data
+    // solhint-disable-next-line code-complexity
     function check(ParamRule storage rule, bytes calldata data) internal view returns (bool) {
-        console.log("Checking rule");
-        console.log("Condition:", uint8(rule.condition));
-        console.log("Offset:", rule.offset);
-        console.log("Length:", rule.length);
-        console.log("Reference value:");
-        console.logBytes32(rule.ref);
-        console.log("Data length:", data.length);
-        console.log("Data:");
-        console.logBytes(data);
         // Cache the offset
         uint64 offset = rule.offset;
         // Cache the length
@@ -167,7 +156,6 @@ library ArgPolicyTreeLibV2 {
         view
         returns (bool)
     {
-        console.log("Evaluating node at index:", nodeIndex);
         // Load the packed node from storage (single SLOAD operation)
         uint256 node = packedNodes[nodeIndex];
 

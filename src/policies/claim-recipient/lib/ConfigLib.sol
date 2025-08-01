@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 // Types
-import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
     TokenInConfig,
@@ -11,9 +10,6 @@ import {
     ParamRule,
     TokenAmountConfig
 } from "@policies/claim-recipient/types/DataTypes.sol";
-
-// Temp
-import { console } from "@forge-std/console.sol";
 
 /*//////////////////////////////////////////////////////////////
                             TYPES
@@ -188,12 +184,6 @@ library ConfigLib {
             });
             offset += 42; // Move to the next rule (1 byte condition + 8 bytes offset
                 // + 1 byte length + 32 bytes ref)
-            console.log("Rule %d", i);
-            console.log("Condition: %d", uint8(paramRules[i].condition));
-            console.log("Offset: %d", paramRules[i].offset);
-            console.log("Length: %d", paramRules[i].length);
-            console.log("Ref:");
-            console.logBytes32(paramRules[i].ref);
         }
 
         // Decode packed nodes

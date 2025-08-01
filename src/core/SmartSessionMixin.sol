@@ -24,11 +24,12 @@ import { SignatureLib } from "@lib/SignatureLib.sol";
 // Types
 import { PermissionId, SmartSessionMode, PolicyType } from "@smartsessions/DataTypes.sol";
 import {
+    DisableSession,
+    INVALID_RETURN,
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable
-} from "@interfaces/ISmartSessionEmissary.sol";
-import { DisableSession, INVALID_RETURN } from "@types/DataTypes.sol";
+} from "@types/DataTypes.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries

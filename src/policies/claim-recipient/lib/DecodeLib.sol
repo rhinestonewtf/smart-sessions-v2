@@ -9,10 +9,7 @@ import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeL
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { Lock, Token, Op, ParamRules } from "@policies/claim-recipient/types/DataTypes.sol";
-
-// Temp
-import { console } from "@forge-std/console.sol";
+import { Lock, Token, ParamRules } from "@policies/claim-recipient/types/DataTypes.sol";
 
 /// @title Decode Library
 /// @notice Library for extracting and validating MultiChainCompact data passed in signatures
@@ -437,15 +434,10 @@ library DecodeLib {
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
-        console.log("Validating qualification for account:", account);
         // Decode qualification header
         uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
         bytes32 qualificationTypehash = bytes32(data[offset + 32:offset + 64]);
         offset += 64;
-
-        console.log("Data length:", dataLength);
-        console.log("Qualification Typehash:");
-        console.logBytes32(qualificationTypehash);
 
         // Get storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
@@ -453,19 +445,6 @@ library DecodeLib {
         // Load the qualification configuration for the account
         ParamRules storage qualificationConfig =
             $.qualificationConfig[configId][msg.sender][account][qualificationTypehash];
-
-        console.log("Qualification config loaded for typehash:");
-        console.logBytes32(qualificationTypehash);
-        console.log("Qualification config rules length:", qualificationConfig.rules.length);
-        console.log(
-            "Qualification config packedNodes length:", qualificationConfig.packedNodes.length
-        );
-        console.log("Qualification config rootNodeIndex:", qualificationConfig.rootNodeIndex);
-        console.log("Qualification config ref value:");
-        console.logBytes32(qualificationConfig.rules[qualificationConfig.rootNodeIndex].ref);
-
-        console.log("Qualification data:");
-        console.logBytes(data[offset:offset + dataLength]);
 
         // Validate qualification data against the qualificationConfig
         if (!qualificationConfig.evaluateExpressionTree(data[offset:offset + dataLength])) {

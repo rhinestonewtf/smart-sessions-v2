@@ -9,8 +9,7 @@ import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidat
 import {
     SmartSessionEmissaryConfig,
     EmissaryConfig,
-    SmartSessionEmissaryEnable,
-    SmartSessionEmissaryDisable
+    SmartSessionEmissaryEnable
 } from "@types/DataTypes.sol";
 import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
 

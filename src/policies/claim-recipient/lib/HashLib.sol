@@ -2,10 +2,11 @@
 pragma solidity ^0.8.28;
 
 // Types
-import { Lock, Token, Op } from "@policies/claim-recipient/types/DataTypes.sol";
+import { Lock, Token } from "@policies/claim-recipient/types/DataTypes.sol";
 
 /// @title Hash Library
 /// @notice Library for hashing MultichainCompact structures with EIP712 compliance
+// solhint-disable max-line-length
 library HashLib {
     /*//////////////////////////////////////////////////////////////
                                TYPEHASHES

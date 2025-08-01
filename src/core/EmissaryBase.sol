@@ -13,8 +13,6 @@ import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
-import { ECDSA } from "@solady/utils/ECDSA.sol";
-import { ECDSA } from "@solady/utils/ECDSA.sol";
 import { WebAuthn } from "@webauthn/WebAuthn.sol";
 import { LibSort } from "@solady/utils/LibSort.sol";
 
