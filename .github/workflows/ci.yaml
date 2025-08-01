@@ -23,3 +23,5 @@ jobs:
       foundry-fuzz-runs: 5000
       foundry-profile: "test"
       match-path: "test/**/*.sol"
+    secrets:
+      DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
