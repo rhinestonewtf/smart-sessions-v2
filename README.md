@@ -1,4 +1,4 @@
-## Module Template
+## Smart Sessions Emissary
 
 **A template for building smart account modules using the [ModuleKit](https://github.com/rhinestonewtf/modulekit)**
 
