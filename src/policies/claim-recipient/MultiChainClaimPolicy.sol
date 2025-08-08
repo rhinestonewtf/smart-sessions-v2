@@ -215,7 +215,7 @@ contract MultiChainClaimPolicy is I1271Policy {
         console.log("Is valid:", isValid);
 
         // If the recomputed hash does not match the provided hash, return false
-        return recomputedHash == hash && isValid;
+        return isValid && recomputedHash == hash;
     }
 
     /*//////////////////////////////////////////////////////////////
