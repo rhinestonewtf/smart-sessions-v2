@@ -10,6 +10,7 @@ import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib
 import { HashLib } from "@policies/claim-recipient/lib/HashLib.sol";
 import { ArgPolicyTreeLib } from
     "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
+import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -32,6 +33,10 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     /// @notice Empty executions hash constant
     bytes32 internal constant EMPTY_EXECUTIONS_HASH =
         0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+
+    /// @notice Test domain separator
+    bytes32 internal testDomainSeparator =
+        0x1234567890123456789012345678901234567890123456789012345678901234;
 
     /*//////////////////////////////////////////////////////////////
                                    SETUP
@@ -72,8 +77,9 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData // signature contains the raw compact data
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData) // signature contains the raw compact
+                // data
         );
 
         assertTrue(result, "Action with executions should be allowed");
@@ -96,8 +102,9 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData // signature contains the raw compact data
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData) // signature contains the raw compact
+                // data
         );
 
         assertFalse(result, "Action without executions should be rejected");
@@ -124,8 +131,9 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData // signature contains the raw compact data
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData) // signature contains the raw compact
+                // data
         );
 
         assertTrue(result, "Sudo mode should allow all actions regardless of executions");
@@ -150,7 +158,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             admin.addr, // sender
             testAccount,
             wrongHash,
-            compactData // signature contains the raw compact data
+            abi.encodePacked(testDomainSeparator, compactData) // signature contains the raw compact
+                // data
         );
 
         assertFalse(result, "Action should fail when hash doesn't match");
@@ -182,8 +191,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertTrue(result, "Action with valid token and amount should be allowed");
@@ -212,8 +221,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertFalse(result, "Action with invalid token should be rejected");
@@ -241,8 +250,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertFalse(result, "Action with amount below minimum should be rejected");
@@ -270,8 +279,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertFalse(result, "Action with amount above maximum should be rejected");
@@ -301,8 +310,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertTrue(result, "Action with any token should be allowed when address(0) is configured");
@@ -336,8 +345,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertTrue(result, "Action with valid tokenOut should be allowed");
@@ -368,8 +377,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertFalse(result, "Action with invalid tokenOut should be rejected");
@@ -399,8 +408,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertFalse(result, "Action with tokenOut amount below minimum should be rejected");
@@ -430,8 +439,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertFalse(result, "Action with tokenOut amount above maximum should be rejected");
@@ -463,8 +472,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertTrue(
@@ -493,8 +502,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertTrue(result, "Action with valid qualification should be allowed");
@@ -517,8 +526,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             testConfigId,
             admin.addr, // sender
             testAccount,
-            expectedHash,
-            compactData
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
         );
 
         assertFalse(result, "Action with invalid qualification should be rejected");

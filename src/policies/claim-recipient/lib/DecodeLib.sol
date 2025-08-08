@@ -6,6 +6,7 @@ import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib
 import { HashLib } from "@policies/claim-recipient/lib/HashLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
 import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeLibV2.sol";
+import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -22,6 +23,7 @@ library DecodeLib {
 
     using ConfigLib for PolicyConfig;
     using ArgPolicyTreeLibV2 for ParamRules;
+    using DomainLib for bytes32;
 
     /*//////////////////////////////////////////////////////////////
                                 CONSTANTS
@@ -59,7 +61,7 @@ library DecodeLib {
     /// @param configId The configuration ID for the policy
     /// @param account The account to validate against
     /// @return valid True if the data is valid, false otherwise
-    /// @return compactHash The hash of the decoded MultiChainCompact struct
+    /// @return digest The digest of the MultiChainCompact struct hash
     function _decodeAndValidate(
         bytes calldata data,
         PolicyConfig config,
@@ -68,16 +70,17 @@ library DecodeLib {
     )
         private
         view
-        returns (bool valid, bytes32 compactHash)
+        returns (bool valid, bytes32 digest)
     {
         // Decode fixed header
-        address sponsor = address(bytes20(data[0:20]));
-        uint256 nonce = uint256(bytes32(data[20:52]));
-        uint256 expires = uint256(bytes32(data[52:84]));
+        bytes32 domainSeparator = bytes32(data[0:32]);
+        address sponsor = address(bytes20(data[32:52]));
+        uint256 nonce = uint256(bytes32(data[52:84]));
+        uint256 expires = uint256(bytes32(data[84:116]));
 
         // Decode otherElements first (always at offset 84)
         (bytes32[] memory otherElements, uint256 notarizedElementOffset) =
-            _decodeOtherElements(data, 84);
+            _decodeOtherElements(data, 116);
 
         // Decode and validate notarized element
         (bool elementValid, bytes32 elementHash) =
@@ -87,8 +90,12 @@ library DecodeLib {
         }
 
         // Hash the MultichainCompact struct
-        compactHash = HashLib.hashCompact(sponsor, nonce, expires, elementHash, otherElements);
-        return (true, compactHash);
+        bytes32 compactHash =
+            HashLib.hashCompact(sponsor, nonce, expires, elementHash, otherElements);
+        // Calculate the digest
+        digest = compactHash.withDomain(domainSeparator);
+
+        return (true, digest);
     }
 
     /// @notice Validates the Element struct and returns its hash
