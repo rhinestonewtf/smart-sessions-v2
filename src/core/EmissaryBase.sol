@@ -190,7 +190,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
 
         // Validate the configuration exists
         require(configData.length != 0, InvalidEmissaryConfig());
-
+ 
         // Validate the signature using ECDSA
         bool isValid = _validateSignatureWithDataECDSA(digest, emissaryData, configData);
 

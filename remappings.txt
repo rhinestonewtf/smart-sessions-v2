@@ -14,12 +14,15 @@ solady/=node_modules/solady/src/
 solarray/=node_modules/solarray/src/
 @prb/math/=node_modules/@prb/math/src/
 ExcessivelySafeCall/=node_modules/excessively-safe-call/src/
+solmate/=node_modules/solmate/src/
+checknsignatures/=node_modules/@rhinestone/checknsignatures/src/
 
 @smartsessions/=node_modules/smartsessions/contracts/
 @smartsessions-test/=node_modules/smartsessions/test/
 @modulekit/=node_modules/@rhinestone/modulekit/src/
 @erc7579/enumerablemap4337/=node_modules/@erc7579/enumerablemap4337/src/
 @compact-utils/=node_modules/@rhinestone/compact-utils/src/
+@compact-utils-test/=node_modules/@rhinestone/compact-utils/test/
 @the-compact/=node_modules/@uniswap/the-compact/src/
 @solady=node_modules/solady/src/
 
@@ -44,3 +47,5 @@ permit2/=node_modules/@uniswap/permit2/
 @types=src/types/
 @mocks/=test/mock/
 @policies=src/policies
+
+node_modules/@rhinestone/compact-utils/src/:src/=node_modules/@rhinestone/compact-utils/src/
