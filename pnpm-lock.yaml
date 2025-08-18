@@ -18,8 +18,8 @@ importers:
         specifier: github:rhinestonewtf/checknsignatures
         version: https://codeload.github.com/rhinestonewtf/checknsignatures/tar.gz/f8389c186fb58480a9a42d598adebaa1a557762d
       '@rhinestone/compact-utils':
-        specifier: github:rhinestonewtf/compact-utils#merge/fix-permit2
-        version: git+https://git@github.com:rhinestonewtf/compact-utils.git#df382bcf3da40965d1394454618517c57ad9c0dc(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)
+        specifier: github:rhinestonewtf/compact-utils#feat/verify-executions
+        version: git+https://git@github.com:rhinestonewtf/compact-utils.git#fd8c279dd470665e0d43c17054f863753ad15b20(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)
       '@rhinestone/flatbytes':
         specifier: github:rhinestonewtf/flatbytes
         version: https://codeload.github.com/rhinestonewtf/flatbytes/tar.gz/8182dc7353bef886be234c54ae36b1e33d6bf8ee
@@ -387,8 +387,8 @@ packages:
     resolution: {tarball: https://codeload.github.com/rhinestonewtf/checknsignatures/tar.gz/f8389c186fb58480a9a42d598adebaa1a557762d}
     version: 0.0.1
 
-  '@rhinestone/compact-utils@git+https://git@github.com:rhinestonewtf/compact-utils.git#df382bcf3da40965d1394454618517c57ad9c0dc':
-    resolution: {commit: df382bcf3da40965d1394454618517c57ad9c0dc, repo: git@github.com:rhinestonewtf/compact-utils.git, type: git}
+  '@rhinestone/compact-utils@git+https://git@github.com:rhinestonewtf/compact-utils.git#fd8c279dd470665e0d43c17054f863753ad15b20':
+    resolution: {commit: fd8c279dd470665e0d43c17054f863753ad15b20, repo: git@github.com:rhinestonewtf/compact-utils.git, type: git}
     version: 0.4.2
 
   '@rhinestone/erc4337-validation@0.0.1-alpha.2':
@@ -1182,13 +1182,13 @@ packages:
       debug:
         optional: true
 
-  forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf:
-    resolution: {tarball: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf}
-    version: 1.10.0
-
   forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/8a225d81aa8e2e013580564588c79abb65eacc9e:
     resolution: {tarball: https://codeload.github.com/foundry-rs/forge-std/tar.gz/8a225d81aa8e2e013580564588c79abb65eacc9e}
     version: 1.9.3
+
+  forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d:
+    resolution: {tarball: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d}
+    version: 1.10.0
 
   forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/ae570fec082bfe1c1f45b0acca4a2b4f84d345ce:
     resolution: {tarball: https://codeload.github.com/foundry-rs/forge-std/tar.gz/ae570fec082bfe1c1f45b0acca4a2b4f84d345ce}
@@ -2051,8 +2051,8 @@ packages:
     resolution: {tarball: https://codeload.github.com/erc7579/smartsessions/tar.gz/b358c8104a168f413c5f53a5d1e4323e1534df7f}
     version: 1.0.0
 
-  solady@https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c:
-    resolution: {tarball: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c}
+  solady@https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911:
+    resolution: {tarball: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911}
     version: 0.1.24
 
   solady@https://codeload.github.com/vectorized/solady/tar.gz/9deb9ed36a27261a8745db5b7cd7f4cdc3b1cd4e:
@@ -2889,10 +2889,10 @@ snapshots:
 
   '@rhinestone/checknsignatures@https://codeload.github.com/rhinestonewtf/checknsignatures/tar.gz/f8389c186fb58480a9a42d598adebaa1a557762d':
     dependencies:
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
 
-  '@rhinestone/compact-utils@git+https://git@github.com:rhinestonewtf/compact-utils.git#df382bcf3da40965d1394454618517c57ad9c0dc(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)':
+  '@rhinestone/compact-utils@git+https://git@github.com:rhinestonewtf/compact-utils.git#fd8c279dd470665e0d43c17054f863753ad15b20(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))(typescript@4.9.5)':
     dependencies:
       '@iarna/toml': 2.2.5
       '@rhinestone/checknsignatures': https://codeload.github.com/rhinestonewtf/checknsignatures/tar.gz/f8389c186fb58480a9a42d598adebaa1a557762d
@@ -2920,9 +2920,9 @@ snapshots:
       account-abstraction: accountabstraction@https://codeload.github.com/kopy-kat/account-abstraction/tar.gz/c5887153fbfe3ed09b2637cac39873f96d676f38(ethers@5.8.0)(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
       account-abstraction-v0.6: accountabstraction@https://codeload.github.com/eth-infinitism/account-abstraction/tar.gz/7174d6d845618dbd11cee68eefa715f5263690b6(ethers@5.8.0)(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
       prettier: 2.8.8
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
       solhint: 4.5.4(typescript@4.9.5)
     transitivePeerDependencies:
       - bufferutil
@@ -2943,7 +2943,7 @@ snapshots:
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
       forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/8a225d81aa8e2e013580564588c79abb65eacc9e
       prettier: 2.8.8
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -2962,7 +2962,7 @@ snapshots:
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
       forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/8a225d81aa8e2e013580564588c79abb65eacc9e
       prettier: 2.8.8
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -2981,7 +2981,7 @@ snapshots:
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
       forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/8a225d81aa8e2e013580564588c79abb65eacc9e
       prettier: 2.8.8
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -2994,13 +2994,13 @@ snapshots:
 
   '@rhinestone/flatbytes@https://codeload.github.com/rhinestonewtf/flatbytes/tar.gz/8182dc7353bef886be234c54ae36b1e33d6bf8ee':
     dependencies:
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
 
   '@rhinestone/module-bases@https://codeload.github.com/rhinestonewtf/module-bases/tar.gz/201f1dd92212a5875db330030af9e33f55b899e3(ethers@5.8.0)(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))':
     dependencies:
       '@ERC4337/account-abstraction': accountabstraction@https://codeload.github.com/kopy-kat/account-abstraction/tar.gz/c5887153fbfe3ed09b2637cac39873f96d676f38(ethers@5.8.0)(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
       erc7579: erc7579-implementation@https://codeload.github.com/erc7579/erc7579-implementation/tar.gz/16138d1afd4e9711f6c1425133538837bd7787b5(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -3015,7 +3015,7 @@ snapshots:
     dependencies:
       '@ERC4337/account-abstraction': accountabstraction@https://codeload.github.com/kopy-kat/account-abstraction/tar.gz/c5887153fbfe3ed09b2637cac39873f96d676f38(ethers@5.8.0)(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
       erc7579: erc7579-implementation@https://codeload.github.com/erc7579/erc7579-implementation/tar.gz/16138d1afd4e9711f6c1425133538837bd7787b5(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -3041,8 +3041,8 @@ snapshots:
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
       erc7579: erc7579-implementation@https://codeload.github.com/erc7579/erc7579-implementation/tar.gz/16138d1afd4e9711f6c1425133538837bd7787b5(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
       excessively-safe-call: '@nomad-xyz/excessively-safe-call@https://codeload.github.com/nomad-xyz/ExcessivelySafeCall/tar.gz/81cd99ce3e69117d665d7601c330ea03b97acce0'
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
       solarray: https://codeload.github.com/sablier-labs/solarray/tar.gz/6bf10cb34cdace52a3ba5fe437e78cc82df92684
     transitivePeerDependencies:
       - bufferutil
@@ -3064,8 +3064,8 @@ snapshots:
       '@rhinestone/sentinellist': https://codeload.github.com/rhinestonewtf/sentinellist/tar.gz/e722c5cc68c570d535bc3c9f85b3ce90cdc38807
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
       excessively-safe-call: '@nomad-xyz/excessively-safe-call@https://codeload.github.com/nomad-xyz/ExcessivelySafeCall/tar.gz/81cd99ce3e69117d665d7601c330ea03b97acce0'
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
       solarray: https://codeload.github.com/sablier-labs/solarray/tar.gz/6bf10cb34cdace52a3ba5fe437e78cc82df92684
       solhint: 5.1.0(typescript@4.9.5)
     transitivePeerDependencies:
@@ -3088,8 +3088,8 @@ snapshots:
       '@rhinestone/sentinellist': https://codeload.github.com/rhinestonewtf/sentinellist/tar.gz/e722c5cc68c570d535bc3c9f85b3ce90cdc38807
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
       excessively-safe-call: '@nomad-xyz/excessively-safe-call@https://codeload.github.com/nomad-xyz/ExcessivelySafeCall/tar.gz/81cd99ce3e69117d665d7601c330ea03b97acce0'
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
       solarray: https://codeload.github.com/sablier-labs/solarray/tar.gz/6bf10cb34cdace52a3ba5fe437e78cc82df92684
       solhint: 5.1.0(typescript@4.9.5)
     transitivePeerDependencies:
@@ -3120,8 +3120,8 @@ snapshots:
       '@safe-global/safe-contracts': 1.4.1(ethers@5.8.0)
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
       erc7579: erc7579-implementation@https://codeload.github.com/erc7579/erc7579-implementation/tar.gz/16138d1afd4e9711f6c1425133538837bd7787b5(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
       solarray: https://codeload.github.com/sablier-labs/solarray/tar.gz/6bf10cb34cdace52a3ba5fe437e78cc82df92684
     transitivePeerDependencies:
       - bufferutil
@@ -3136,7 +3136,7 @@ snapshots:
 
   '@rhinestone/sentinellist@https://codeload.github.com/rhinestonewtf/sentinellist/tar.gz/e722c5cc68c570d535bc3c9f85b3ce90cdc38807':
     dependencies:
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
 
   '@safe-global/safe-contracts@1.4.1(ethers@5.8.0)':
     dependencies:
@@ -3909,8 +3909,8 @@ snapshots:
       '@rhinestone/sentinellist': https://codeload.github.com/rhinestonewtf/sentinellist/tar.gz/e722c5cc68c570d535bc3c9f85b3ce90cdc38807
       account-abstraction: accountabstraction@https://codeload.github.com/eth-infinitism/account-abstraction/tar.gz/cc3893bcaf2272c163ce89d5eb9eadb8e6b52db7(hardhat@2.22.6(typescript@4.9.5))(lodash@4.17.21)(typechain@5.2.0(typescript@4.9.5))
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159d5170298eb2455a6c05280ab5a73a4ef0
-      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf
-      solady: https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c
+      forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d
+      solady: https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911
     transitivePeerDependencies:
       - bufferutil
       - hardhat
@@ -4158,9 +4158,9 @@ snapshots:
     optionalDependencies:
       debug: 4.4.1(supports-color@8.1.1)
 
-  forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/0c71116a218268ee8c0157be8efcb13af0f7beaf: {}
-
   forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/8a225d81aa8e2e013580564588c79abb65eacc9e: {}
+
+  forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/addeae62cd620c53f2fdc91bfc82396f5df79d1d: {}
 
   forge-std@https://codeload.github.com/foundry-rs/forge-std/tar.gz/ae570fec082bfe1c1f45b0acca4a2b4f84d345ce: {}
 
@@ -5135,7 +5135,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  solady@https://codeload.github.com/vectorized/solady/tar.gz/834bbc4fd366ca8bce8c532a0e3b34eca6be709c: {}
+  solady@https://codeload.github.com/vectorized/solady/tar.gz/33b4b98e350bbcba6aa85642957c313e98b5f911: {}
 
   solady@https://codeload.github.com/vectorized/solady/tar.gz/9deb9ed36a27261a8745db5b7cd7f4cdc3b1cd4e: {}
 
