@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Contracts
+import { Decoder } from "@policies/claim-recipient/core/Decoder.sol";
+
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
@@ -8,7 +11,6 @@ import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
 // Libraries
 import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
-import { DecodeLib } from "@policies/claim-recipient/lib/DecodeLib.sol";
 import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeLibV2.sol";
 
 // Types
@@ -19,10 +21,6 @@ import {
     TokenOutConfig
 } from "@policies/claim-recipient/types/DataTypes.sol";
 
-// Temp
-// solhint-disable no-console
-import { console } from "@forge-std/console.sol";
-
 /// @title MultiChainClaimPolicy
 /// @notice A policy that allows enforcing rules on specific fields of a MultiChainClaim struct:
 ///         - hasExecutions: executions != empty executions hash
@@ -31,14 +29,13 @@ import { console } from "@forge-std/console.sol";
 ///         - tokenOut/amount: per targetChainId mapping
 ///         - qualification: compare with input
 ///         Uses a bitmap configuration with separate storage for each condition
-contract MultiChainClaimPolicy is I1271Policy {
+contract MultiChainClaimPolicy is I1271Policy, Decoder {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using ConfigLib for PolicyConfig;
     using ConfigLib for bytes;
-    using DecodeLib for bytes;
     using ArgPolicyTreeLibV2 for ParamRules;
 
     /*//////////////////////////////////////////////////////////////
@@ -114,8 +111,6 @@ contract MultiChainClaimPolicy is I1271Policy {
             bytes32 qualificationTypehash;
             (qualificationConfig, configData, qualificationTypehash) =
                 configData.decodeQualificationConfig();
-            console.log("Qualification typehash:");
-            console.logBytes32(qualificationTypehash);
             // Store the qualification configuration
             $.qualificationConfig[configId][msg.sender][account][qualificationTypehash].fill(
                 qualificationConfig
@@ -195,24 +190,14 @@ contract MultiChainClaimPolicy is I1271Policy {
         // Load the policy configuration bitmap
         PolicyConfig config = $.policyConfig[id][msg.sender][account];
 
-        console.log("Checking MultiChainClaimPolicy for account:", account);
-        console.log("Conditions bitmap:", PolicyConfig.unwrap(config));
-
         // If no conditions are enabled, allow everything (sudo mode)
         if (config == PolicyConfig.wrap(0)) {
-            console.log("No conditions enabled - allowing all actions");
             return true;
         }
 
         // Extract the hash and validate the parameters from the signature
         // using the raw data and the stored configuration for the account
-        (bool isValid, bytes32 recomputedHash) = signature.extractAndValidate(config, id, account);
-
-        console.log("Recomputed hash:");
-        console.logBytes32(recomputedHash);
-        console.log("Original hash:");
-        console.logBytes32(hash);
-        console.log("Is valid:", isValid);
+        (bool isValid, bytes32 recomputedHash) = extractAndValidate(signature, config, id, account);
 
         // If the recomputed hash does not match the provided hash, return false
         return isValid && recomputedHash == hash;

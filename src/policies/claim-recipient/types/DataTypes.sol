@@ -54,8 +54,6 @@ struct TokenOutConfig {
                         MULITCHAINCOMPACT
 //////////////////////////////////////////////////////////////*/
 
-// TODO: Use latest
-
 struct Token {
     address token;
     uint256 amount;
