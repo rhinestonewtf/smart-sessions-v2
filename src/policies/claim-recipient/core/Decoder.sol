@@ -1,22 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Contracts
+import { EIP712TypeHash } from "@compact-utils/types/EIP712TypeHash.sol";
+
 // Libraries
 import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
-import { HashLib } from "@policies/claim-recipient/lib/HashLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
 import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeLibV2.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
+import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
+import { IdLib } from "@the-compact/lib/IdLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { Lock, Token, ParamRules } from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamRules } from "@policies/claim-recipient/types/DataTypes.sol";
 
-/// @title Decode Library
-/// @notice Library for extracting and validating MultiChainCompact data passed in signatures
-///         It decodes the data, validates it against the policy configuration, and reconstructs
-///         the MultiChainCompact struct hash for verification.
-library DecodeLib {
+/// @title Decoder
+/// @notice Abstract contract used for extracting and validating MultiChainCompact data passed in
+///         signatures. It decodes the data, validates it against the policy configuration, and
+///         reconstructs the MultiChainCompact struct hash for verification.
+abstract contract Decoder is EIP712TypeHash {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -24,6 +28,9 @@ library DecodeLib {
     using ConfigLib for PolicyConfig;
     using ArgPolicyTreeLibV2 for ParamRules;
     using DomainLib for bytes32;
+    using EfficientHashLib for bytes32;
+    using EfficientHashLib for bytes32[];
+    using IdLib for uint256;
 
     /*//////////////////////////////////////////////////////////////
                                 CONSTANTS
@@ -89,9 +96,26 @@ library DecodeLib {
             return (false, bytes32(0));
         }
 
+        // Direct array building using EfficientHashLib to avoid copying and initialization overhead
+        uint256 totalLength = otherElements.length + 1;
+        bytes32[] memory allElements = EfficientHashLib.malloc(totalLength);
+
+        // Set the notarized element first (maintains same ordering as original)
+        allElements.set(0, elementHash);
+
+        // Copy other elements directly using optimized operations (no bounds checking)
+        for (uint256 i; i < otherElements.length; ++i) {
+            allElements.set(i + 1, otherElements[i]);
+        }
+
+        // Use EfficientHashLib for the final elements array hash instead of
+        // keccak256(abi.encodePacked())
+        // This provides significant gas savings for array hashing
+        bytes32 allElementsHash = allElements.hash();
+
         // Hash the MultichainCompact struct
-        bytes32 compactHash =
-            HashLib.hashCompact(sponsor, nonce, expires, elementHash, otherElements);
+        bytes32 compactHash = _hashCompact(sponsor, nonce, expires, allElementsHash);
+
         // Calculate the digest
         digest = compactHash.withDomain(domainSeparator);
 
@@ -148,7 +172,7 @@ library DecodeLib {
         }
 
         // Calculate Element struct hash
-        elementHash = HashLib.hashElement(arbiter, chainId, commitmentsHash, mandateHash);
+        elementHash = _hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
         return (true, elementHash);
     }
 
@@ -235,8 +259,7 @@ library DecodeLib {
         }
 
         // Calculate Mandate struct hash
-        mandateHash =
-            HashLib.hashMandate(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
+        mandateHash = _hashMandateRaw(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
         return (true, mandateHash);
     }
 
@@ -299,7 +322,7 @@ library DecodeLib {
         }
 
         // Calculate Target struct hash
-        targetHash = HashLib.hashTarget(recipient, tokenOutHash, targetChain, fillExpires);
+        targetHash = _hashTargetAttributesRaw(recipient, tokenOutHash, targetChain, fillExpires);
         return (true, targetHash, offset);
     }
 
@@ -307,14 +330,14 @@ library DecodeLib {
                             VALIDATION HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Validates the Lock structs and returns their hashes
+    /// @notice Validates the token input commitments and returns their hash
     /// @param data The MultiChainCompact data to validate
     /// @param offset The offset in the data where the tokenIn starts
     /// @param chainId The chain ID for the tokenIn validation
     /// @param configId The configuration ID for the policy
     /// @param account The account to validate against
     /// @return valid True if the tokenIn is valid, false otherwise
-    /// @return commitmentsHash The hash of the validated Lock structs
+    /// @return commitmentsHash The hash of the validated token commitments
     /// @return newOffset The new offset after reading the tokenIn data
     function _validateTokenIn(
         bytes calldata data,
@@ -327,53 +350,55 @@ library DecodeLib {
         view
         returns (bool valid, bytes32 commitmentsHash, uint256 newOffset)
     {
-        // Decode tokenIn header
+        // Decode tokenIn length
         uint256 length = uint256(bytes32(data[offset:offset + 32]));
         offset += 32;
 
-        // Get storage pointer
+        // Get storage pointer and cache config values
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address configuredToken = $.tokenInConfig[configId][msg.sender][account][chainId].token;
+        uint256 minAmount = $.tokenInConfig[configId][msg.sender][account][chainId].minAmount;
+        uint256 maxAmount = $.tokenInConfig[configId][msg.sender][account][chainId].maxAmount;
 
-        // Parse each Lock struct
-        Lock[] memory locks = new Lock[](length);
+        // Create calldata pointer to the tokenIn array data
+        // Assumes data is formatted as uint256[2][]
+        uint256[2][] calldata tokenIn;
+        assembly {
+            tokenIn.offset := add(data.offset, offset)
+            tokenIn.length := length
+        }
+
+        // Validate each entry
         for (uint256 i = 0; i < length; i++) {
-            locks[i] = Lock({
-                lockTag: bytes12(data[offset:offset + 12]),
-                token: address(bytes20(data[offset + 12:offset + 32])),
-                amount: uint256(bytes32(data[offset + 32:offset + 64]))
-            });
-            offset += 64;
+            // Extract token address from packed data (bottom 20 bytes)
+            address token = tokenIn[i][0].toAddress();
+            uint256 amount = tokenIn[i][1];
 
             // Validate token address
-            if (
-                $.tokenInConfig[configId][msg.sender][account][chainId].token != address(0)
-                    && $.tokenInConfig[configId][msg.sender][account][chainId].token != locks[i].token
-            ) {
+            if (configuredToken != address(0) && configuredToken != token) {
                 return (false, bytes32(0), 0);
             }
-            // Validate amount against min and max limits
-            if (
-                locks[i].amount < $.tokenInConfig[configId][msg.sender][account][chainId].minAmount
-                    || locks[i].amount
-                        > $.tokenInConfig[configId][msg.sender][account][chainId].maxAmount
-            ) {
+
+            // Validate amount bounds
+            if (amount < minAmount || amount > maxAmount) {
                 return (false, bytes32(0), 0);
             }
         }
 
-        // Calculate Lock structs hash
-        commitmentsHash = HashLib.hashCommitments(locks);
-        return (true, commitmentsHash, offset);
+        // Calculate hash using the optimized _hashTokenIn function
+        commitmentsHash = _hashTokenIn(tokenIn);
+
+        return (true, commitmentsHash, offset + (length * 64));
     }
 
-    /// @notice Validates the Token structs and returns their hash
+    /// @notice Validates the token output specifications and returns their hash
     /// @param data The MultiChainCompact data to validate
     /// @param offset The offset in the data where the tokenOut starts
     /// @param configId The configuration ID for the policy
     /// @param account The account to validate against
     /// @param chainId The chain ID for the tokenOut validation
     /// @return valid True if the tokenOut is valid, false otherwise
-    /// @return tokenOutHash The hash of the validated Token structs
+    /// @return tokenOutHash The hash of the validated token outputs
     /// @return newOffset The new offset after reading the tokenOut data
     function _validateTokenOut(
         bytes calldata data,
@@ -386,43 +411,45 @@ library DecodeLib {
         view
         returns (bool valid, bytes32 tokenOutHash, uint256 newOffset)
     {
-        // Decode tokenOut header
+        // Decode tokenOut length
         uint256 length = uint256(bytes32(data[offset:offset + 32]));
         offset += 32;
 
-        // Get storage pointer
+        // Get storage pointer and cache config values
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address configuredToken = $.tokenOutConfig[configId][msg.sender][account][chainId].token;
+        uint256 minAmount = $.tokenOutConfig[configId][msg.sender][account][chainId].minAmount;
+        uint256 maxAmount = $.tokenOutConfig[configId][msg.sender][account][chainId].maxAmount;
 
-        // Parse each Token struct
-        Token[] memory tokens = new Token[](length);
+        // Create calldata pointer to the tokenOut array data
+        // Assumes data is formatted as uint256[2][]
+        uint256[2][] calldata tokenOut;
+        assembly {
+            tokenOut.offset := add(data.offset, offset)
+            tokenOut.length := length
+        }
+
+        // Validate each entry
         for (uint256 i = 0; i < length; i++) {
-            tokens[i] = Token({
-                token: address(bytes20(data[offset:offset + 20])),
-                amount: uint256(bytes32(data[offset + 20:offset + 52]))
-            });
-            offset += 52;
+            // Extract token address from first slot (bottom 20 bytes)
+            address token = address(uint160(tokenOut[i][0]));
+            uint256 amount = tokenOut[i][1];
 
             // Validate token address
-            if (
-                $.tokenOutConfig[configId][msg.sender][account][chainId].token != address(0)
-                    && $.tokenOutConfig[configId][msg.sender][account][chainId].token != tokens[i].token
-            ) {
+            if (configuredToken != address(0) && configuredToken != token) {
                 return (false, bytes32(0), 0);
             }
-            // Validate amount against min and max limits
-            if (
-                tokens[i].amount
-                    < $.tokenOutConfig[configId][msg.sender][account][chainId].minAmount
-                    || tokens[i].amount
-                        > $.tokenOutConfig[configId][msg.sender][account][chainId].maxAmount
-            ) {
+
+            // Validate amount bounds
+            if (amount < minAmount || amount > maxAmount) {
                 return (false, bytes32(0), 0);
             }
         }
 
-        // Calculate Token structs hash
-        tokenOutHash = HashLib.hashTokenOut(tokens);
-        return (true, tokenOutHash, offset);
+        // Calculate hash using the optimized _hashTokenOut function
+        tokenOutHash = _hashTokenOut(tokenOut);
+
+        return (true, tokenOutHash, offset + (length * 64));
     }
 
     /// @notice Validates the Qualification struct and returns its hash
@@ -459,7 +486,7 @@ library DecodeLib {
         }
 
         // Calculate qualification hash
-        qualificationHash = HashLib.hashQualification(data[offset:offset + dataLength]);
+        qualificationHash = keccak256(data[offset:offset + dataLength]);
         return (true, qualificationHash, offset + dataLength);
     }
 

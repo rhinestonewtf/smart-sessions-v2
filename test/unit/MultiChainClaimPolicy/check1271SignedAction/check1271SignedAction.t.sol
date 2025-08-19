@@ -6,17 +6,14 @@ import { MultiChainClaimPolicy_Unit_Test } from
     "@test/unit/MultiChainClaimPolicy/MultiChainClaimPolicy.t.sol";
 
 // Libraries
-import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
-import { HashLib } from "@policies/claim-recipient/lib/HashLib.sol";
+import { HashLib, Lock, Token } from "@mocks/HashLib.sol";
 import { ArgPolicyTreeLib } from
     "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import {
-    Lock, Token, Op, ParamRules, ParamRule
-} from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamRules, ParamRule } from "@policies/claim-recipient/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPolicy_Unit_Test {
@@ -725,10 +722,12 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         return ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
     }
 
-    /// @notice Create Lock struct data
+    /// @notice Create Lock struct data (tokenIn)
     function _createLockData(address token, uint256 amount) private pure returns (bytes memory) {
         bytes12 lockTag = bytes12("test_lock");
-        return abi.encodePacked(lockTag, token, amount);
+        // Pack lockTag and token address into first uint256
+        uint256 tokenData = (uint256(uint96(lockTag)) << 160) | uint256(uint160(token));
+        return abi.encodePacked(tokenData, amount);
     }
 
     /// @notice Create mandate data with custom targetOpsHash
@@ -770,8 +769,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         );
     }
 
-    /// @notice Create the target data (recipient + reserved + targetChain + fillExpires +
-    /// claimHashProofer + tokenOut)
+    /// @notice Create the target data with tokenOut in uint256[2][] format
     function _createTargetData(
         address token,
         uint256 amount,
@@ -781,14 +779,18 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         returns (bytes memory)
     {
         address recipient = makeAddr("recipient");
+
+        // Pack token address into uint256 (address goes in bottom 20 bytes)
+        uint256 tokenData = uint256(uint160(token));
+
         return abi.encodePacked(
             recipient, // recipient (20 bytes)
             bytes12(0), // reserved (12 bytes)
             targetChainId, // targetChain (32 bytes)
             uint256(block.timestamp + 7200), // fillExpires (32 bytes)
             uint256(1), // tokenOut length (32 bytes)
-            token, // token address (20 bytes)
-            amount // token amount (32 bytes)
+            tokenData, // token as uint256 (32 bytes)
+            amount // amount (32 bytes)
         );
     }
 
@@ -964,6 +966,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
 
     /// @notice Helper function to compute the expected hash for MultiChainCompact with tokenOut
     /// data
+    /// @notice Updated compute hash function for tokenOut
     function computeExpectedHashWithTokenOut(bytes calldata compactData)
         public
         pure
@@ -993,18 +996,19 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         uint256 fillExpires = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
-        // Parse tokenOut (Token structs)
+        // Parse tokenOut (now as uint256[2][] format - 64 bytes per entry)
         uint256 tokenOutLength = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
-        // Create Token structs array and parse the data
+        // Create Token structs array from the uint256[2] format data
         Token[] memory tokens = new Token[](tokenOutLength);
         for (uint256 i = 0; i < tokenOutLength; i++) {
-            tokens[i] = Token({
-                token: address(bytes20(compactData[offset:offset + 20])),
-                amount: uint256(bytes32(compactData[offset + 20:offset + 52]))
-            });
-            offset += 52; // Each Token struct is 52 bytes (20 + 32)
+            uint256 tokenData = uint256(bytes32(compactData[offset:offset + 32]));
+            uint256 amount = uint256(bytes32(compactData[offset + 32:offset + 64]));
+
+            // Extract address from bottom 20 bytes of tokenData
+            tokens[i] = Token({ token: address(uint160(tokenData)), amount: amount });
+            offset += 64; // Each entry is now 64 bytes (32 + 32)
         }
 
         // Hash the tokenOut using proper EIP712 hashing
@@ -1055,19 +1059,23 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
-        // Parse commitments (Lock structs)
+        // Parse commitments (Lock structs in uint256[2] format)
         uint256 commitmentsLength = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
-        // Create Lock structs array and parse the data
+        // Create Lock structs array from the uint256[2] format data
         Lock[] memory locks = new Lock[](commitmentsLength);
         for (uint256 i = 0; i < commitmentsLength; i++) {
+            uint256 tokenData = uint256(bytes32(compactData[offset:offset + 32]));
+            uint256 amount = uint256(bytes32(compactData[offset + 32:offset + 64]));
+
+            // Extract lockTag (top 12 bytes) and token address (bottom 20 bytes) from tokenData
             locks[i] = Lock({
-                lockTag: bytes12(compactData[offset:offset + 12]),
-                token: address(bytes20(compactData[offset + 12:offset + 32])),
-                amount: uint256(bytes32(compactData[offset + 32:offset + 64]))
+                lockTag: bytes12(uint96(tokenData >> 160)), // Extract top 12 bytes
+                token: address(uint160(tokenData)), // Extract bottom 20 bytes
+                amount: amount
             });
-            offset += 64; // Each Lock struct is 64 bytes (12 + 20 + 32)
+            offset += 64; // Each entry is 64 bytes (32 + 32)
         }
 
         // Hash the commitments using proper EIP712 hashing
@@ -1096,8 +1104,8 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         // Hash the compact using proper EIP712 hashing
         return HashLib.hashCompact(sponsor, nonce, expires, notarizedElementHash, otherElements);
     }
-
     /// @notice Helper function to compute expected hash with qualification
+
     function computeExpectedHashWithQualification(bytes calldata compactData)
         public
         pure
