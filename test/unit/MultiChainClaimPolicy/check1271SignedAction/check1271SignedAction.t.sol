@@ -6,14 +6,14 @@ import { MultiChainClaimPolicy_Unit_Test } from
     "@test/unit/MultiChainClaimPolicy/MultiChainClaimPolicy.t.sol";
 
 // Libraries
-import { HashLib } from "@mocks/HashLib.sol";
+import { HashLib, Lock, Token } from "@mocks/HashLib.sol";
 import { ArgPolicyTreeLib } from
     "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { Lock, Token, ParamRules, ParamRule } from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamRules, ParamRule } from "@policies/claim-recipient/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPolicy_Unit_Test {

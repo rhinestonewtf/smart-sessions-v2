@@ -1,8 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Types
-import { Lock, Token } from "@policies/claim-recipient/types/DataTypes.sol";
+struct Lock {
+    bytes12 lockTag;
+    address token;
+    uint256 amount;
+}
+
+struct Token {
+    address token;
+    uint256 amount;
+}
 
 /// @title Hash Library
 /// @notice Library for hashing MultichainCompact structures with EIP712 compliance
