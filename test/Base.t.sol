@@ -114,15 +114,6 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         noValidator = new NoValidator();
         // Deploy the NoPolicy contract.
         noPolicy = new NoPolicy();
-        // Deploy the fallback module.
-        fallbackModule = new SmartSessionCompatibilityFallback();
-        // Install the fallback module on the account instance.
-        bytes memory _fallback = abi.encode(EIP712.eip712Domain.selector, CALLTYPE_STATIC, "");
-        instance.installModule({
-            moduleTypeId: MODULE_TYPE_FALLBACK,
-            module: address(fallbackModule),
-            data: _fallback
-        });
     }
 
     /*//////////////////////////////////////////////////////////////

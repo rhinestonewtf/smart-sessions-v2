@@ -2,24 +2,20 @@
 pragma solidity ^0.8.28;
 
 // Contracts
-import { Decoder } from "@policies/claim-recipient/core/Decoder.sol";
+import { Decoder } from "@policies/claim/core/Decoder.sol";
 
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
 
 // Libraries
-import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
-import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
-import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeLibV2.sol";
+import { ConfigLib, PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
+import { StorageLib, PolicyStorage } from "@policies/claim/lib/StorageLib.sol";
+import { ArgPolicyTreeLibV2 } from "@policies/claim/lib/ArgPolicyTreeLibV2.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import {
-    ParamRules,
-    TokenInConfig,
-    TokenOutConfig
-} from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamRules, TokenInConfig, TokenOutConfig } from "@policies/claim/types/DataTypes.sol";
 
 /// @title MultiChainClaimPolicy
 /// @notice A policy that allows enforcing rules on specific fields of a MultiChainClaim struct:
@@ -168,10 +164,7 @@ contract MultiChainClaimPolicy is I1271Policy, Decoder {
     /// @param id The configuration ID for the policy
     /// @param account The account to check the action for
     /// @param hash The hash of the action to check
-    /// @param signature The signature of the action to check, containing the actual signature and
-    /// additional data used to reconstruct the MultiChainClaim struct
-    /// @dev The signature is expected to be in the format:
-    ///      [actual_sig_length][actual_signature][raw_multichain_claim_data]
+    /// @param signature Data used to reconstruct the MultiChainClaim struct
     function check1271SignedAction(
         ConfigId id,
         address, /*sender*/

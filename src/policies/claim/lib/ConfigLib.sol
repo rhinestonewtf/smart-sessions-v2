@@ -9,7 +9,7 @@ import {
     ParamRules,
     ParamRule,
     TokenAmountConfig
-} from "@policies/claim-recipient/types/DataTypes.sol";
+} from "@policies/claim/types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                             TYPES

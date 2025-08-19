@@ -5,16 +5,16 @@ pragma solidity ^0.8.28;
 import { EIP712TypeHash } from "@compact-utils/types/EIP712TypeHash.sol";
 
 // Libraries
-import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
-import { StorageLib, PolicyStorage } from "@policies/claim-recipient/lib/StorageLib.sol";
-import { ArgPolicyTreeLibV2 } from "@policies/claim-recipient/lib/ArgPolicyTreeLibV2.sol";
+import { ConfigLib, PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
+import { StorageLib, PolicyStorage } from "@policies/claim/lib/StorageLib.sol";
+import { ArgPolicyTreeLibV2 } from "@policies/claim/lib/ArgPolicyTreeLibV2.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { ParamRules } from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamRules } from "@policies/claim/types/DataTypes.sol";
 
 /// @title Decoder
 /// @notice Abstract contract used for extracting and validating MultiChainCompact data passed in
