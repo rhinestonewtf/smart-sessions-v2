@@ -6,7 +6,6 @@ import { MultiChainClaimPolicy_Unit_Test } from
     "@test/unit/MultiChainClaimPolicy/MultiChainClaimPolicy.t.sol";
 
 // Libraries
-import { ConfigLib, PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
 import { HashLib } from "@mocks/HashLib.sol";
 import { ArgPolicyTreeLib } from
     "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
@@ -14,9 +13,7 @@ import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import {
-    Lock, Token, Op, ParamRules, ParamRule
-} from "@policies/claim-recipient/types/DataTypes.sol";
+import { Lock, Token, ParamRules, ParamRule } from "@policies/claim-recipient/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPolicy_Unit_Test {
@@ -773,7 +770,6 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Create the target data with tokenOut in uint256[2][] format
-    /// @notice Create the target data with tokenOut - NOW AS uint256[2] format
     function _createTargetData(
         address token,
         uint256 amount,
@@ -793,7 +789,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             targetChainId, // targetChain (32 bytes)
             uint256(block.timestamp + 7200), // fillExpires (32 bytes)
             uint256(1), // tokenOut length (32 bytes)
-            tokenData, // token as uint256 (32 bytes) - CHANGED
+            tokenData, // token as uint256 (32 bytes)
             amount // amount (32 bytes)
         );
     }

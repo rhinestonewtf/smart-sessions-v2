@@ -14,9 +14,7 @@ import { IdLib } from "@the-compact/lib/IdLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import {
-    Lock, Token, ParamRules, TokenInConfig
-} from "@policies/claim-recipient/types/DataTypes.sol";
+import { ParamRules } from "@policies/claim-recipient/types/DataTypes.sol";
 
 /// @title Decoder
 /// @notice Abstract contract used for extracting and validating MultiChainCompact data passed in
