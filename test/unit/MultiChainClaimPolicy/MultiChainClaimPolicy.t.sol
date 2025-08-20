@@ -5,7 +5,7 @@ pragma solidity >=0.8.27;
 import { Base_Test } from "@test/Base.t.sol";
 
 // Contracts
-import { MultiChainClaimPolicy } from "@policies/claim-recipient/MultiChainClaimPolicy.sol";
+import { MultiChainClaimPolicy } from "@policies/claim/MultiChainClaimPolicy.sol";
 
 contract MultiChainClaimPolicy_Unit_Test is Base_Test {
     /*//////////////////////////////////////////////////////////////

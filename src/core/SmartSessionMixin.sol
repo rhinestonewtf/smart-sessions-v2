@@ -373,13 +373,14 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @notice Validates an ERC-1271 signature
     /// @dev This function performs several checks to validate the signature:
     ///      1. Verifies that the permissionId is enabled for the sender
-    ///      3. Checks the ERC-1271 policy
+    ///      2. Extracts the session validator signature using the provided length
+    ///      3. Checks the ERC-1271 policy with the remaining policy data
     ///      4. Validates the signature using ISessionValidator
-    /// @dev This function returns false if a permissionId supplied within the signature is not
-    /// enabled
+    /// @dev Signature format:
+    /// [permissionId(32)][sigLength(32)][validatorSig(sigLength)][policyData]
     /// @param sender The address initiating the signature validation
     /// @param hash The hash of the data to be signed
-    /// @param signature The signature to be validated (first 32 bytes contain the permissionId)
+    /// @param signature The signature to be validated
     /// @param sponsor The address of the account for which the signature is being validated
     /// @param lockTag The lock tag associated with the session
     /// @return valid Boolean indicating whether the signature is valid
@@ -396,7 +397,6 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     {
         // isolate the PermissionId and actual signature from the supplied signature param
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
-        signature = signature[32:];
 
         // forgefmt: disable-next-item
         if (
@@ -406,12 +406,16 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             )
         ) return false;
 
+        // Extract the offset for the policy data
+        uint256 policyDataOffset = uint256(bytes32(signature[32:64]));
+
         // check the ERC-1271 policy
         bool valid = $erc1271Policies.checkERC1271({
             account: sponsor,
             requestSender: sender,
             hash: hash,
-            signature: signature,
+            signature: signature[policyDataOffset:], // extract the policy data after the
+                // validator signature
             permissionId: permissionId,
             configId: permissionId.toErc1271PolicyId().toConfigId(sponsor),
             minPoliciesToEnforce: 1
@@ -424,8 +428,8 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             hash: hash,
             account: sponsor,
             permissionId: permissionId,
-            signature: signature
-        });
+            signature: signature[64:policyDataOffset] // extract the validator signature
+         });
     }
 
     /*//////////////////////////////////////////////////////////////

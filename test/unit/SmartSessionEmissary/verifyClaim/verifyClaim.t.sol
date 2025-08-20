@@ -240,6 +240,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         );
 
         // Prepend the permissionId
-        mockSignature = abi.encodePacked(testPermissionId, sessionSignature);
+        mockSignature =
+            abi.encodePacked(testPermissionId, sessionSignature.length + 64, sessionSignature);
     }
 }

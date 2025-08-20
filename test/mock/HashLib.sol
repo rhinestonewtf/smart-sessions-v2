@@ -1,8 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Types
-import { Lock, Token } from "@policies/claim-recipient/types/DataTypes.sol";
+struct Lock {
+    bytes12 lockTag;
+    address token;
+    uint256 amount;
+}
+
+struct Token {
+    address token;
+    uint256 amount;
+}
 
 /// @title Hash Library
 /// @notice Library for hashing MultichainCompact structures with EIP712 compliance
@@ -23,31 +31,32 @@ library HashLib {
     /// @notice EIP-712 typehash for the `Op` struct.
     bytes32 internal constant TYPEHASH_OP = keccak256("Op(address to,uint256 value,bytes data)");
 
-    /// @notice EIP-712 typehash for the `Target` struct.
+    /// @notice EIP-712 typehash for the `Target` struct - FIXED: removed claimProofer
     bytes32 internal constant TYPEHASH_TARGET = keccak256(
         bytes(
             "Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry)Token(address token,uint256 amount)"
         )
     );
 
-    /// @notice EIP-712 typehash for the `Mandate` struct.
+    /// @notice EIP-712 typehash for the `Mandate` struct - FIXED: removed claimProofer from Target
     bytes32 internal constant TYPEHASH_MANDATE = keccak256(
         bytes(
-            "Mandate(Target target,Op[] originOps,Op[] destOps,bytes32 q)Op(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry,address claimProofer)Token(address token,uint256 amount)"
+            "Mandate(Target target,Op[] originOps,Op[] destOps,bytes32 q)Op(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry)Token(address token,uint256 amount)"
         )
     );
 
-    /// @notice EIP-712 typehash for the `Element` struct.
+    /// @notice EIP-712 typehash for the `Element` struct - FIXED: removed claimProofer from Target
     bytes32 internal constant TYPEHASH_ELEMENT = keccak256(
         bytes(
-            "Element(address arbiter,uint256 chainId,Lock[] commitments,Mandate mandate)Lock(bytes12 lockTag,address token,uint256 amount)Mandate(Target target,Op[] originOps,Op[] destOps,bytes32 q)Op(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry,address claimProofer)Token(address token,uint256 amount)"
+            "Element(address arbiter,uint256 chainId,Lock[] commitments,Mandate mandate)Lock(bytes12 lockTag,address token,uint256 amount)Mandate(Target target,Op[] originOps,Op[] destOps,bytes32 q)Op(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry)Token(address token,uint256 amount)"
         )
     );
 
-    /// @notice EIP-712 typehash for the `MultichainCompact` struct.
+    /// @notice EIP-712 typehash for the `MultichainCompact` struct - FIXED: removed claimProofer
+    /// from Target
     bytes32 internal constant TYPEHASH_COMPACT = keccak256(
         bytes(
-            "MultichainCompact(address sponsor,uint256 nonce,uint256 expires,Element[] elements)Element(address arbiter,uint256 chainId,Lock[] commitments,Mandate mandate)Lock(bytes12 lockTag,address token,uint256 amount)Mandate(Target target,Op[] originOps,Op[] destOps,bytes32 q)Op(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry,address claimProofer)Token(address token,uint256 amount)"
+            "MultichainCompact(address sponsor,uint256 nonce,uint256 expires,Element[] elements)Element(address arbiter,uint256 chainId,Lock[] commitments,Mandate mandate)Lock(bytes12 lockTag,address token,uint256 amount)Mandate(Target target,Op[] originOps,Op[] destOps,bytes32 q)Op(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry)Token(address token,uint256 amount)"
         )
     );
 

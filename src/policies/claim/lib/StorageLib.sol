@@ -3,8 +3,8 @@ pragma solidity ^0.8.28;
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { PolicyConfig } from "@policies/claim-recipient/lib/ConfigLib.sol";
-import { ParamRules, TokenAmountConfig } from "@policies/claim-recipient/types/DataTypes.sol";
+import { PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
+import { ParamRules, TokenAmountConfig } from "@policies/claim/types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                              STRUCTS
