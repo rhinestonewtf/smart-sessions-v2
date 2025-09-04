@@ -18,6 +18,7 @@ import {
 
 // Types
 import { INVALID_RETURN } from "@types/DataTypes.sol";
+import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
@@ -87,7 +88,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata executions,
+        Execution[] calldata executions,
         bytes12 lockTag
     )
         public

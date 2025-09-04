@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 // Contracts
-import { EIP712TypeHash } from "@compact-utils/types/EIP712TypeHash.sol";
+import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
 // Libraries
 import { ConfigLib, PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
@@ -16,11 +16,11 @@ import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { ParamRules } from "@policies/claim/types/DataTypes.sol";
 
-/// @title Decoder
-/// @notice Abstract contract used for extracting and validating MultiChainCompact data passed in
+/// @title Decode Library
+/// @notice Library used for extracting and validating MultiChainCompact data passed in
 ///         signatures. It decodes the data, validates it against the policy configuration, and
 ///         reconstructs the MultiChainCompact struct hash for verification.
-abstract contract Decoder is EIP712TypeHash {
+library DecodeLib {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -92,6 +92,7 @@ abstract contract Decoder is EIP712TypeHash {
         // Decode and validate notarized element
         (bool elementValid, bytes32 elementHash) =
             _validateNotarizedElement(data, notarizedElementOffset, config, configId, account);
+
         if (!elementValid) {
             return (false, bytes32(0));
         }
@@ -114,7 +115,8 @@ abstract contract Decoder is EIP712TypeHash {
         bytes32 allElementsHash = allElements.hash();
 
         // Hash the MultichainCompact struct
-        bytes32 compactHash = _hashCompact(sponsor, nonce, expires, allElementsHash);
+        bytes32 compactHash =
+            EIP712TypeHashLib.hashCompact(sponsor, nonce, expires, allElementsHash);
 
         // Calculate the digest
         digest = compactHash.withDomain(domainSeparator);
@@ -172,7 +174,9 @@ abstract contract Decoder is EIP712TypeHash {
         }
 
         // Calculate Element struct hash
-        elementHash = _hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+        elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+
         return (true, elementHash);
     }
 
@@ -259,7 +263,9 @@ abstract contract Decoder is EIP712TypeHash {
         }
 
         // Calculate Mandate struct hash
-        mandateHash = _hashMandateRaw(targetHash, preClaimOpsHash, targetOpsHash, qualificationHash);
+        mandateHash = EIP712TypeHashLib.hashMandateRaw(
+            targetHash, preClaimOpsHash, targetOpsHash, qualificationHash
+        );
         return (true, mandateHash);
     }
 
@@ -322,7 +328,9 @@ abstract contract Decoder is EIP712TypeHash {
         }
 
         // Calculate Target struct hash
-        targetHash = _hashTargetAttributesRaw(recipient, tokenOutHash, targetChain, fillExpires);
+        targetHash = EIP712TypeHashLib.hashTargetAttributesRaw(
+            recipient, tokenOutHash, targetChain, fillExpires
+        );
         return (true, targetHash, offset);
     }
 
@@ -386,7 +394,7 @@ abstract contract Decoder is EIP712TypeHash {
         }
 
         // Calculate hash using the optimized _hashTokenIn function
-        commitmentsHash = _hashTokenIn(tokenIn);
+        commitmentsHash = EIP712TypeHashLib.hashTokenIn(tokenIn);
 
         return (true, commitmentsHash, offset + (length * 64));
     }
@@ -447,7 +455,7 @@ abstract contract Decoder is EIP712TypeHash {
         }
 
         // Calculate hash using the optimized _hashTokenOut function
-        tokenOutHash = _hashTokenOut(tokenOut);
+        tokenOutHash = EIP712TypeHashLib.hashTokenOut(tokenOut);
 
         return (true, tokenOutHash, offset + (length * 64));
     }

@@ -8,7 +8,6 @@ import {
     PermissionId,
     ActionId,
     ActionData,
-    SmartSessionMode,
     SignerConf,
     EnumerableActionPolicy,
     PolicyType,

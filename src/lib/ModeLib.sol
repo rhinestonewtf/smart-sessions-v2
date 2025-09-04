@@ -26,14 +26,4 @@ library ModeLib {
     function decodeMode(bytes calldata emissaryData) internal pure returns (EmissaryMode) {
         return EmissaryMode.wrap(emissaryData[0]);
     }
-
-    /// @notice Decodes mode and lock tag from given signature data
-    function decodeModeAndLockTag(bytes calldata signatureData)
-        internal
-        pure
-        returns (EmissaryMode mode, bytes12 lockTag)
-    {
-        mode = EmissaryMode.wrap(signatureData[0]);
-        lockTag = bytes12(signatureData[1:13]);
-    }
 }

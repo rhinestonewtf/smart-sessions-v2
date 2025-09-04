@@ -4,7 +4,7 @@ pragma solidity >=0.8.27;
 // Contracts
 import { SameChainAdapter } from "@compact-utils/arbiters/samechain/SameChainAdapter.sol";
 import { AlwaysOKAllocator } from "@the-compact/test/AlwaysOKAllocator.sol";
-import { EIP712TypeHash } from "@compact-utils/base/arbiter/ArbiterBase.sol";
+import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
 // Libraries
 import { IdLib } from "@the-compact/lib/IdLib.sol";
@@ -17,7 +17,7 @@ import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.s
 
 // Types
 import { Element, Mandate, Target } from "@compact-utils/types/TheCompactStructs.sol";
-import { Execution } from "@modulekit/integrations/ERC7579Exec.sol";
+import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
 import { PolicyData, ActionData, PermissionId } from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
@@ -59,9 +59,9 @@ contract SmartSessionEmissary_Integration_Test is
         _lockAssets(env.smartAccount1, env.token1, 100 ether);
 
         adapter = env.sameChainAdapter;
-        arbiter = address(adapter);
+        arbiter = address(adapter.ARBITER());
 
-        _setFillRoute(SameChainAdapter.samechain_handleFill.selector, address(adapter));
+        _setFillRoute(SameChainAdapter.samechain_compact_handleFill.selector, address(adapter));
 
         // test
         _sampleExecERC20(env.token2, 10);
@@ -120,7 +120,6 @@ contract SmartSessionEmissary_Integration_Test is
     //////////////////////////////////////////////////////////////*/
 
     // test_fillSameChain from parent will run automatically with our setup
-
     function test_fillSameChain_sudoPolicy_RevertsWhen_withFailingValidator() public {
         // Setup failing validator session (replaces the default one)
         _setupFailingValidatorSession();
@@ -131,12 +130,8 @@ contract SmartSessionEmissary_Integration_Test is
         Types.Order memory order = _getOrder($intent.compact, 0);
         vm.chainId(order.notarizedChainId);
 
-        bytes32 typehashCompact = EIP712TypeHash(arbiter).TYPEHASH_COMPACT();
-
-        bytes32 qualifiedHash;
-        (bytes32 digest, bytes memory allocatorSig) = _allocatorSig(
-            env.orchestrator, order.notarizedChainId, $intent.claimHash, qualifiedHash
-        );
+        (bytes32 digest, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
 
         (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
 
@@ -146,9 +141,9 @@ contract SmartSessionEmissary_Integration_Test is
             chainId: order.notarizedChainId,
             solverContext: abi.encodePacked(env.solver.addr),
             adapterCalldata: abi.encodeCall(
-                SameChainAdapter.samechain_handleFill,
+                SameChainAdapter.samechain_compact_handleFill,
                 (
-                    SameChainAdapter.FillData({
+                    SameChainAdapter.FillDataCompact({
                         order: order,
                         userSigs: Types.Signatures($intent.userEmissarySig, ""),
                         otherElements: otherElements,

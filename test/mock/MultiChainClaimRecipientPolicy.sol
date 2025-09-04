@@ -6,7 +6,7 @@ import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
 
 // Contracts
-import { EIP712TypeHash } from "@compact-utils/types/EIP712TypeHash.sol";
+import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -17,7 +17,7 @@ import { console } from "@forge-std/console.sol";
 /// @notice A policy that allows enforcing rules on the claim recipient of a MultiChainClaim struct
 ///         The hash of the MultiChainClaim struct hash is reconstructed using the EIP-712
 ///         standard and passed data within the signature
-contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
+contract MultiChainClaimRecipientPolicy is I1271Policy {
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -190,7 +190,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
         );
 
         // Hash the mandate
-        bytes32 mandateHash = _hashMandateRaw(
+        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
             targetHash,
             multichainCompact.notarizedElement.mandate.preClaimOps,
             multichainCompact.notarizedElement.mandate.targetOps,
@@ -198,7 +198,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
         );
 
         // Hash the notarized element
-        bytes32 notarizedElementHash = _hashElementRaw(
+        bytes32 notarizedElementHash = EIP712TypeHashLib.hashElementRaw(
             multichainCompact.notarizedElement.arbiter,
             multichainCompact.notarizedElement.chainId,
             multichainCompact.notarizedElement.commitments,
@@ -215,7 +215,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
         // Hash the complete MultichainCompact
         bytes32 hash = keccak256(
             abi.encode(
-                TYPEHASH_COMPACT,
+                EIP712TypeHashLib.TYPEHASH_COMPACT,
                 multichainCompact.sponsor,
                 multichainCompact.nonce,
                 multichainCompact.expires,
@@ -236,10 +236,14 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
         uint256 fillExpires
     )
         internal
-        view
+        pure
         returns (bytes32)
     {
-        return keccak256(abi.encode(TYPEHASH_TARGET, recipient, tokenOut, targetChain, fillExpires));
+        return keccak256(
+            abi.encode(
+                EIP712TypeHashLib.TYPEHASH_TARGET, recipient, tokenOut, targetChain, fillExpires
+            )
+        );
     }
 
     /// @notice Checks if the policy supports the given interface ID
@@ -250,7 +254,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy, EIP712TypeHash {
         );
     }
 
-    function __QUALIFIER_EIP712Hash(bytes calldata) public pure override returns (bytes32) {
+    function __QUALIFIER_EIP712Hash(bytes calldata) public pure returns (bytes32) {
         revert();
     }
 }
