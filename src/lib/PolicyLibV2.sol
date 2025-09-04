@@ -124,7 +124,7 @@ library PolicyLibV2 {
     /// @dev Adjusted checkBatch7579Exec from PolicyLib to work with erc7579 Execution[] callData
     function checkBatch7579Exec(
         mapping(ActionId => Policy) storage $policies,
-        bytes calldata callData,
+        Execution[] calldata executions,
         PermissionId permissionId,
         uint256 minPolicies,
         address account
@@ -132,7 +132,6 @@ library PolicyLibV2 {
         internal
     {
         // Decode the batch of 7579 executions from the user operation's call data
-        Execution[] calldata executions = callData.decodeBatch();
         uint256 length = executions.length;
         // Revert if there are no executions in the batch
         if (length == 0) revert ISmartSession.NoExecutionsInBatch();

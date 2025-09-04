@@ -23,6 +23,7 @@ import {
     INVALID_RETURN,
     WebAuthVerificationContext
 } from "@types/DataTypes.sol";
+import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title EmissaryBase
 /// @notice Base emissary contract providing basic validator functionality (ECDSA, Passkey,
@@ -244,7 +245,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata, /* executions */
+        Execution[] calldata, /* executions */
         bytes12 lockTag
     )
         internal
@@ -281,7 +282,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata, /* executions */
+        Execution[] calldata, /* executions */
         bytes12 /* lockTag */
     )
         internal
@@ -316,7 +317,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        bytes calldata, /* executions */
+        Execution[] calldata, /* executions */
         bytes12 /* lockTag */
     )
         internal

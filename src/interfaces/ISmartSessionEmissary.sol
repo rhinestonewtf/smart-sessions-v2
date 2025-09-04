@@ -11,7 +11,8 @@ import {
     EmissaryConfig,
     SmartSessionEmissaryEnable
 } from "@types/DataTypes.sol";
-import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
+import { PermissionId } from "@smartsessions/DataTypes.sol";
+import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 interface ISmartSessionEmissary is IEmissary {
     /*//////////////////////////////////////////////////////////////
@@ -32,9 +33,6 @@ interface ISmartSessionEmissary is IEmissary {
 
     /// @notice Thrown when a permission ID is not valid
     error InvalidPermissionId(PermissionId permissionId);
-
-    /// @notice Thrown when the session mode is not supported
-    error UnsupportedSmartSessionMode(SmartSessionMode mode);
 
     /// @notice Thrown when the execution type is not supported
     error UnsupportedExecutionType();
@@ -132,7 +130,7 @@ interface ISmartSessionEmissary is IEmissary {
         address account,
         bytes32 hash,
         bytes calldata data,
-        bytes calldata executions,
+        Execution[] calldata executions,
         bytes12 lockTag
     )
         external

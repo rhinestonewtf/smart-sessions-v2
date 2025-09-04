@@ -4,7 +4,7 @@ pragma solidity >=0.8.27;
 // Contracts
 import { SameChainAdapter } from "@compact-utils/arbiters/samechain/SameChainAdapter.sol";
 import { AlwaysOKAllocator } from "@the-compact/test/AlwaysOKAllocator.sol";
-import { EIP712TypeHash } from "@compact-utils/base/arbiter/ArbiterBase.sol";
+import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { MultiChainClaimPolicy } from "@policies/claim/MultiChainClaimPolicy.sol";
 
 // Libraries
@@ -18,7 +18,7 @@ import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.s
 
 // Types
 import { Element, Mandate, Target } from "@compact-utils/types/TheCompactStructs.sol";
-import { Execution } from "@modulekit/integrations/ERC7579Exec.sol";
+import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
 import { PolicyData, ActionData, PermissionId, ConfigId } from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
@@ -67,7 +67,7 @@ contract MultiChainClaimPolicy_SmartSessionEmissary_Integration_Test is
         adapter = env.sameChainAdapter;
         arbiter = address(adapter);
 
-        _setFillRoute(SameChainAdapter.samechain_handleFill.selector, address(adapter));
+        _setFillRoute(SameChainAdapter.samechain_compact_handleFill.selector, address(adapter));
 
         // test
         _sampleExecERC20(env.token2, 10);
@@ -101,7 +101,9 @@ contract MultiChainClaimPolicy_SmartSessionEmissary_Integration_Test is
         );
 
         ($intent.claimHash, $intent.elementHashes) = hashCompact(arbiter, $intent.compact);
+        console.logBytes32($intent.claimHash);
         $intent.digest = _hashTypedData(notarizedChain, $intent.claimHash);
+        console.logBytes32($intent.digest);
 
         env.alwaysOKAllocator = new AlwaysOKAllocator();
         vm.prank(address(env.alwaysOKAllocator));
@@ -145,12 +147,8 @@ contract MultiChainClaimPolicy_SmartSessionEmissary_Integration_Test is
         // The intent has executions (intent.targetExecutions), so it should pass
         vm.chainId(order.notarizedChainId);
 
-        bytes32 typehashCompact = EIP712TypeHash(arbiter).TYPEHASH_COMPACT();
-
-        bytes32 qualifiedHash;
-        (bytes32 digest, bytes memory allocatorSig) = _allocatorSig(
-            env.orchestrator, order.notarizedChainId, $intent.claimHash, qualifiedHash
-        );
+        (bytes32 digest, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
 
         (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
 
@@ -158,9 +156,9 @@ contract MultiChainClaimPolicy_SmartSessionEmissary_Integration_Test is
             chainId: order.notarizedChainId,
             solverContext: abi.encodePacked(env.solver.addr),
             adapterCalldata: abi.encodeCall(
-                SameChainAdapter.samechain_handleFill,
+                SameChainAdapter.samechain_compact_handleFill,
                 (
-                    SameChainAdapter.FillData({
+                    SameChainAdapter.FillDataCompact({
                         order: order,
                         userSigs: Types.Signatures($intent.userEmissarySig, ""),
                         otherElements: otherElements,

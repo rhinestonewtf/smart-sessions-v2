@@ -5,8 +5,6 @@ pragma solidity ^0.8.28;
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 
 // Libraries
-import { EncodeLib } from "@smartsessions/lib/EncodeLib.sol";
-import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { IdLibV2 } from "@lib/IdLibV2.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
@@ -20,9 +18,10 @@ import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
+import { EncodeLibV2 } from "@lib/EncodeLibV2.sol";
 
 // Types
-import { PermissionId, SmartSessionMode, PolicyType } from "@smartsessions/DataTypes.sol";
+import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
 import {
     DisableSession,
     INVALID_RETURN,
@@ -30,6 +29,7 @@ import {
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable
 } from "@types/DataTypes.sol";
+import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
@@ -39,8 +39,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    using EncodeLib for *;
-    using SmartSessionModeLib for *;
+    using EncodeLibV2 for *;
     using IdLib for *;
     using IdLibV2 for *;
     using EnumerableSet for *;
@@ -274,7 +273,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         address account,
         bytes32 hash,
         bytes calldata emissaryData,
-        bytes calldata executions,
+        Execution[] calldata executions,
         bytes12 lockTag
     )
         internal
@@ -285,27 +284,17 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         bool validSig;
 
         // unpacking data packed in data
-        (SmartSessionMode mode, PermissionId permissionId, bytes calldata packedSig) =
-            emissaryData.unpackMode();
+        (PermissionId permissionId, bytes calldata packedSig) = emissaryData.unpack();
 
-        // If the SmartSession.USE mode was selected, no further policies have to be enabled.
-        // We can go straight to userOp validation
-        // This condition is the average case, so should be handled as the first condition
-        if (mode.isUseMode()) {
-            // USE mode: Directly enforce policies without enabling new ones
-            validSig = _enforcePolicies({
-                permissionId: permissionId,
-                hash: hash,
-                callData: executions,
-                decompressedSignature: packedSig,
-                account: account,
-                lockTag: lockTag
-            });
-        }
-        // if an Unknown mode is provided, the function will revert
-        else {
-            revert UnsupportedSmartSessionMode(mode);
-        }
+        // Enforce policies without enabling new ones
+        validSig = _enforcePolicies({
+            permissionId: permissionId,
+            hash: hash,
+            executions: executions,
+            decompressedSignature: packedSig,
+            account: account,
+            lockTag: lockTag
+        });
 
         // Return the function selector on success, or a specific failure code otherwise.
         return validSig ? this.verifyExecution.selector : INVALID_RETURN;
@@ -319,7 +308,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     /// @dev This function is the core of policy enforcement in SmartSession
     /// @param permissionId The unique identifier for the permission set
     /// @param hash Message hash to be validated
-    /// @param callData Execution data for the call
+    /// @param executions The execution data for the user operation
     /// @param decompressedSignature The decompressed signature for validation
     /// @param account The account for which policies are being enforced
     /// @param lockTag The lock tag associated with the session
@@ -327,7 +316,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     function _enforcePolicies(
         PermissionId permissionId,
         bytes32 hash,
-        bytes calldata callData,
+        Execution[] calldata executions,
         bytes memory decompressedSignature,
         address account,
         bytes12 lockTag
@@ -350,7 +339,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
 
         // Check action policies for the given permissionId and batch execution
         $actionPolicies.actionPolicies.checkBatch7579Exec({
-            callData: callData,
+            executions: executions,
             permissionId: permissionId,
             minPolicies: 1, // minimum of one actionPolicy must be set.
             account: account

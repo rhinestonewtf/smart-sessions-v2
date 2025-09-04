@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Contracts
-import { Decoder } from "@policies/claim/core/Decoder.sol";
-
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
@@ -12,10 +9,14 @@ import { IERC165 } from "@forge-std/interfaces/IERC165.sol";
 import { ConfigLib, PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/claim/lib/StorageLib.sol";
 import { ArgPolicyTreeLibV2 } from "@policies/claim/lib/ArgPolicyTreeLibV2.sol";
+import { DecodeLib } from "@policies/claim/lib/DecodeLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { ParamRules, TokenInConfig, TokenOutConfig } from "@policies/claim/types/DataTypes.sol";
+
+// Debug
+import { console } from "@forge-std/console.sol";
 
 /// @title MultiChainClaimPolicy
 /// @notice A policy that allows enforcing rules on specific fields of a MultiChainClaim struct:
@@ -25,7 +26,7 @@ import { ParamRules, TokenInConfig, TokenOutConfig } from "@policies/claim/types
 ///         - tokenOut/amount: per targetChainId mapping
 ///         - qualification: compare with input
 ///         Uses a bitmap configuration with separate storage for each condition
-contract MultiChainClaimPolicy is I1271Policy, Decoder {
+contract MultiChainClaimPolicy is I1271Policy {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -33,6 +34,7 @@ contract MultiChainClaimPolicy is I1271Policy, Decoder {
     using ConfigLib for PolicyConfig;
     using ConfigLib for bytes;
     using ArgPolicyTreeLibV2 for ParamRules;
+    using DecodeLib for bytes;
 
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -190,7 +192,13 @@ contract MultiChainClaimPolicy is I1271Policy, Decoder {
 
         // Extract the hash and validate the parameters from the signature
         // using the raw data and the stored configuration for the account
-        (bool isValid, bytes32 recomputedHash) = extractAndValidate(signature, config, id, account);
+        (bool isValid, bytes32 recomputedHash) = signature.extractAndValidate(config, id, account);
+
+        console.log("MultiChainClaimPolicy check1271SignedAction:");
+        console.log("Recomputed hash:");
+        console.logBytes32(recomputedHash);
+        console.log("Provided hash:");
+        console.logBytes32(hash);
 
         // If the recomputed hash does not match the provided hash, return false
         return isValid && recomputedHash == hash;

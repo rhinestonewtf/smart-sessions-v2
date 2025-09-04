@@ -12,7 +12,7 @@ import { SmartSessionEmissaryMock } from "@test/mock/SmartSessionEmissaryMock.so
 import { IntegrationEncodeLib } from "@smartsessions-test/utils/lib/IntegrationEncodeLib.sol";
 
 // Types
-import { SmartSessionMode, PermissionId, ChainDigest } from "@smartsessions/DataTypes.sol";
+import { PermissionId, ChainDigest } from "@smartsessions/DataTypes.sol";
 import { Session, EnableSession } from "@types/DataTypes.sol";
 
 contract SmartSessionEmissary_Unit_Test is Base_Test {

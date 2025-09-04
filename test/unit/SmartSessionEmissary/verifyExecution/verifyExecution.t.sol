@@ -23,7 +23,6 @@ import {
     FALLBACK_TARGET_FLAG,
     FALLBACK_TARGET_SELECTOR_FLAG,
     PermissionId,
-    SmartSessionMode,
     ActionId,
     EnableSession
 } from "@smartsessions/DataTypes.sol";
@@ -59,7 +58,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
     PermissionId testPermissionId;
     bytes mockSignature;
-    bytes mockExecData;
+    Execution[] mockExecData;
     bytes32 TEST_HASH;
     bytes4 mockTargetSelector;
     address testValidator;
@@ -82,7 +81,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
         Execution[] memory executions = new Execution[](1);
         executions[0] = Execution({ target: target, value: value, callData: callData });
-        mockExecData = abi.encode(executions);
+        mockExecData = executions;
 
         // Setup testValidator as default validator
         testValidator = address(instance.defaultValidator);
@@ -97,8 +96,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
     function test_verifyExecution_Success() public withEnabledSudoSession {
         // Arrange
-        bytes memory data =
-            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data = packData(EMISSARY_SMART_SESSION, testPermissionId, mockSignature);
 
         // Act
         bytes4 result = smartSessionEmissary.verifyExecution(
@@ -116,9 +114,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
     function test_verifyExecution_RevertsWhen_InvalidPermissionId() public {
         // Arrange
         PermissionId invalidPermissionId = PermissionId.wrap(keccak256("invalid"));
-        bytes memory data = packData(
-            EMISSARY_SMART_SESSION, SmartSessionMode.USE, invalidPermissionId, mockSignature
-        );
+        bytes memory data = packData(EMISSARY_SMART_SESSION, invalidPermissionId, mockSignature);
 
         // Act/Assert
         vm.expectRevert(
@@ -133,8 +129,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
     function test_verifyExecution_BatchCall_Success() public withEnabledBatchSudoSession {
         // Arrange
-        bytes memory data =
-            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data = packData(EMISSARY_SMART_SESSION, testPermissionId, mockSignature);
 
         // Create mock batch execution data
         Execution[] memory executions = new Execution[](2);
@@ -151,11 +146,9 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
             callData: abi.encodeWithSelector(bytes4(keccak256("anotherFunction()")))
         });
 
-        bytes memory batchExecData = ExecutionLib.encodeBatch(executions);
-
         // Act
         bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, batchExecData, testLockTag
+            instance.account, TEST_HASH, data, executions, testLockTag
         );
 
         // Assert
@@ -171,8 +164,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         withEnabledSessionWithFailingValidator
     {
         // Arrange
-        bytes memory data =
-            packData(EMISSARY_SMART_SESSION, SmartSessionMode.USE, testPermissionId, mockSignature);
+        bytes memory data = packData(EMISSARY_SMART_SESSION, testPermissionId, mockSignature);
 
         // Act
         bytes4 result = smartSessionEmissary.verifyExecution(
@@ -321,7 +313,6 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
     function packData(
         EmissaryMode emissaryMode,
-        SmartSessionMode sessionMode,
         PermissionId permissionId,
         bytes memory signature
     )
@@ -329,7 +320,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(emissaryMode, sessionMode, permissionId, signature);
+        return abi.encodePacked(emissaryMode, permissionId, signature);
     }
 
     function packPermissionSig() internal view returns (bytes memory) {
@@ -358,17 +349,5 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
         // Calculate the permission ID
         testPermissionId = smartSessionEmissary.getPermissionId(session);
-    }
-
-    function encodeEnable(
-        bytes memory sig,
-        EnableSession memory enableData
-    )
-        internal
-        pure
-        returns (bytes memory packedSig)
-    {
-        packedSig =
-            abi.encodePacked(SmartSessionMode.ENABLE, abi.encode(enableData, sig).flzCompress());
     }
 }
