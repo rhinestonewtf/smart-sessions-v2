@@ -65,7 +65,7 @@ contract MultiChainClaimPolicy_SmartSessionEmissary_Integration_Test is
         _lockAssets(env.smartAccount1, env.token1, 100 ether);
 
         adapter = env.sameChainAdapter;
-        arbiter = address(adapter);
+        arbiter = address(adapter.ARBITER());
 
         _setFillRoute(SameChainAdapter.samechain_compact_handleFill.selector, address(adapter));
 
@@ -101,9 +101,7 @@ contract MultiChainClaimPolicy_SmartSessionEmissary_Integration_Test is
         );
 
         ($intent.claimHash, $intent.elementHashes) = hashCompact(arbiter, $intent.compact);
-        console.logBytes32($intent.claimHash);
         $intent.digest = _hashTypedData(notarizedChain, $intent.claimHash);
-        console.logBytes32($intent.digest);
 
         env.alwaysOKAllocator = new AlwaysOKAllocator();
         vm.prank(address(env.alwaysOKAllocator));

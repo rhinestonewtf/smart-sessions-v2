@@ -15,9 +15,6 @@ import { DecodeLib } from "@policies/claim/lib/DecodeLib.sol";
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { ParamRules, TokenInConfig, TokenOutConfig } from "@policies/claim/types/DataTypes.sol";
 
-// Debug
-import { console } from "@forge-std/console.sol";
-
 /// @title MultiChainClaimPolicy
 /// @notice A policy that allows enforcing rules on specific fields of a MultiChainClaim struct:
 ///         - hasExecutions: executions != empty executions hash
@@ -193,12 +190,6 @@ contract MultiChainClaimPolicy is I1271Policy {
         // Extract the hash and validate the parameters from the signature
         // using the raw data and the stored configuration for the account
         (bool isValid, bytes32 recomputedHash) = signature.extractAndValidate(config, id, account);
-
-        console.log("MultiChainClaimPolicy check1271SignedAction:");
-        console.log("Recomputed hash:");
-        console.logBytes32(recomputedHash);
-        console.log("Provided hash:");
-        console.logBytes32(hash);
 
         // If the recomputed hash does not match the provided hash, return false
         return isValid && recomputedHash == hash;

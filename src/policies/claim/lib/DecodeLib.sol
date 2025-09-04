@@ -16,9 +16,6 @@ import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { ParamRules } from "@policies/claim/types/DataTypes.sol";
 
-// Debug
-import { console } from "@forge-std/console.sol";
-
 /// @title Decode Library
 /// @notice Library used for extracting and validating MultiChainCompact data passed in
 ///         signatures. It decodes the data, validates it against the policy configuration, and
@@ -96,9 +93,6 @@ library DecodeLib {
         (bool elementValid, bytes32 elementHash) =
             _validateNotarizedElement(data, notarizedElementOffset, config, configId, account);
 
-        console.log("Element valid:", elementValid);
-        console.logBytes32(elementHash);
-
         if (!elementValid) {
             return (false, bytes32(0));
         }
@@ -124,14 +118,8 @@ library DecodeLib {
         bytes32 compactHash =
             EIP712TypeHashLib.hashCompact(sponsor, nonce, expires, allElementsHash);
 
-        console.log("Compact hash:");
-        console.logBytes32(compactHash);
-
         // Calculate the digest
         digest = compactHash.withDomain(domainSeparator);
-
-        console.log("Digest:");
-        console.logBytes32(digest);
 
         return (true, digest);
     }
@@ -188,6 +176,7 @@ library DecodeLib {
         // Calculate Element struct hash
         elementHash =
             EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+
         return (true, elementHash);
     }
 

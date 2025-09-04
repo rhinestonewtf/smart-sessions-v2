@@ -59,7 +59,7 @@ contract SmartSessionEmissary_Integration_Test is
         _lockAssets(env.smartAccount1, env.token1, 100 ether);
 
         adapter = env.sameChainAdapter;
-        arbiter = address(adapter);
+        arbiter = address(adapter.ARBITER());
 
         _setFillRoute(SameChainAdapter.samechain_compact_handleFill.selector, address(adapter));
 
