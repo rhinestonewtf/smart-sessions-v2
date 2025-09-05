@@ -1,0 +1,121 @@
+name: Build Artifacts
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-artifacts:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+
+    - name: "Install Foundry"
+      uses: "foundry-rs/foundry-toolchain@v1.2.0"
+      with:
+        version: stable
+
+    - name: Set up SSH keys for private dependencies
+      run: |
+        if [ -n "${DEPLOY_KEYS}" ]; then
+          echo "Setting up SSH agent..."
+          echo "$DEPLOY_KEYS" | tr -d '\r' | sed 's/\\n/\n/g' > all_keys
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          eval "$(ssh-agent -s)"
+
+          awk '/^-----BEGIN OPENSSH PRIVATE KEY-----/ {
+              file = "key_" ++count
+          }
+          { print > file }
+          END {
+              for (i = 1; i <= count; i++) {
+                  system("chmod 600 key_" i)
+                  system("ssh-add key_" i)
+              }
+          }' all_keys
+
+          {
+            echo "Host github.com"
+            echo "  IdentitiesOnly yes"
+            for key in key_*; do
+              echo "  IdentityFile $(pwd)/$key"
+            done
+          } >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+          echo "Keys loaded in SSH agent:"
+          ssh-add -l
+
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          echo "Testing SSH connection to GitHub:"
+          ssh -T git@github.com || true
+        else
+          echo "No SSH keys provided."
+        fi
+      env:
+        DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
+        
+    - name: Install dependencies
+      run: pnpm install
+      
+    - name: Make build script executable
+      run: chmod +x ./build-all.sh
+      
+    - name: Build artifacts
+      run: ./build-all.sh
+      env:
+        TENDERLY_API_KEY: ${{ secrets.TENDERLY_API_KEY }}
+
+    - name: Configure git
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+    - name: Switch to dev branch
+      run: |
+        git fetch origin dev
+        git checkout dev
+        
+    - name: Check for changes
+      id: verify-changed-files
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Commit artifacts
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      run: |
+        git add artifacts/
+        git commit -m "chore: update build artifacts
+        
+        Generated artifacts from build-all.sh script"
+        
+    - name: Push changes
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      run: |
+        git push origin dev
