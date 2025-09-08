@@ -14,16 +14,10 @@ import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
-import { LibSort } from "@solady/utils/LibSort.sol";
 import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 
 // Types
-import {
-    EmissaryConfig,
-    EmissaryEnable,
-    INVALID_RETURN,
-    WebAuthVerificationContext
-} from "@types/DataTypes.sol";
+import { EmissaryConfig, EmissaryEnable, INVALID_RETURN } from "@types/DataTypes.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title EmissaryBase
