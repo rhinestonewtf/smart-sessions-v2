@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { NonceManager } from "@core/NonceManager.sol";
+import { StatelessValidation } from "@core/StatelessValidation.sol";
 
 // Interfaces
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
@@ -13,30 +14,24 @@ import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
-import { WebAuthn } from "@webauthn/WebAuthn.sol";
-import { LibSort } from "@solady/utils/LibSort.sol";
+import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 
 // Types
-import {
-    EmissaryConfig,
-    EmissaryEnable,
-    INVALID_RETURN,
-    WebAuthVerificationContext
-} from "@types/DataTypes.sol";
+import { EmissaryConfig, EmissaryEnable, INVALID_RETURN } from "@types/DataTypes.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title EmissaryBase
 /// @notice Base emissary contract providing basic validator functionality (ECDSA, Passkey,
 ///         Stateless validators)
-abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
+abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using IdLib for *;
     using Compressed for *;
-    using LibSort for *;
     using SignatureLib for *;
+    using DigestCacheLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -149,6 +144,11 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         uint8 configId = uint8(bytes1(emissaryData[20:21]));
         emissaryData = emissaryData[21:];
 
+        // Check if this digest has already been verified in this transaction
+        if (digest.isAlreadyVerified(sponsor, validator, configId, lockTag)) {
+            return this.verifyClaim.selector;
+        }
+
         // Get the compressed configuration data
         Compressed.Bytes storage $config =
             $statelessValidatorConfig[sponsor][configId][lockTag][validator];
@@ -183,6 +183,11 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         uint8 configId = uint8(bytes1(emissaryData[:1]));
         emissaryData = emissaryData[1:];
 
+        // Check if this digest has already been verified in this transaction
+        if (digest.isAlreadyVerified(sponsor, configId, lockTag)) {
+            return this.verifyClaim.selector;
+        }
+
         // Get the compressed configuration data
         Compressed.Bytes storage $config = $ecdsaPasskeyConfig[sponsor][configId][lockTag];
         bytes memory configData = $config.sload();
@@ -216,6 +221,11 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         // Parse emissaryData format for Passkey:
         uint8 configId = uint8(bytes1(emissaryData[:1]));
         emissaryData = emissaryData[1:];
+
+        // Check if this digest has already been verified in this transaction
+        if (digest.isAlreadyVerified(sponsor, configId, lockTag)) {
+            return this.verifyClaim.selector;
+        }
 
         // Get the compressed configuration data
         Compressed.Bytes storage $config = $ecdsaPasskeyConfig[sponsor][configId][lockTag];
@@ -257,6 +267,11 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         uint8 configId = uint8(bytes1(emissaryData[20:21]));
         emissaryData = emissaryData[21:];
 
+        // Check if this digest has already been verified in this transaction
+        if (digest.isAlreadyVerified(sponsor, validator, configId, lockTag)) {
+            return this.verifyExecution.selector;
+        }
+
         // Get the compressed configuration data
         Compressed.Bytes storage $config =
             $statelessValidatorConfig[sponsor][configId][lockTag][validator];
@@ -266,10 +281,16 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         require(configData.length != 0, InvalidEmissaryConfig());
 
         // Delegate signature validation to the stateless validator
+        bool isValid = validator.validateSignatureWithData(digest, emissaryData, configData);
+
         // Return the function selector on success, or a specific failure code otherwise.
-        return validator.validateSignatureWithData(digest, emissaryData, configData)
-            ? this.verifyClaim.selector
-            : INVALID_RETURN;
+        if (isValid) {
+            // Mark digest as verified in this transaction
+            digest.markAsVerified(sponsor, validator, configId, lockTag);
+            return this.verifyExecution.selector;
+        } else {
+            return INVALID_RETURN;
+        }
     }
 
     /// @notice Validates executions for an account using ECDSA signatures and stored ECDSA
@@ -283,7 +304,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         bytes32 digest,
         bytes calldata emissaryData,
         Execution[] calldata, /* executions */
-        bytes12 /* lockTag */
+        bytes12 lockTag
     )
         internal
         virtual
@@ -293,8 +314,13 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         uint8 configId = uint8(bytes1(emissaryData[:1]));
         emissaryData = emissaryData[1:];
 
+        // Check if this digest has already been verified in this transaction
+        if (digest.isAlreadyVerified(sponsor, configId, lockTag)) {
+            return this.verifyExecution.selector;
+        }
+
         // Get the compressed configuration data
-        Compressed.Bytes storage $config = $ecdsaPasskeyConfig[sponsor][configId][bytes12(0)];
+        Compressed.Bytes storage $config = $ecdsaPasskeyConfig[sponsor][configId][lockTag];
         bytes memory configData = $config.sload();
 
         // Validate the configuration exists
@@ -304,7 +330,13 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         bool isValid = _validateSignatureWithDataECDSA(digest, emissaryData, configData);
 
         // Return the function selector on success, or a specific failure code otherwise.
-        return isValid ? this.verifyClaim.selector : INVALID_RETURN;
+        if (isValid) {
+            // Mark digest as verified in this transaction
+            digest.markAsVerified(sponsor, configId, lockTag);
+            return this.verifyExecution.selector;
+        } else {
+            return INVALID_RETURN;
+        }
     }
 
     /// @notice Validates executions for an account using Passkey signatures and stored Passkey
@@ -318,7 +350,7 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         bytes32 digest,
         bytes calldata emissaryData,
         Execution[] calldata, /* executions */
-        bytes12 /* lockTag */
+        bytes12 lockTag
     )
         internal
         virtual
@@ -328,8 +360,13 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         uint8 configId = uint8(bytes1(emissaryData[:1]));
         emissaryData = emissaryData[1:];
 
+        // Check if this digest has already been verified in this transaction
+        if (digest.isAlreadyVerified(sponsor, configId, lockTag)) {
+            return this.verifyExecution.selector;
+        }
+
         // Get the compressed configuration data
-        Compressed.Bytes storage $config = $ecdsaPasskeyConfig[sponsor][configId][bytes12(0)];
+        Compressed.Bytes storage $config = $ecdsaPasskeyConfig[sponsor][configId][lockTag];
         bytes memory configData = $config.sload();
 
         // Validate the configuration exists
@@ -339,151 +376,13 @@ abstract contract EmissaryBase is NonceManager, ISmartSessionEmissary {
         bool isValid = _validateSignatureWithDataPasskey(digest, emissaryData, configData);
 
         // Return the function selector on success, or a specific failure code otherwise.
-        return isValid ? this.verifyClaim.selector : INVALID_RETURN;
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                 ECDSA
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Validates a signature against a hash and data using ECDSA
-    function _validateSignatureWithDataECDSA(
-        bytes32 hash,
-        bytes calldata signature,
-        bytes memory data
-    )
-        internal
-        view
-        returns (bool)
-    {
-        // decode the threshold and owners
-        (uint256 _threshold, address[] memory _owners) = abi.decode(data, (uint256, address[]));
-
-        // check that owners are sorted and uniquified
-        if (!_owners.isSortedAndUniquified()) {
-            return false;
+        if (isValid) {
+            // Mark digest as verified in this transaction
+            digest.markAsVerified(sponsor, configId, lockTag);
+            return this.verifyExecution.selector;
+        } else {
+            return INVALID_RETURN;
         }
-
-        // check that threshold is set
-        if (_threshold == 0) {
-            return false;
-        }
-
-        // recover the signers from the signatures using ecrecover
-        uint256 sigCount = signature.length / 65;
-        address[] memory signers = new address[](sigCount);
-        for (uint256 i = 0; i < sigCount; i++) {
-            // recover the signer from the hash and signature
-            address signer = SignatureLib.recoverECDSA(hash, signature[i * 65:(i + 1) * 65]);
-            // store the signer
-            signers[i] = signer;
-        }
-
-        // sort and uniquify the signers to make sure a signer is not reused
-        signers.sort();
-        signers.uniquifySorted();
-
-        // check if the signers are owners
-        uint256 validSigners;
-        for (uint256 i = 0; i < sigCount; i++) {
-            (bool found,) = _owners.searchSorted(signers[i]);
-            if (found) {
-                validSigners++;
-            }
-        }
-
-        // check if the threshold is met and return the result
-        if (validSigners >= _threshold) {
-            // if the threshold is met, return true
-            return true;
-        }
-        // if the threshold is not met, return false
-        return false;
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                PASSKEY
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Validates a signature with external credential data
-    /// @dev Used for stateless validation without pre-registered credentials
-    /// @param hash Hash of the data to validate
-    /// @param signature WebAuthn signature data
-    /// @param data Encoded credential details and threshold
-    /// @return bool True if the signature is valid, false otherwise
-    function _validateSignatureWithDataPasskey(
-        bytes32 hash,
-        bytes calldata signature,
-        bytes memory data
-    )
-        internal
-        view
-        returns (bool)
-    {
-        // Decode the threshold and credentials
-        WebAuthVerificationContext memory context = abi.decode(data, (WebAuthVerificationContext));
-        // Make sure the credentials are unique and sorted
-        context.credentialIds.sort();
-        context.credentialIds.uniquifySorted();
-
-        // Decode signature
-        // Format: abi.encode(WebAuthn.WebAuthnAuth[])
-        WebAuthn.WebAuthnAuth[] memory auth = abi.decode(signature, (WebAuthn.WebAuthnAuth[]));
-
-        // Check that arrays have matching lengths
-        uint256 credentialsLength = context.credentialIds.length;
-        if (credentialsLength != context.credentialData.length) {
-            return false;
-        }
-
-        // Check that threshold is valid
-        if (context.threshold == 0 || context.threshold > credentialsLength) {
-            return false;
-        }
-
-        // Cache lengths
-        uint256 sigCount = auth.length;
-
-        // Check number of signatures
-        if (sigCount == 0 || sigCount < context.threshold) {
-            return false;
-        }
-
-        // Track valid signatures
-        uint256 validCount;
-
-        // Verify each signature
-        for (uint256 i; i < sigCount; ++i) {
-            // Challenge is the hash to be signed
-            bytes memory challenge = abi.encode(hash);
-
-            // IMPORTANT:
-            // **********************************************************************
-            // * We assume here that signatures are ordered to match credential IDs *
-            // **********************************************************************
-
-            // Verify the signature against the credential at the same index
-            bool valid = WebAuthn.verify(
-                challenge,
-                context.credentialData[i].requireUV,
-                auth[i],
-                context.credentialData[i].pubKeyX,
-                context.credentialData[i].pubKeyY,
-                context.usePrecompile
-            );
-
-            if (valid) {
-                ++validCount;
-
-                // Early return if threshold is met
-                if (validCount >= context.threshold) {
-                    return true;
-                }
-            }
-        }
-
-        // If we reach this, we didn't meet the threshold
-        return false;
     }
 
     /*//////////////////////////////////////////////////////////////

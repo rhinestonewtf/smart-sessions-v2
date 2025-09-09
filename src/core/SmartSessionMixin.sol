@@ -19,6 +19,7 @@ import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
 import { EncodeLibV2 } from "@lib/EncodeLibV2.sol";
+import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 
 // Types
 import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
@@ -53,6 +54,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     using CompactIdLib for *;
     using SignatureCheckerLib for *;
     using SignatureLib for *;
+    using DigestCacheLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 CONFIG
@@ -349,6 +351,11 @@ abstract contract SmartSessionMixin is SmartSessionManager {
                                 CHECK SESSION KEY
         //////////////////////////////////////////////////////////////*/
 
+        // Check if this digest was already validated
+        if (hash.isAlreadyVerified(account, permissionId, lockTag)) {
+            return true;
+        }
+
         // perform signature check with ISessionValidator
         // this function will revert if no ISessionValidator is set for this permissionId
         validSig = $sessionValidators.isValidISessionValidator({
@@ -357,6 +364,11 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             permissionId: permissionId,
             signature: decompressedSignature
         });
+
+        // Cache the result if valid
+        if (validSig) {
+            hash.markAsVerified(account, permissionId, lockTag);
+        }
     }
 
     /// @notice Validates an ERC-1271 signature
@@ -412,6 +424,12 @@ abstract contract SmartSessionMixin is SmartSessionManager {
 
         // if the erc1271 policy check failed, return false
         if (!valid) return valid;
+
+        // Check if this digest was already validated
+        if (hash.isAlreadyVerified(sponsor, permissionId, lockTag)) {
+            return true;
+        }
+
         // this call reverts if the ISessionValidator is not set
         return $sessionValidators.isValidISessionValidator({
             hash: hash,
