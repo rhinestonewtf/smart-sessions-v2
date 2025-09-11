@@ -70,7 +70,7 @@ contract Permit2CompatibilityValidator is ERC7579ValidatorBase {
         bytes12 lockTag = bytes12(data[:12]);
         // Delegate to the Smart Session Emissary for signature verification
         return SMART_SESSION_EMISSARY.verifyClaim({
-            sponsor: sender,
+            sponsor: msg.sender,
             digest: hash,
             claimHash: bytes32(0),
             emissaryData: data[12:],
