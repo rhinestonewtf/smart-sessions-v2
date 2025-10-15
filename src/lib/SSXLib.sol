@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.28;
+
 import { EnumerableMapLib } from "solady/utils/EnumerableMapLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 
@@ -28,8 +31,28 @@ library ConfigBitMapLib {
     using IdLib for uint256;
     using EnumerableMapLib for EnumerableMapLib.AddressToBytes32Map;
 
+    /* //////////////////////////////////////////////////////////////
+                            CONSTANTS
+    //////////////////////////////////////////////////////////////*/
+
     bytes32 internal constant NO_EXEC =
         0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+
+    // Byte position constants for configuration bitmap (single source of truth)
+    uint8 internal constant BYTE_IS_ENABLED = 31;
+    uint8 internal constant BYTE_ANY_TARGET_CHAIN_ID = 30;
+    uint8 internal constant BYTE_ARBITER_ID = 30;
+    uint8 internal constant BYTE_PRE_CLAIM_OPS = 28;
+    uint8 internal constant BYTE_TARGET_OPS = 27;
+    uint8 internal constant BYTE_CLAIM_EXPIRY = 26;
+    uint8 internal constant BYTE_FILL_EXPIRY = 25;
+    uint8 internal constant BYTE_RECIPIENT = 3;
+    uint8 internal constant BYTE_TOKEN_OUT = 2;
+    uint8 internal constant BYTE_TOKEN_IN = 1;
+
+    /* //////////////////////////////////////////////////////////////
+                            HELPERS
+    //////////////////////////////////////////////////////////////*/
 
     function getPermissionMode(bytes1 flag) internal pure returns (PermissionMode mode) {
         mode = PermissionMode(uint8(flag));
@@ -39,12 +62,12 @@ library ConfigBitMapLib {
     // 0: isEnabled:false
     // 1: isEnabled:true
     function isEnabled(bytes32 configFlag) internal pure returns (bool) {
-        return configFlag[31] == bytes1(0x01);
+        return configFlag[BYTE_IS_ENABLED] == bytes1(0x01);
     }
 
     // byte31
     function isAnyTargetChainId(bytes32 configFlag) internal pure returns (bool) {
-        return configFlag[30] == bytes1(0x01);
+        return configFlag[BYTE_ANY_TARGET_CHAIN_ID] == bytes1(0x01);
     }
 
     // byte30
@@ -59,13 +82,13 @@ library ConfigBitMapLib {
         returns (bool)
     {
         if (preClaimOps == NO_EXEC) return true;
-        else return configFlag[28] == bytes1(0x01);
+        else return configFlag[BYTE_PRE_CLAIM_OPS] == bytes1(0x01);
     }
 
     // byte 27 target ops
     function inspectTargetOps(bytes32 configFlag, bytes32 targetOps) internal pure returns (bool) {
         if (targetOps == NO_EXEC) return true;
-        else return configFlag[27] == bytes1(0x01);
+        else return configFlag[BYTE_TARGET_OPS] == bytes1(0x01);
     }
 
     // byte 26 claimExpires
@@ -74,7 +97,7 @@ library ConfigBitMapLib {
         pure
         returns (bool)
     {
-        bytes1 flag = configFlag[26];
+        bytes1 flag = configFlag[BYTE_CLAIM_EXPIRY];
         PermissionMode mode = flag.getPermissionMode();
 
         if (mode == PermissionMode.IGNORE) {
@@ -90,7 +113,7 @@ library ConfigBitMapLib {
         pure
         returns (bool)
     {
-        bytes1 flag = configFlag[25];
+        bytes1 flag = configFlag[BYTE_FILL_EXPIRY];
         PermissionMode mode = flag.getPermissionMode();
 
         if (mode == PermissionMode.IGNORE) {
@@ -114,7 +137,7 @@ library ConfigBitMapLib {
         view
         returns (bool)
     {
-        bytes1 flag = configFlag[3];
+        bytes1 flag = configFlag[BYTE_RECIPIENT];
         PermissionMode mode = flag.getPermissionMode();
 
         if (mode == PermissionMode.IGNORE) {
@@ -144,7 +167,7 @@ library ConfigBitMapLib {
         view
         returns (bool)
     {
-        bytes1 flag = configFlag[2];
+        bytes1 flag = configFlag[BYTE_TOKEN_OUT];
         PermissionMode mode = flag.getPermissionMode();
         if (mode == PermissionMode.IGNORE) {
             return true;
@@ -173,7 +196,7 @@ library ConfigBitMapLib {
         view
         returns (bool)
     {
-        bytes1 flag = configFlag[1];
+        bytes1 flag = configFlag[BYTE_TOKEN_IN];
         PermissionMode mode = flag.getPermissionMode();
         if (mode == PermissionMode.IGNORE) {
             return true;

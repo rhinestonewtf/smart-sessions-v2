@@ -198,10 +198,11 @@ abstract contract VerifyClaim {
         }
     }
 
-    function __hashMandate(address sponsor, bytes12 lockTag, Element calldata element)
-        external
+    function hashElement(address sponsor, bytes12 lockTag, Element calldata element)
+        internal
         returns (bytes32 elementHash)
     {
+        (address arbiter, bytes32 qHash) = _getArbiter(element.arbiter, element.mandate.qParam);
         // Step 2: Hash the mandate structure (what happens on target chain)
         // First hash the target attributes (recipient, tokens out, chain, expiry)
         // Then combine with operation hashes and qHash
@@ -218,7 +219,7 @@ abstract contract VerifyClaim {
         );
 
         elementHash = EIP712TypeHashLib.hashElementRaw({
-            // arbiter: arbiterIds[fields.thisElement.arbiter].arbiter,
+            arbiter: arbiter,
             originChainId: block.chainid,
             tokenInHash: EIP712TypeHashLib.hashTokenIn(element.tokenIn),
             mandateHash: mandateHash
@@ -228,21 +229,32 @@ abstract contract VerifyClaim {
     function _verifyCompactPolicies(
         address sponsor,
         bytes32 claimHash,
+        bytes32 permissionId,
         bytes calldata emissaryData,
         bytes12 lockTag
     )
         internal
-        returns (bytes32 claimHash)
+        returns (bool valid)
     {
-        bool valid = true;
+        valid = true;
         // Extract permission ID from emissary data and convert to config ID
         // bytes32 configId = emissaryData.extractPermissionId().toCompactPolicyId();
         bytes32 configId;
 
         // TODO: Optimize to use calldata instead of memory for gas efficiency
         // Decode the compact fields starting after the first 32 bytes (permission ID)
-        CompactFields memory fields = abi.decode(emissaryData[32:], (CompactFields));
-        bytes32 tokenOutHash;
+        CompactFields calldata fields;
+        assembly {
+            fields := emissaryData.offset
+        }
+
+        require(
+            fields.allElements[fields.elementPtr]
+                == hashElement(sponsor, lockTag, fields.thisElement)
+        );
+        //k
+        // function hashCompact(address sponsor, uint256 nonce, uint256 expires, bytes32
+        // allElementsHash) internal pure returns (bytes32 hash) {
 
         SessionConfig storage $sessionConfig = configs[configId][sponsor];
         // Extract the bitmap that defines which validations to perform
@@ -273,6 +285,12 @@ abstract contract VerifyClaim {
         valid = valid && configFlags.inspectPreClaimOps(fields.thisElement.mandate.originOps);
 
         valid = valid && configFlags.inspectTargetOps(fields.thisElement.mandate.originOps);
+
+        valid = valid
+            && claimHash
+                == EIP712TypeHashLib.hashCompact(
+                    sponsor, fields.nonce, fields.expires, abi.encodePacked(fields.allElements)
+                );
     }
 
     /**
