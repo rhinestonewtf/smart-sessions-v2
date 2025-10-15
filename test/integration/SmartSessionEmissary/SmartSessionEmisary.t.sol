@@ -25,15 +25,16 @@ import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 
 // Test
 import { SameChainBaseTest } from "@compact-utils-test/unit/SameChainArbiter/SameChain.t.sol";
-import { SmartSessionEmissary_Unit_Test } from
-    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
+import {
+    SmartSessionEmissary_Unit_Test
+} from "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
 
 /// @dev Tests smart session emissary integration with SameChainAdapter
 contract SmartSessionEmissary_Integration_Test is
     SameChainBaseTest,
     SmartSessionEmissary_Unit_Test
 {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -42,13 +43,13 @@ contract SmartSessionEmissary_Integration_Test is
     using Types for Execution[];
     using HashLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 VARIABLES
     //////////////////////////////////////////////////////////////*/
 
     PermissionId defaultPermissionId;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -75,24 +76,25 @@ contract SmartSessionEmissary_Integration_Test is
         uint256 notarizedChain = chains.originChain1;
 
         // Element for originChain 1 (Notarized chain)
-        $intent.compact.elements.push(
-            Element({
-                arbiter: arbiter,
-                chainId: notarizedChain,
-                idsAndAmounts: [toId(env.token1), 100].into(),
-                mandate: Mandate({
-                    target: Target({
-                        recipient: recipient,
-                        tokenOut: [toId(env.token2), 20].into(),
-                        targetChain: notarizedChain,
-                        fillExpiry: uint32(block.timestamp + 1 hours)
-                    }),
-                    originOps: intent.targetExecutions,
-                    destOps: intent.targetExecutions,
-                    q: ""
+        $intent.compact.elements
+            .push(
+                Element({
+                    arbiter: arbiter,
+                    chainId: notarizedChain,
+                    idsAndAmounts: [toId(env.token1), 100].into(),
+                    mandate: Mandate({
+                        target: Target({
+                            recipient: recipient,
+                            tokenOut: [toId(env.token2), 20].into(),
+                            targetChain: notarizedChain,
+                            fillExpiry: uint32(block.timestamp + 1 hours)
+                        }),
+                        originOps: intent.targetExecutions,
+                        destOps: intent.targetExecutions,
+                        q: ""
+                    })
                 })
-            })
-        );
+            );
 
         ($intent.claimHash, $intent.elementHashes) = hashCompact(arbiter, $intent.compact);
         $intent.digest = _hashTypedData(notarizedChain, $intent.claimHash);
@@ -115,7 +117,7 @@ contract SmartSessionEmissary_Integration_Test is
         $intent.userEmissarySig = _createSmartSessionSignature($intent.digest);
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
@@ -142,20 +144,18 @@ contract SmartSessionEmissary_Integration_Test is
             solverContext: abi.encodePacked(env.solver.addr),
             adapterCalldata: abi.encodeCall(
                 SameChainAdapter.samechain_compact_handleFill,
-                (
-                    SameChainAdapter.FillDataCompact({
+                (SameChainAdapter.FillDataCompact({
                         order: order,
                         userSigs: Types.Signatures($intent.userEmissarySig, ""),
                         otherElements: otherElements,
                         allocatorData: allocatorSig,
                         preClaimGasStipend: type(uint256).max
-                    })
-                )
+                    }))
             )
         });
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                HELPERS
     //////////////////////////////////////////////////////////////*/
 

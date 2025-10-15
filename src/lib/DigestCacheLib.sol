@@ -13,7 +13,7 @@ import { PermissionId } from "@smartsessions/DataTypes.sol";
 /// @dev Uses transient storage (TSTORE/TLOAD) to cache verification results that automatically
 ///      clear after the transaction
 library DigestCacheLib {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 CONSTANT
     //////////////////////////////////////////////////////////////*/
 
@@ -25,17 +25,12 @@ library DigestCacheLib {
     /// - 1)) & ~bytes32(uint256(0xff))))) >> 176;
     uint256 private constant TSTORE_BASE_SLOT = 0x468e535faa4b0ffe3d06;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                              ECDSA/PASSKEY
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Checks if verified for ECDSA/Passkey mode
-    function isAlreadyVerified(
-        bytes32 digest,
-        address account,
-        uint8 configId,
-        bytes12 lockTag
-    )
+    function isAlreadyVerified(bytes32 digest, address account, uint8 configId, bytes12 lockTag)
         internal
         view
         returns (bool isVerified)
@@ -57,12 +52,7 @@ library DigestCacheLib {
     }
 
     /// @notice Marks as verified for ECDSA/Passkey mode
-    function markAsVerified(
-        bytes32 digest,
-        address account,
-        uint8 configId,
-        bytes12 lockTag
-    )
+    function markAsVerified(bytes32 digest, address account, uint8 configId, bytes12 lockTag)
         internal
     {
         bytes32 slot;
@@ -81,7 +71,7 @@ library DigestCacheLib {
         }
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                            STATELESS VALIDATOR
     //////////////////////////////////////////////////////////////*/
 
@@ -141,7 +131,7 @@ library DigestCacheLib {
         }
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                              SMART SESSION
     //////////////////////////////////////////////////////////////*/
 

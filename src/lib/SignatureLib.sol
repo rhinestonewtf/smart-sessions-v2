@@ -7,13 +7,13 @@ import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 /// @title Signature Library
 /// @notice Library for validating allocator and user signatures
 library SignatureLib {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using SignatureCheckerLib for address;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   ERRORS
     //////////////////////////////////////////////////////////////*/
 
@@ -23,7 +23,7 @@ library SignatureLib {
     /// @notice Thrown when the user signature is invalid
     error InvalidUserSignature();
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 VALIDATE
     //////////////////////////////////////////////////////////////*/
 
@@ -60,7 +60,7 @@ library SignatureLib {
         }
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  ECDSA
     //////////////////////////////////////////////////////////////*/
 
@@ -68,10 +68,7 @@ library SignatureLib {
     /// @param hash The hash to validate the signature against
     /// @param signature The ECDSA signature to validate
     /// @return result The address that signed the hash
-    function recoverECDSA(
-        bytes32 hash,
-        bytes calldata signature
-    )
+    function recoverECDSA(bytes32 hash, bytes calldata signature)
         internal
         view
         returns (address result)
@@ -84,7 +81,7 @@ library SignatureLib {
             calldatacopy(0x40, signature.offset, 0x40) // Copy 'r' and 's'
             mstore(0x00, hash) // Store the hash
             result := mload(staticcall(gas(), 1, 0x00, 0x80, 0x01, 0x20)) // Call ecrecover
-            // `returndatasize() will be '0x20' if successful, otherwise it will be '0'.
+                // `returndatasize() will be '0x20' if successful, otherwise it will be '0'.
             if iszero(returndatasize()) {
                 mstore(0x00, 0x8baa579f) // `InvalidSignature()`.
                 revert(0x1c, 0x04)

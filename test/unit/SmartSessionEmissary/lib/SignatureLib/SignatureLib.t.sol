@@ -9,13 +9,13 @@ import { SignatureLib } from "@lib/SignatureLib.sol";
 import { MockERC1271 } from "@mocks/MockERC1271.sol";
 
 contract SignatureLib_Unit_Test is Base_Test {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using SignatureLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 VARIABLES
     //////////////////////////////////////////////////////////////*/
 
@@ -37,7 +37,7 @@ contract SignatureLib_Unit_Test is Base_Test {
     bytes32 internal testHash;
     bytes32 internal invalidHash;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -71,15 +71,12 @@ contract SignatureLib_Unit_Test is Base_Test {
         vm.label(userWallet, "UserWallet");
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                              SIGNATURE HELPERS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Creates a valid ECDSA signature for a given hash and private key
-    function createEOASignature(
-        bytes32 hash,
-        uint256 privateKey
-    )
+    function createEOASignature(bytes32 hash, uint256 privateKey)
         internal
         pure
         returns (bytes memory)
@@ -89,10 +86,7 @@ contract SignatureLib_Unit_Test is Base_Test {
     }
 
     /// @notice Creates a signature for a smart account (owner signs with their EOA)
-    function createSmartAccountSignature(
-        bytes32 hash,
-        uint256 ownerPrivateKey
-    )
+    function createSmartAccountSignature(bytes32 hash, uint256 ownerPrivateKey)
         internal
         pure
         returns (bytes memory)
@@ -111,7 +105,7 @@ contract SignatureLib_Unit_Test is Base_Test {
         return abi.encodePacked(bytes32(0));
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                MOCK HELPERS
     //////////////////////////////////////////////////////////////*/
 

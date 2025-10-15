@@ -18,11 +18,11 @@ import { console } from "@forge-std/console.sol";
 ///         The hash of the MultiChainClaim struct hash is reconstructed using the EIP-712
 ///         standard and passed data within the signature
 contract MultiChainClaimRecipientPolicy is I1271Policy {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 STRUCTS
     //////////////////////////////////////////////////////////////*/
 
@@ -55,7 +55,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
         bytes32[] otherElements;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
@@ -64,11 +64,11 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
     mapping(
         ConfigId id
             => mapping(
-                address msgSender => mapping(address userOpSender => address allowedRecipient)
-            )
+            address msgSender => mapping(address userOpSender => address allowedRecipient)
+        )
     ) internal $recipientConfig;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   INIT
     //////////////////////////////////////////////////////////////*/
 
@@ -76,11 +76,7 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
     /// @param account The account to initialize
     /// @param configId The configuration ID for the policy
     /// @param initData The initialization data containing the recipient address
-    function initializeWithMultiplexer(
-        address account,
-        ConfigId configId,
-        bytes calldata initData
-    )
+    function initializeWithMultiplexer(address account, ConfigId configId, bytes calldata initData)
         external
         override
     {
@@ -92,13 +88,13 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
         console.log("Recipient address set to:", recipient);
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CHECK
     //////////////////////////////////////////////////////////////*/
 
     function check1271SignedAction(
         ConfigId id,
-        address, /*sender*/
+        address, /* sender*/
         address account,
         bytes32 hash,
         bytes calldata signature
@@ -249,9 +245,9 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
     /// @notice Checks if the policy supports the given interface ID
     function supportsInterface(bytes4 interfaceID) external pure override returns (bool) {
         // Check if the interface ID matches the I1271Policy interface
-        return (
-            interfaceID == type(IERC165).interfaceId || interfaceID == type(I1271Policy).interfaceId
-        );
+        return
+            (interfaceID == type(IERC165).interfaceId
+                    || interfaceID == type(I1271Policy).interfaceId);
     }
 
     function __QUALIFIER_EIP712Hash(bytes calldata) public pure returns (bytes32) {

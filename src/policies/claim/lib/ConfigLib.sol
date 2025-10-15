@@ -11,7 +11,7 @@ import {
     TokenAmountConfig
 } from "@policies/claim/types/DataTypes.sol";
 
-/*//////////////////////////////////////////////////////////////
+/* //////////////////////////////////////////////////////////////
                             TYPES
 //////////////////////////////////////////////////////////////*/
 
@@ -33,7 +33,7 @@ function eqConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
 /// @title Config Library
 /// @notice Library for managing condition configurations in the MultiChainClaimPolicy
 library ConfigLib {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  TYPES
     //////////////////////////////////////////////////////////////*/
 
@@ -66,7 +66,7 @@ library ConfigLib {
         ParamRules qualificationConfig;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  BITMAP
     //////////////////////////////////////////////////////////////*/
 
@@ -100,7 +100,7 @@ library ConfigLib {
         return PolicyConfig.unwrap(config) & 16 != 0;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  DECODE
     //////////////////////////////////////////////////////////////*/
 
@@ -194,9 +194,7 @@ library ConfigLib {
         }
 
         rules = ParamRules({
-            rootNodeIndex: rootNodeIndex,
-            rules: paramRules,
-            packedNodes: packedNodes
+            rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
         });
 
         data = initData[offset + packedNodesLength * 32:]; // Remaining data after decoding

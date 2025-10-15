@@ -2,8 +2,9 @@
 pragma solidity >=0.8.27;
 
 // Dependencies
-import { SmartSessionEmissary_Unit_Test } from
-    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
+import {
+    SmartSessionEmissary_Unit_Test
+} from "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -52,7 +53,7 @@ import { MODULE_TYPE_VALIDATOR } from "erc7579/interfaces/IERC7579Module.sol";
 import { Session } from "@types/DataTypes.sol";
 
 contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_Test {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -60,7 +61,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
     using LibZip for bytes;
     using HashLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
@@ -72,7 +73,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
     address testValidator;
     bytes12 testLockTag = bytes12(keccak256("mockLockTag"));
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -98,7 +99,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         instance.deployAccount();
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                STATELESS
     //////////////////////////////////////////////////////////////*/
 
@@ -170,7 +171,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  ECDSA
     //////////////////////////////////////////////////////////////*/
 
@@ -283,7 +284,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 PASSKEY
     //////////////////////////////////////////////////////////////*/
 
@@ -301,7 +302,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                              SMART SESSION
     //////////////////////////////////////////////////////////////*/
 
@@ -349,9 +350,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         Execution[] memory executions = new Execution[](2);
 
         executions[0] = Execution({
-            target: target,
-            value: value,
-            callData: abi.encodeWithSelector(mockTargetSelector)
+            target: target, value: value, callData: abi.encodeWithSelector(mockTargetSelector)
         });
 
         executions[1] = Execution({
@@ -389,7 +388,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         assertEq(result, bytes4(0xFFFFFFFF), "Should return failure code for invalid signature");
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CACHE
     //////////////////////////////////////////////////////////////*/
 
@@ -723,7 +722,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   EDGE
     //////////////////////////////////////////////////////////////*/
 
@@ -753,7 +752,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
@@ -885,15 +884,11 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         _;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    function packData(
-        EmissaryMode emissaryMode,
-        PermissionId permissionId,
-        bytes memory signature
-    )
+    function packData(EmissaryMode emissaryMode, PermissionId permissionId, bytes memory signature)
         internal
         pure
         returns (bytes memory)

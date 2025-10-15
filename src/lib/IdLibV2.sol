@@ -9,22 +9,18 @@ import { PermissionId, ActionId, ConfigId } from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
 
 library IdLibV2 {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using IdLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 CONVERT
     //////////////////////////////////////////////////////////////*/
 
     /// @dev Adjusted toConfigId from IdLib to work with address instead of msg.sender
-    function toConfigId(
-        PermissionId permissionId,
-        ActionId actionId,
-        address account
-    )
+    function toConfigId(PermissionId permissionId, ActionId actionId, address account)
         internal
         pure
         returns (ConfigId _id)

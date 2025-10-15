@@ -2,8 +2,9 @@
 pragma solidity ^0.8.28;
 
 // Libraries
-import { ArgPolicyTreeLib } from
-    "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
+import {
+    ArgPolicyTreeLib
+} from "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 
 // Types
 import { ParamRules, ParamRule } from "@policies/claim/types/DataTypes.sol";
@@ -13,14 +14,14 @@ import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPo
 /// @notice Adjusted ArgPolicyTreeLib to work with the new ParamRules struct that doesn't have value
 ///         and usage limits (compared to the original ArgPolicyTreeLib).
 library ArgPolicyTreeLibV2 {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using ArgPolicyTreeLibV2 for *;
     using ArgPolicyTreeLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 VALIDATE
     //////////////////////////////////////////////////////////////*/
 
@@ -75,7 +76,7 @@ library ArgPolicyTreeLibV2 {
                 param < (ref >> 128) // Check if param is less than min value (high 128 bits)
                     || param
                         > (ref & 0x00000000000000000000000000000000ffffffffffffffffffffffffffffffff) // Check
-                    // if
+                    //if
                     // param is greater than max value (low 128 bits)
             ) {
                 return false;
@@ -129,15 +130,12 @@ library ArgPolicyTreeLibV2 {
         }
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 EVALUATE
     //////////////////////////////////////////////////////////////*/
 
     /// @dev Adjusted evaluateExpressionTree to work with the new ParamRules struct
-    function evaluateExpressionTree(
-        ParamRules storage rules,
-        bytes calldata data
-    )
+    function evaluateExpressionTree(ParamRules storage rules, bytes calldata data)
         internal
         view
         returns (bool)
@@ -199,7 +197,7 @@ library ArgPolicyTreeLibV2 {
         return false;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   FILL
     //////////////////////////////////////////////////////////////*/
 

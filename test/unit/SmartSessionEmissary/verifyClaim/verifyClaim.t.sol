@@ -2,8 +2,9 @@
 pragma solidity >=0.8.27;
 
 // Dependencies
-import { SmartSessionEmissary_Unit_Test } from
-    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
+import {
+    SmartSessionEmissary_Unit_Test
+} from "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -28,7 +29,7 @@ import {
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -36,7 +37,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
     using LibZip for bytes;
     using HashLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
@@ -47,7 +48,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
     string constant TEST_CONTENT = "TestContent(string data)";
     bytes mockSignature;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -64,7 +65,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         instance.deployAccount();
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                STATELESS
     //////////////////////////////////////////////////////////////*/
 
@@ -136,7 +137,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  ECDSA
     //////////////////////////////////////////////////////////////*/
 
@@ -249,7 +250,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 PASSKEY
     //////////////////////////////////////////////////////////////*/
 
@@ -267,7 +268,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                               SMART SESSION
     //////////////////////////////////////////////////////////////*/
 
@@ -304,7 +305,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         assertEq(result, bytes4(0xffffffff), "Should return failure code for invalid signature");
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   EDGE
     //////////////////////////////////////////////////////////////*/
 
@@ -348,7 +349,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         );
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CACHE
     //////////////////////////////////////////////////////////////*/
 
@@ -611,7 +612,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         assertEq(result, bytes4(0xFFFFFFFF), "Should fail for uncached config with invalid sig");
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
@@ -644,7 +645,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Generate the permission ID
         testPermissionId = smartSessionEmissary.getPermissionId(session);
 
-        //_ Create mock signature
+        // _ Create mock signature
         _createMockSignature();
 
         // Continue with the test
@@ -655,7 +656,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Prank to account
         vm.prank(instance.account);
 
-        // Setup  policies
+        // Setup policies
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
 
@@ -678,21 +679,18 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
             smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
         testPermissionId = testPermissionIds[0];
 
-        //_ Create mock signature
+        // _ Create mock signature
         _createMockSignature();
 
         // Continue with the test
         _;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    function packClaimData(
-        EmissaryMode emissaryMode,
-        bytes memory signatureData
-    )
+    function packClaimData(EmissaryMode emissaryMode, bytes memory signatureData)
         internal
         pure
         returns (bytes memory)

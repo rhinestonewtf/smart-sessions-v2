@@ -2,13 +2,15 @@
 pragma solidity >=0.8.27;
 
 // Dependencies
-import { MultiChainClaimPolicy_Unit_Test } from
-    "@test/unit/MultiChainClaimPolicy/MultiChainClaimPolicy.t.sol";
+import {
+    MultiChainClaimPolicy_Unit_Test
+} from "@test/unit/MultiChainClaimPolicy/MultiChainClaimPolicy.t.sol";
 
 // Libraries
 import { HashLib, Lock, Token } from "@mocks/HashLib.sol";
-import { ArgPolicyTreeLib } from
-    "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
+import {
+    ArgPolicyTreeLib
+} from "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 
 // Types
@@ -17,7 +19,7 @@ import { ParamRules, ParamRule } from "@policies/claim/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPolicy_Unit_Test {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
@@ -35,7 +37,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     bytes32 internal testDomainSeparator =
         0x1234567890123456789012345678901234567890123456789012345678901234;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                    SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -48,13 +50,13 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         testConfigId = ConfigId.wrap(bytes32(uint256(1)));
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
-    //-------------------------------------
+    // -------------------------------------
     // 1) EXECUTIONS
-    //-------------------------------------
+    // -------------------------------------
 
     /// @notice Test check1271SignedAction with hasExecutions condition - should pass when
     /// executions present
@@ -162,9 +164,9 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         assertFalse(result, "Action should fail when hash doesn't match");
     }
 
-    //-------------------------------------
+    // -------------------------------------
     // 2) TOKEN IN
-    //-------------------------------------
+    // -------------------------------------
 
     /// @notice Test check1271SignedAction with tokenIn condition - should pass when token and
     /// amount are valid
@@ -314,9 +316,9 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         assertTrue(result, "Action with any token should be allowed when address(0) is configured");
     }
 
-    //-------------------------------------
+    // -------------------------------------
     // 3) TOKEN OUT
-    //-------------------------------------
+    // -------------------------------------
 
     /// @notice Test check1271SignedAction with tokenOut condition - should pass when token and
     /// amount are valid
@@ -478,9 +480,9 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         );
     }
 
-    //-------------------------------------
+    // -------------------------------------
     // 4) QUALIFICATION
-    //-------------------------------------
+    // -------------------------------------
 
     /// @notice Test check1271SignedAction with qualification condition - should pass when
     /// qualification matches rules
@@ -530,7 +532,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         assertFalse(result, "Action with invalid qualification should be rejected");
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  HELPERS
     //////////////////////////////////////////////////////////////*/
 
@@ -548,10 +550,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Helper function to create MultiChainCompact data with tokenIn (Lock structs)
-    function _createMultiChainCompactDataWithTokenIn(
-        address token,
-        uint256 amount
-    )
+    function _createMultiChainCompactDataWithTokenIn(address token, uint256 amount)
         internal
         view
         returns (bytes memory)
@@ -594,9 +593,10 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         bytes memory preClaimOpsData = _createPreClaimOpsData(isValid);
         bytes memory mandateWithPreClaimOps = _createMandateDataWithPreClaimOps(preClaimOpsData);
 
-        return abi.encodePacked(
-            header, elementHeader, keccak256("commitments"), mandateWithPreClaimOps
-        );
+        return
+            abi.encodePacked(
+                header, elementHeader, keccak256("commitments"), mandateWithPreClaimOps
+            );
     }
 
     /// @notice Helper function to create MultiChainCompact data with qualification
@@ -620,7 +620,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     function _createPreClaimOpsData(bool isValid) private pure returns (bytes memory) {
         // Create function call data with different selectors for valid/invalid cases
         bytes memory functionCallData = isValid
-            ? abi.encodeWithSignature("allowedFunction(uint256)", uint256(123)) // This selector
+            ? abi.encodeWithSignature("allowedFunction(uint256)", uint256(123))  // This selector
                 // will match our rule
             : abi.encodeWithSignature("forbiddenFunction(uint256)", uint256(123)); // This selector
             // won't match
@@ -644,8 +644,12 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
         // Create qualification data that will pass or fail validation
         bytes32 typehash = keccak256("TestQualification(uint256 value)");
         bytes memory qualData = isValid
-            ? abi.encode(uint256(0x1234567890123456789012345678901234567890123456789012345678901234))
-            : abi.encode(uint256(0x9999999999999999999999999999999999999999999999999999999999999999));
+            ? abi.encode(
+                uint256(0x1234567890123456789012345678901234567890123456789012345678901234)
+            )
+            : abi.encode(
+                    uint256(0x9999999999999999999999999999999999999999999999999999999999999999)
+                );
 
         return abi.encodePacked(
             uint256(qualData.length), // qualification data length
@@ -693,7 +697,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             length: 4, // Extract only 4 bytes for selector
             ref: bytes32(bytes4(keccak256("allowedFunction(uint256)"))) // Convert 4-byte selector
                 // to bytes32
-         });
+        });
 
         // Create a simple expression tree with one rule node
         uint256[] memory packedNodes = new uint256[](1);
@@ -712,7 +716,9 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
             condition: ParamCondition.EQUAL,
             offset: 0, // Direct offset to first parameter position
             length: 0, // Use default 32 bytes for parameter
-            ref: bytes32(uint256(0x1234567890123456789012345678901234567890123456789012345678901234))
+            ref: bytes32(
+                uint256(0x1234567890123456789012345678901234567890123456789012345678901234)
+            )
         });
 
         // Create a simple expression tree with one rule node
@@ -770,11 +776,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Create the target data with tokenOut in uint256[2][] format
-    function _createTargetData(
-        address token,
-        uint256 amount,
-        uint256 targetChainId
-    )
+    function _createTargetData(address token, uint256 amount, uint256 targetChainId)
         private
         returns (bytes memory)
     {
@@ -899,11 +901,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Helper function to initialize policy with tokenIn condition
-    function _initializePolicyWithTokenIn(
-        address token,
-        uint128 minAmount,
-        uint128 maxAmount
-    )
+    function _initializePolicyWithTokenIn(address token, uint128 minAmount, uint128 maxAmount)
         internal
     {
         // Create policy config with only CHECK_TOKEN_IN enabled (bit 3)
@@ -1153,10 +1151,7 @@ contract MultiChainClaimPolicy_check1271SignedAction_Test is MultiChainClaimPoli
     }
 
     /// @notice Parse and hash qualification data
-    function _parseAndHashQualification(
-        bytes calldata data,
-        uint256 offset
-    )
+    function _parseAndHashQualification(bytes calldata data, uint256 offset)
         private
         pure
         returns (bytes32)

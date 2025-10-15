@@ -25,29 +25,25 @@ import { Session } from "@types/DataTypes.sol";
 
 /// @dev Extended SmartSessionEmissary with helpers for testing purposes.
 contract SmartSessionEmissaryMock is SmartSessionEmissary {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using Compressed for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Enable multiple sessions with their associated policies
-    function enableSessions(
-        Session[] calldata sessions,
-        bytes12 lockTag,
-        address sender
-    )
+    function enableSessions(Session[] calldata sessions, bytes12 lockTag, address sender)
         external
         returns (PermissionId[] memory permissionIds)
     {
         return _enableSessions(sessions, msg.sender, true, lockTag, sender);
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                         TEST HELPER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
@@ -90,17 +86,12 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         $ecdsaPasskeyConfig[account][configId][lockTag].sstore(passkeyConfigData);
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                         CACHE HELPER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Check if ECDSA digest is cached
-    function isDigestCachedECDSA(
-        address account,
-        bytes32 digest,
-        uint8 configId,
-        bytes12 lockTag
-    )
+    function isDigestCachedECDSA(address account, bytes32 digest, uint8 configId, bytes12 lockTag)
         external
         view
         returns (bool)
@@ -109,12 +100,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
     }
 
     /// @notice Set ECDSA digest cache
-    function setDigestCacheECDSA(
-        address account,
-        bytes32 digest,
-        uint8 configId,
-        bytes12 lockTag
-    )
+    function setDigestCacheECDSA(address account, bytes32 digest, uint8 configId, bytes12 lockTag)
         external
     {
         DigestCacheLib.markAsVerified(digest, account, configId, lockTag);
@@ -179,12 +165,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
     }
 
     /// @notice Clear ECDSA digest cache
-    function clearDigestCacheECDSA(
-        address account,
-        bytes32 digest,
-        uint8 configId,
-        bytes12 lockTag
-    )
+    function clearDigestCacheECDSA(address account, bytes32 digest, uint8 configId, bytes12 lockTag)
         external
     {
         bytes32 slot;

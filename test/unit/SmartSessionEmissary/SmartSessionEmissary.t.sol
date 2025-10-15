@@ -16,14 +16,14 @@ import { PermissionId, ChainDigest } from "@smartsessions/DataTypes.sol";
 import { Session, EnableSession } from "@types/DataTypes.sol";
 
 contract SmartSessionEmissary_Unit_Test is Base_Test {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 VARIABLES
     //////////////////////////////////////////////////////////////*/
 
     /// @notice The SmartSessionEmissary contract instance.
     SmartSessionEmissaryMock internal smartSessionEmissary;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -34,17 +34,17 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         smartSessionEmissary = new SmartSessionEmissaryMock();
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  HELPERS
     //////////////////////////////////////////////////////////////*/
 
     function makeMultiChainEnableData(
         Session memory session,
-        address, /*validator*/
+        address, /* validator*/
         bytes12 lockTag,
         uint256 expires,
         address sender,
-        address /*allocator*/
+        address /* allocator*/
     )
         internal
         view
@@ -64,9 +64,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         );
 
         enableData = EnableSession({
-            chainDigestIndex: 1,
-            hashesAndChainIds: chainDigests,
-            sessionToEnable: session
+            chainDigestIndex: 1, hashesAndChainIds: chainDigests, sessionToEnable: session
         });
     }
 }

@@ -8,13 +8,13 @@ import { SignatureLib_Unit_Test } from "../SignatureLib.t.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
 
 contract SignatureLib_recoverECDSA_Test is SignatureLib_Unit_Test {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using SignatureLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
@@ -125,14 +125,11 @@ contract SignatureLib_recoverECDSA_Test is SignatureLib_Unit_Test {
         assertEq(libRecover, userEOA, "Should be correct address");
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    function callRecoverECDSA(
-        bytes32 hash,
-        bytes calldata signature
-    )
+    function callRecoverECDSA(bytes32 hash, bytes calldata signature)
         external
         view
         returns (address)

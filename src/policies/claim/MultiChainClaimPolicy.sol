@@ -24,7 +24,7 @@ import { ParamRules, TokenInConfig, TokenOutConfig } from "@policies/claim/types
 ///         - qualification: compare with input
 ///         Uses a bitmap configuration with separate storage for each condition
 contract MultiChainClaimPolicy is I1271Policy {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -33,11 +33,11 @@ contract MultiChainClaimPolicy is I1271Policy {
     using ArgPolicyTreeLibV2 for ParamRules;
     using DecodeLib for bytes;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   INIT
     //////////////////////////////////////////////////////////////*/
 
@@ -45,11 +45,7 @@ contract MultiChainClaimPolicy is I1271Policy {
     /// @param account The account to initialize
     /// @param configId The configuration ID for the policy
     /// @param initData The initialization data containing the PolicyConfig
-    function initializeWithMultiplexer(
-        address account,
-        ConfigId configId,
-        bytes calldata initData
-    )
+    function initializeWithMultiplexer(address account, ConfigId configId, bytes calldata initData)
         external
         override
     {
@@ -70,7 +66,7 @@ contract MultiChainClaimPolicy is I1271Policy {
         }
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CONFIG
     //////////////////////////////////////////////////////////////*/
 
@@ -93,8 +89,8 @@ contract MultiChainClaimPolicy is I1271Policy {
         // (0) hasExecutions
 
         // if (configBitmap.hasCheckHasExecutions()) {
-        ///    This condition doesn't need any additional data
-        // }
+        // / This condition doesn't need any additional data
+        //}
 
         // Get policy storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
@@ -107,9 +103,8 @@ contract MultiChainClaimPolicy is I1271Policy {
             (qualificationConfig, configData, qualificationTypehash) =
                 configData.decodeQualificationConfig();
             // Store the qualification configuration
-            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash].fill(
-                qualificationConfig
-            );
+            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash]
+            .fill(qualificationConfig);
         }
 
         // (2) recipient and targetChainId
@@ -152,7 +147,7 @@ contract MultiChainClaimPolicy is I1271Policy {
         $.policyConfig[configId][msg.sender][account] = configBitmap;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CHECK
     //////////////////////////////////////////////////////////////*/
 
@@ -166,7 +161,7 @@ contract MultiChainClaimPolicy is I1271Policy {
     /// @param signature Data used to reconstruct the MultiChainClaim struct
     function check1271SignedAction(
         ConfigId id,
-        address, /*sender*/
+        address, /* sender*/
         address account,
         bytes32 hash,
         bytes calldata signature
@@ -195,14 +190,14 @@ contract MultiChainClaimPolicy is I1271Policy {
         return isValid && recomputedHash == hash;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   VIEW
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Checks if the policy supports the given interface ID
     function supportsInterface(bytes4 interfaceID) external pure override returns (bool) {
-        return (
-            interfaceID == type(IERC165).interfaceId || interfaceID == type(I1271Policy).interfaceId
-        );
+        return
+            (interfaceID == type(IERC165).interfaceId
+                    || interfaceID == type(I1271Policy).interfaceId);
     }
 }

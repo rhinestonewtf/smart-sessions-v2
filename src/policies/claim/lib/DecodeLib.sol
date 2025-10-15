@@ -21,7 +21,7 @@ import { ParamRules } from "@policies/claim/types/DataTypes.sol";
 ///         signatures. It decodes the data, validates it against the policy configuration, and
 ///         reconstructs the MultiChainCompact struct hash for verification.
 library DecodeLib {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -32,14 +32,14 @@ library DecodeLib {
     using EfficientHashLib for bytes32[];
     using IdLib for uint256;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
     bytes32 private constant EMPTY_EXECUTIONS_HASH =
         0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 EXTRACT
     //////////////////////////////////////////////////////////////*/
 
@@ -57,7 +57,7 @@ library DecodeLib {
         return _decodeAndValidate(signature, config, configId, account);
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  DECODE
     //////////////////////////////////////////////////////////////*/
 
@@ -334,7 +334,7 @@ library DecodeLib {
         return (true, targetHash, offset);
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                             VALIDATION HELPERS
     //////////////////////////////////////////////////////////////*/
 
@@ -503,10 +503,7 @@ library DecodeLib {
     /// @param offset The offset in the data where the other elements start
     /// @return elements The decoded other elements as an array of bytes32
     /// @return newOffset The new offset after reading the other elements
-    function _decodeOtherElements(
-        bytes calldata data,
-        uint256 offset
-    )
+    function _decodeOtherElements(bytes calldata data, uint256 offset)
         private
         pure
         returns (bytes32[] memory, uint256 newOffset)

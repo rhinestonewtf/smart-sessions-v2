@@ -26,7 +26,7 @@ import {
 } from "@smartsessions/DataTypes.sol";
 
 library PolicyLibV2 {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -37,7 +37,7 @@ library PolicyLibV2 {
     using PolicyLib for *;
     using PolicyLibV2 for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CHECK
     //////////////////////////////////////////////////////////////*/
 
@@ -87,7 +87,8 @@ library PolicyLibV2 {
             // Generate the action ID based on the target and function selector
             actionId = target.toActionId(targetSig);
             // Check the relevant action policy
-            vd = $policies[actionId].tryCheck({
+            vd = $policies[actionId]
+            .tryCheck({
                 permissionId: permissionId,
                 callOnIPolicy: abi.encodeCall(
                     IActionPolicy.checkAction,
@@ -109,7 +110,8 @@ library PolicyLibV2 {
         // If no policies were configured for FALLBACK_ACTIONID or
         // FALLBACK_ACTIONID_SMARTSESSION_CALL this call will
         // revert
-        vd = $policies[actionId].check({
+        vd = $policies[actionId]
+        .check({
             permissionId: permissionId,
             callOnIPolicy: abi.encodeCall(
                 IActionPolicy.checkAction,

@@ -6,7 +6,7 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
 import { ParamRules, TokenAmountConfig } from "@policies/claim/types/DataTypes.sol";
 
-/*//////////////////////////////////////////////////////////////
+/* //////////////////////////////////////////////////////////////
                              STRUCTS
 //////////////////////////////////////////////////////////////*/
 
@@ -15,67 +15,64 @@ struct PolicyStorage {
     mapping(
         ConfigId id
             => mapping(
-                address msgSender => mapping(address userOpSender => PolicyConfig conditionsBitmap)
-            )
+            address msgSender => mapping(address userOpSender => PolicyConfig conditionsBitmap)
+        )
     ) policyConfig;
     // Mapping to store token amount configurations per chain id
     mapping(
         ConfigId id
             => mapping(
-                address msgSender
-                    => mapping(
-                        address userOpSender
-                            => mapping(uint256 chainId => TokenAmountConfig tokenInConfig)
-                    )
+            address msgSender
+                => mapping(
+                address userOpSender => mapping(uint256 chainId => TokenAmountConfig tokenInConfig)
             )
+        )
     ) tokenInConfig;
     // Mapping to store token amount configurations per target chain id
     mapping(
         ConfigId id
             => mapping(
-                address msgSender
-                    => mapping(
-                        address userOpSender
-                            => mapping(uint256 targetChainId => TokenAmountConfig tokenOutConfig)
-                    )
+            address msgSender
+                => mapping(
+                address userOpSender
+                    => mapping(uint256 targetChainId => TokenAmountConfig tokenOutConfig)
             )
+        )
     ) tokenOutConfig;
     // Mapping to recipient configurations per chain target chain id
     mapping(
         ConfigId id
             => mapping(
-                address msgSender
-                    => mapping(
-                        address userOpSender => mapping(uint256 targetChainId => address recipient)
-                    )
+            address msgSender
+                => mapping(
+                address userOpSender => mapping(uint256 targetChainId => address recipient)
             )
+        )
     ) recipientConfig;
     // Mapping to store qualification params
     mapping(
         ConfigId id
             => mapping(
-                address msgSender
-                    => mapping(
-                        address userOpSender
-                            => mapping(
-                                bytes32 qualificationTypehash => ParamRules qualificationConfig
-                            )
-                    )
+            address msgSender
+                => mapping(
+                address userOpSender
+                    => mapping(bytes32 qualificationTypehash => ParamRules qualificationConfig)
             )
+        )
     ) qualificationConfig;
 }
 
 /// @title Storage Library
 /// @notice Library for managing storage of claim recipient data
 library StorageLib {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
     // TODO: Hardcode and truncate this
     bytes32 internal constant POLICY_STORAGE_POSITION = keccak256("claim.recipient.policy.storage");
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                STORAGE ACCESS
     //////////////////////////////////////////////////////////////*/
 

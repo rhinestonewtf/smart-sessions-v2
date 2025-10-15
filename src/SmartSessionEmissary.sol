@@ -24,13 +24,13 @@ import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 /// @notice An extended emissary contract that supports multiple verification modes including
 ///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
 contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using ModeLib for bytes;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CLAIM
     //////////////////////////////////////////////////////////////*/
 
@@ -43,7 +43,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
     function verifyClaim(
         address sponsor,
         bytes32 digest,
-        bytes32, /*/ claimHash */
+        bytes32, /* / claimHash */
         bytes calldata emissaryData,
         bytes12 lockTag
     )
@@ -73,7 +73,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         return INVALID_RETURN;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                EXECUTIONS
     //////////////////////////////////////////////////////////////*/
 
@@ -119,7 +119,7 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         return INVALID_RETURN;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   712
     //////////////////////////////////////////////////////////////*/
 

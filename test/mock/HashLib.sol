@@ -16,7 +16,7 @@ struct Token {
 /// @notice Library for hashing MultichainCompact structures with EIP712 compliance
 // solhint-disable max-line-length
 library HashLib {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                TYPEHASHES
     //////////////////////////////////////////////////////////////*/
 
@@ -60,7 +60,7 @@ library HashLib {
         )
     );
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                   HASH
     //////////////////////////////////////////////////////////////*/
 
@@ -136,8 +136,9 @@ library HashLib {
         pure
         returns (bytes32)
     {
-        return
-            keccak256(abi.encode(TYPEHASH_ELEMENT, arbiter, chainId, commitmentsHash, mandateHash));
+        return keccak256(
+            abi.encode(TYPEHASH_ELEMENT, arbiter, chainId, commitmentsHash, mandateHash)
+        );
     }
 
     function hashCompact(

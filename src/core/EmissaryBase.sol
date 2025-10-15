@@ -24,7 +24,7 @@ import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 /// @notice Base emissary contract providing basic validator functionality (ECDSA, Passkey,
 ///         Stateless validators)
 abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessionEmissary {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -33,7 +33,7 @@ abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessi
     using SignatureLib for *;
     using DigestCacheLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
@@ -42,12 +42,11 @@ abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessi
     mapping(
         address sponsor
             => mapping(
-                uint8 configId
-                    => mapping(
-                        bytes12 lockTag
-                            => mapping(IStatelessValidator validator => Compressed.Bytes)
-                    )
+            uint8 configId
+                => mapping(
+                bytes12 lockTag => mapping(IStatelessValidator validator => Compressed.Bytes)
             )
+        )
     ) public $statelessValidatorConfig;
 
     /// @notice Emissary storage for ECDSA/Passkey configurations
@@ -56,7 +55,7 @@ abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessi
         address sponsor => mapping(uint8 configId => mapping(bytes12 lockTag => Compressed.Bytes))
     ) public $ecdsaPasskeyConfig;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CONFIG
     //////////////////////////////////////////////////////////////*/
 
@@ -119,7 +118,7 @@ abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessi
         emit EmissaryConfigUpdated(account, config.validator, lockTag);
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  CLAIM
     //////////////////////////////////////////////////////////////*/
 
@@ -241,7 +240,7 @@ abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessi
         return isValid ? this.verifyClaim.selector : INVALID_RETURN;
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                EXECUTION
     //////////////////////////////////////////////////////////////*/
 
@@ -385,7 +384,7 @@ abstract contract EmissaryBase is StatelessValidation, NonceManager, ISmartSessi
         }
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 VIRTUAL
     //////////////////////////////////////////////////////////////*/
 

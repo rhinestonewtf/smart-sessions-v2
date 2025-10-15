@@ -8,8 +8,9 @@ import { NoSessionValidator } from "@test/mock/NoSessionValidator.sol";
 import { NoValidator } from "@test/mock/NoValidator.sol";
 import { NoPolicy } from "@smartsessions-test/mock/NoPolicy.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
-import { SmartSessionCompatibilityFallback } from
-    "@smartsessions/SmartSessionCompatibilityFallback.sol";
+import {
+    SmartSessionCompatibilityFallback
+} from "@smartsessions/SmartSessionCompatibilityFallback.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
@@ -42,20 +43,20 @@ import { MODULE_TYPE_FALLBACK } from "erc7579/interfaces/IERC7579Module.sol";
 
 /// @notice An abstract base test contract that provides common test logic.
 abstract contract Base_Test is Test, RhinestoneModuleKit {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using ModuleKitHelpers for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
     bytes32 constant EIP712_DOMAIN_TYPEHASH =
         0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                VARIABLES
     //////////////////////////////////////////////////////////////*/
 
@@ -89,7 +90,7 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
     // The fallback module instance.
     SmartSessionCompatibilityFallback internal fallbackModule;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -116,7 +117,7 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         noPolicy = new NoPolicy();
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
@@ -130,10 +131,7 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         return abi.encodePacked(r, s, v);
     }
 
-    function getCallData(
-        Execution[] calldata executions,
-        bytes calldata context
-    )
+    function getCallData(Execution[] calldata executions, bytes calldata context)
         external
         pure
         returns (bytes memory callData)

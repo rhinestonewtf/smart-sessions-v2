@@ -2,8 +2,9 @@
 pragma solidity >=0.8.27;
 
 // Dependencies
-import { SmartSessionEmissary_Unit_Test } from
-    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
+import {
+    SmartSessionEmissary_Unit_Test
+} from "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -29,7 +30,7 @@ import { Scope } from "@the-compact/types/Scope.sol";
 import { ResetPeriod } from "@the-compact/types/ResetPeriod.sol";
 
 contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -39,7 +40,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
     using IdLibV2 for *;
     using CompactIdLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
@@ -55,7 +56,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
     SmartSessionEmissaryEnable testEnableData;
     Session testSession;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
@@ -63,13 +64,13 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         address indexed account, PermissionId indexed permissionId, bytes12 indexed lockTag
     );
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
     error InvalidEmissaryEnableData();
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
 
@@ -90,7 +91,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         _setupTestConfiguration();
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  TESTS
     //////////////////////////////////////////////////////////////*/
 
@@ -157,8 +158,8 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
 
     function test_setConfig_RevertsWhen_InvalidUserSignature() public {
         // Recalculate lockTag and setup with new sender
-        testLockTag =
-            testConfig.allocator.toAllocatorId().toLockTag(testConfig.scope, testConfig.resetPeriod);
+        testLockTag = testConfig.allocator.toAllocatorId()
+            .toLockTag(testConfig.scope, testConfig.resetPeriod);
 
         // Update chain digests with new sender
         ChainDigest[] memory chainDigests = new ChainDigest[](1);
@@ -228,8 +229,8 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         testConfig.resetPeriod = ResetPeriod.OneSecond;
 
         // Recalculate lockTag with new reset period
-        testLockTag =
-            testConfig.allocator.toAllocatorId().toLockTag(testConfig.scope, testConfig.resetPeriod);
+        testLockTag = testConfig.allocator.toAllocatorId()
+            .toLockTag(testConfig.scope, testConfig.resetPeriod);
 
         // Update chain digests and signature
         ChainDigest[] memory chainDigests = new ChainDigest[](1);
@@ -255,14 +256,11 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         assertTrue(isEnabled, "Session should be enabled with different reset period");
     }
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    function _signWithWallet(
-        Vm.Wallet memory wallet,
-        bytes32 hash
-    )
+    function _signWithWallet(Vm.Wallet memory wallet, bytes32 hash)
         internal
         returns (bytes memory)
     {
@@ -362,9 +360,7 @@ contract SmartSessionEmissary_setConfig_Test is SmartSessionEmissary_Unit_Test {
         // Setup SmartSessionEmissaryEnable
         testEnableData = SmartSessionEmissaryEnable({
             session: EnableSession({
-                sessionToEnable: testSession,
-                hashesAndChainIds: chainDigests,
-                chainDigestIndex: 0
+                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
             allocatorSig: allocatorSig,

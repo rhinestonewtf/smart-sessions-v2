@@ -24,11 +24,7 @@ contract NoSessionValidator is ISessionValidator {
         return true;
     }
 
-    function validateSignatureWithData(
-        bytes32,
-        bytes calldata,
-        bytes calldata
-    )
+    function validateSignatureWithData(bytes32, bytes calldata, bytes calldata)
         external
         pure
         override

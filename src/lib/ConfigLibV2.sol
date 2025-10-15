@@ -34,7 +34,7 @@ import {
 /// @dev Extended ConfigLib library from SmartSessions to allow passing an address instead of
 ///      msg.sender for different enable functions.
 library ConfigLibV2 {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
@@ -45,14 +45,15 @@ library ConfigLibV2 {
     using ConfigLibV2 for *;
     using HashLib for *;
 
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                  ENABLE
     //////////////////////////////////////////////////////////////*/
 
     /// @dev Adjusted enable from ConfigLib to work with address instead of msg.sender
     function enable(
-        mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf))
-            storage $sessionValidators,
+        mapping(
+            PermissionId permissionId => mapping(address smartAccount => SignerConf conf)
+        ) storage $sessionValidators,
         PermissionId permissionId,
         ISessionValidator sessionValidator,
         bytes memory sessionValidatorConfig,
@@ -121,7 +122,8 @@ library ConfigLibV2 {
             }
 
             // Record the enabled action ID
-            $self.actionPolicies[actionId].enable({
+            $self.actionPolicies[actionId]
+            .enable({
                 policyType: PolicyType.ACTION,
                 permissionId: permissionId,
                 configId: permissionId.toConfigId(actionId),
@@ -164,11 +166,10 @@ library ConfigLibV2 {
 
             // Initialize the policy with the provided configuration
             // overwrites the config
-            IPolicy(policy).initializeWithMultiplexer({
-                account: account,
-                configId: configId,
-                initData: policyDatas[i].initData
-            });
+            IPolicy(policy)
+                .initializeWithMultiplexer({
+                    account: account, configId: configId, initData: policyDatas[i].initData
+                });
 
             emit ISmartSession.PolicyEnabled(permissionId, policyType, policy, account);
         }

@@ -8,7 +8,7 @@ import { SignatureLib } from "@lib/SignatureLib.sol";
 /// @notice Mock ERC1271 contract for testing
 
 contract MockERC1271 is IERC1271 {
-    /*//////////////////////////////////////////////////////////////
+    /* //////////////////////////////////////////////////////////////
                                 CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
@@ -29,10 +29,7 @@ contract MockERC1271 is IERC1271 {
         owner = _owner;
     }
 
-    function isValidSignature(
-        bytes32 hash,
-        bytes calldata signature
-    )
+    function isValidSignature(bytes32 hash, bytes calldata signature)
         external
         view
         override
