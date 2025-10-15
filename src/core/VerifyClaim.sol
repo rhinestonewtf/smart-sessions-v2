@@ -1,13 +1,10 @@
 // Library for handling permission IDs and configuration bitmaps
-import { PermissionIdLib, ConfigBitMapLib } from "../lib/SSXLib.sol";
+import { PermissionIdLib, ConfigBitMapLib, Permission } from "../lib/SSXLib.sol";
 // Library for EIP-712 typed data hashing
 import { EIP712TypeHashLib } from "@rhinestone/compact-utils/src/types/EIP712TypeHashLib.sol";
 // Solady's efficient enumerable map implementation
 import { EnumerableMapLib } from "solady/utils/EnumerableMapLib.sol";
 // EIP-712 domain separator and signing utilities
-import { EIP712 } from "solady/utils/EnumerableMapLib.sol";
-import { EIP712Domain } from "solady/utils/EnumerableMapLib.sol";
-// Library for compact ID conversions and operations
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 
 /**
@@ -44,7 +41,7 @@ abstract contract VerifyClaim {
     using EnumerableMapLib for EnumerableMapLib.Uint256ToBytes32Map;
     using EIP712TypeHashLib for *;
     using PermissionIdLib for bytes;
-    using ConfigBitMapLib for uint8;
+    using ConfigBitMapLib for bytes32;
 
     /**
      * @dev Keccak256 hash of empty bytes, used to indicate "no execution"
@@ -133,24 +130,16 @@ abstract contract VerifyClaim {
 
     uint256 constant SENTINEL_ANY_TARGET_CHAIN = type(uint256).max;
 
-    struct Permission {
-        EnumerableMapLib.AddressToBytes32Map localPermission;
-        address externalPermission;
-    }
-
     /**
      * @dev Configuration for claim validation policies
      * @notice Defines the rules and whitelists for a specific permission
      */
     struct SessionConfig {
-        /// @dev Bitmap encoding validation rules (e.g., check recipient, inspect tokens, etc.)
-        /// Each bit represents a different validation flag
-        uint8 configBitmap;
-
+        bytes32 configFlags;
         EnumerableMapLib.AddressToAddressMap enabledArbiter;
         /// @dev Map of whitelisted input tokens (tokenAddress => data)
         Permission tokenIns;
-        mapping(uint256 targetChainId => ChainSpecific targetChainConfig) chainConfig;
+        mapping(uint256 targetChainId => ChainSpecificConfig targetChainConfig) chainConfig;
     }
 
     struct ChainSpecificConfig {
@@ -184,23 +173,19 @@ abstract contract VerifyClaim {
      * @notice Stores validation policies per configuration per sponsor
      * The configId is derived from the permission data
      */
-    mapping(bytes32 configId => mapping(address sponsor => Config)) internal configs;
+    mapping(bytes32 configId => mapping(address sponsor => SessionConfig)) internal configs;
 
-    /**
-     * @dev Retrieves arbiter address and computes qualified hash
-     * @notice Looks up arbiter configuration and hashes the qualifier input
-     * @param arbiterId The ID of the arbiter to look up
-     * @param qInput The qualifier input data to hash
-     * @return arbiter The address of the arbiter
-     * @return qHash The computed qualifier hash
-     */
-    function _getArbiter(uint8 arbiterId, bytes memory qInput)
+    function _getArbiter(address arbiter, bytes memory qInput)
         internal
-        returns (address arbiter, bytes32 qHash)
+        returns (address _arbiter, bytes32 qHash)
     {
         // Load arbiter configuration from storage
-        ArbiterConfig memory arbiterConfig = arbiterIds[arbiterId];
-        arbiter = arbiterConfig.arbiter;
+        ArbiterConfig memory arbiterConfig = arbiterIds[arbiter];
+        if (arbiterConfig.enabled == false) {
+            return (address(0), bytes32(0));
+        } else {
+            _arbiter = arbiter;
+        }
 
         // Ensure arbiter is configured and enabled
         require(arbiter != address(0));
@@ -211,7 +196,7 @@ abstract contract VerifyClaim {
             qHash = keccak256(qInput);
         } else {
             // Use custom hasher contract for domain-specific hashing logic
-            qHash = IQualifierHasher(arbiterConfig.hasher).createQHash(qInput);
+            qHash = IQualifierHasher(arbiterConfig.qHasher).createQHash(qInput);
         }
     }
 
@@ -237,42 +222,43 @@ abstract contract VerifyClaim {
         returns (bytes32 hash)
     {
         // Step 1: Get arbiter address and compute qualified hash from qualifier params
-        (address arbiter, bytes32 qHash) = _getArbiter(fields.arbiterId, fields.qParam);
+        (address arbiter, bytes32 qHash) =
+            _getArbiter(fields.thisElement.arbiter, fields.thisElement.mandate.qParam);
 
         // Step 2: Hash the mandate structure (what happens on target chain)
         // First hash the target attributes (recipient, tokens out, chain, expiry)
         // Then combine with operation hashes and qHash
         bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
             EIP712TypeHashLib.hashTargetAttributesRaw({
-                recipient: fields.recipient,
-                tokenOutHash: EIP712TypeHashLib.hashTokenOut(fields.tokenOut),
-                targetChainId: fields.targetChain,
-                fillDeadline: fields.fillExpiry
+                recipient: fields.thisElement.mandate.recipient,
+                tokenOutHash: EIP712TypeHashLib.hashTokenOut(fields.thisElement.mandate.tokenOut),
+                targetChainId: fields.thisElement.mandate.targetChain,
+                fillDeadline: fields.thisElement.mandate.fillExpiry
             }),
-            fields.originOps,
-            fields.targetOps,
+            fields.thisElement.mandate.originOps,
+            fields.thisElement.mandate.targetOps,
             qHash
         );
 
         // Step 3: Hash the element (origin chain data + mandate)
-        bytes32 elementHash = EIP712TypeHashLib.hashElementRaw({
-            arbiter: arbiterIds[fields.arbiterId].arbiter,
-            originChainId: block.chainid,
-            tokenInHash: EIP712TypeHashLib.hashTokenIn(fields.tokenIn),
-            mandateHash: mandateHash
-        });
+        // bytes32 elementHash = EIP712TypeHashLib.hashElementRaw({
+        // // arbiter: arbiterIds[fields.thisElement.arbiter].arbiter,
+        // originChainId: block.chainid,
+        // tokenInHash: EIP712TypeHashLib.hashTokenIn(fields.tokenIn),
+        // mandateHash: mandateHash
+        // });
 
-        // Step 4: Verify the computed element hash matches the expected hash in allElements
-        // This ensures the element data hasn't been tampered with
-        require(elementHash == fields.allElements[fields.elementPtr]);
-
-        // Step 5: Hash the complete compact structure (sponsor + nonce + expiry + elements)
-        hash = EIP712TypeHashLib.hashCompact({
-            sponsor: sponsor,
-            nonce: fields.nonce,
-            expires: fields.claimExpiry,
-            allElementsHash: abi.encodePacked(fields.allElements)
-        });
+        // // Step 4: Verify the computed element hash matches the expected hash in allElements
+        // // This ensures the element data hasn't been tampered with
+        // require(elementHash == fields.allElements[fields.elementPtr]);
+        //
+        // // Step 5: Hash the complete compact structure (sponsor + nonce + expiry + elements)
+        // hash = EIP712TypeHashLib.hashCompact({
+        // sponsor: sponsor,
+        // nonce: fields.nonce,
+        // expires: fields.claimExpiry,
+        // allElementsHash: abi.encodePacked(fields.allElements)
+        // });
     }
 
     /**
@@ -305,7 +291,8 @@ abstract contract VerifyClaim {
         returns (bool valid)
     {
         // Extract permission ID from emissary data and convert to config ID
-        bytes32 configId = emissaryData.extractPermissionId().toCompactPolicyId();
+        // bytes32 configId = emissaryData.extractPermissionId().toCompactPolicyId();
+        bytes32 configId;
 
         // TODO: Optimize to use calldata instead of memory for gas efficiency
         // Decode the compact fields starting after the first 32 bytes (permission ID)
@@ -314,125 +301,127 @@ abstract contract VerifyClaim {
 
         SessionConfig storage $sessionConfig = configs[configId][sponsor];
         // Extract the bitmap that defines which validations to perform
-        uint8 configBitmap = $sessionConfig.configBitmap;
-        require(configBitmap.isEnabled());
+        bytes32 configFlags = $sessionConfig.configFlags;
+        require(configFlags.isEnabled());
 
         ChainSpecificConfig storage $chainConfig;
 
         // Load the configuration for this sponsor and permission
-        if (configBitmap.isAnyTargetChainId()) {
-            $config = $chainConfig.chainConfig[SENTINEL_ANY_TARGET_CHAIN];
+        if (configFlags.isAnyTargetChainId()) {
+            $chainConfig = $chainConfig.chainConfig[SENTINEL_ANY_TARGET_CHAIN];
         } else {
-            $config = $chainConfig.chainConfig[fields.targetChain];
+            $chainConfig = $chainConfig.chainConfig[fields.targetChain];
         }
 
-        /* //////////////////////////////////////////////////////////////
-                              RECIPIENT FIELD VALIDATION
-        //////////////////////////////////////////////////////////////*/
-        // Three modes for recipient validation based on config bitmap:
-        // 1. Sponsor must equal recipient (self-transfer)
-        // 2. Recipient determined by policy contract (dynamic validation)
-        // 3. Recipient must be in whitelist (static validation)
-
-        if (configBitmap.isSponsorEqRecipient()) {
-            // Mode 1: Enforce that sponsor is sending to themselves
-            // This is the most restrictive mode - no third-party recipients allowed
-            require(fields.recipient == sponsor);
-        } else if (configBitmap.isRecipientViaPolicy()) {
-            // Mode 2: Delegate recipient validation to an external policy contract
-            // TODO: Implement policy contract call for dynamic recipient validation
-            // call policy
-        } else {
-            // Mode 3: Check if recipient is in the pre-approved whitelist
-            // Reverts if recipient address is not in the whitelist map
-            require($config.recipients.contains(fields.recipient));
-        }
-
-        /* //////////////////////////////////////////////////////////////
-                                TOKEN IN FIELD VALIDATION
-        //////////////////////////////////////////////////////////////*/
-        // Validate input tokens on the origin chain
-        // Only enforced if the inspectTokenIn bit is set in config
-
-        if (configBitmap.inspectTokenIn()) {
-            // Iterate through all input tokens in the claim
-            for (uint256 i; i < fields.tokenIn.length; i++) {
-                // Extract token address from the [address, amount] pair
-                // tokenIn[i][0] contains the address encoded as uint256
-                address _checkTokenIn = fields.tokenIn[i][0].toAddress();
-
-                // Verify token is in the whitelist - reverts if not found
-                require($config.tokenIns.contains(_checkTokenIn));
-            }
-        }
-        // If inspectTokenIn bit is not set, any input tokens are allowed
-
-        /* //////////////////////////////////////////////////////////////
-                                TOKEN OUT FIELD VALIDATION
-        //////////////////////////////////////////////////////////////*/
-        // Validate output tokens on the target chain
-        // Two modes based on inspectTokenOut bit:
-        // 1. Full inspection: compute hash and validate against whitelist
-        // 2. Stub mode: use pre-computed hash without validation
-
-        if (configBitmap.isInspectTokenOut()) {
-            // Mode 1: Full inspection - compute hash and validate each token
-            // This provides maximum security by checking every output token
-            tokenOutHash = fields.tokenOutHash();
-
-            // Iterate through all output tokens in the claim
-            for (uint256 i; i < fields.tokenOut.length; i++) {
-                // Extract token address from the [address, amount] pair
-                // tokenOut[i][0] contains the address encoded as uint256
-                address _checkTokenOut = fields.tokenOut[i][0].toAddress();
-
-                // Verify token is in the whitelist - reverts if not found
-                require($config.tokenOut.contains(_checkTokenOut));
-            }
-        } else {
-            // Mode 2: Stub mode - use pre-computed hash without validation
-            // This saves gas but relies on the hash being computed correctly off-chain
-            tokenOutHash = fields.tokenOutStub();
-        }
-
-        /* //////////////////////////////////////////////////////////////
-                                TARGET CHAIN ID VALIDATION
-        //////////////////////////////////////////////////////////////*/
-        // Validate the destination chain for the claim
-        // If inspection is disabled, any chain is allowed (wildcard mode)
-
-        if (configBitmap.isInspectTargetChainId()) {
-            // Verify the target chain is in the whitelist
-            // This prevents claims from being executed on unauthorized chains
-            require($config.allowedTargetChains[fields.targetChain]);
-        }
-        // If inspectTargetChainId bit is not set, all chains are allowed
-
-        /* //////////////////////////////////////////////////////////////
-                                ORIGIN OPS VALIDATION
-        //////////////////////////////////////////////////////////////*/
-        // Validate operations to be executed on the origin chain before claim
-        // These are pre-claim operations that run before the main transfer
-
-        if (!configBitmap.allowPreClaimOps()) {
-            // If pre-claim ops are not allowed by config, enforce NO_EXEC
-            // originOps must be the empty hash (keccak256("")) indicating no operations
-            require(fields.originOps == NO_EXEC);
-        }
-        // If allowPreClaimOps bit is set, any origin operations are permitted
-
-        /* //////////////////////////////////////////////////////////////
-                                TARGET OPS VALIDATION
-        //////////////////////////////////////////////////////////////*/
-        // Validate operations to be executed on the target chain after claim
-        // These are post-claim operations that run after the token transfer
-
-        if (!configBitmap.allowTargetOps()) {
-            // If target ops are not allowed by config, enforce NO_EXEC
-            // targetOps must be the empty hash (keccak256("")) indicating no operations
-            require(fields.targetOps == NO_EXEC);
-        }
-        // If allowTargetOps bit is set, any target operations are permitted
+        // /* //////////////////////////////////////////////////////////////
+        // RECIPIENT FIELD VALIDATION
+        // //////////////////////////////////////////////////////////////*/
+        // // Three modes for recipient validation based on config bitmap:
+        // // 1. Sponsor must equal recipient (self-transfer)
+        // // 2. Recipient determined by policy contract (dynamic validation)
+        // // 3. Recipient must be in whitelist (static validation)
+        //
+        //
+        //
+        // if (configFlags.isSponsorEqRecipient()) {
+        // // Mode 1: Enforce that sponsor is sending to themselves
+        // // This is the most restrictive mode - no third-party recipients allowed
+        // require(fields.recipient == sponsor);
+        // } else if (configFlags.isRecipientViaPolicy()) {
+        // // Mode 2: Delegate recipient validation to an external policy contract
+        // // TODO: Implement policy contract call for dynamic recipient validation
+        // // call policy
+        // } else {
+        // // Mode 3: Check if recipient is in the pre-approved whitelist
+        // // Reverts if recipient address is not in the whitelist map
+        // require($config.recipients.contains(fields.recipient));
+        //}
+        //
+        // /* //////////////////////////////////////////////////////////////
+        // TOKEN IN FIELD VALIDATION
+        // //////////////////////////////////////////////////////////////*/
+        // // Validate input tokens on the origin chain
+        // // Only enforced if the inspectTokenIn bit is set in config
+        //
+        // if (configFlags.inspectTokenIn()) {
+        // // Iterate through all input tokens in the claim
+        // for (uint256 i; i < fields.tokenIn.length; i++) {
+        // // Extract token address from the [address, amount] pair
+        // // tokenIn[i][0] contains the address encoded as uint256
+        // address _checkTokenIn = fields.tokenIn[i][0].toAddress();
+        //
+        // // Verify token is in the whitelist - reverts if not found
+        // require($config.tokenIns.contains(_checkTokenIn));
+        //}
+        //}
+        // // If inspectTokenIn bit is not set, any input tokens are allowed
+        //
+        // /* //////////////////////////////////////////////////////////////
+        // TOKEN OUT FIELD VALIDATION
+        // //////////////////////////////////////////////////////////////*/
+        // // Validate output tokens on the target chain
+        // // Two modes based on inspectTokenOut bit:
+        // // 1. Full inspection: compute hash and validate against whitelist
+        // // 2. Stub mode: use pre-computed hash without validation
+        //
+        // if (configBitmap.isInspectTokenOut()) {
+        // // Mode 1: Full inspection - compute hash and validate each token
+        // // This provides maximum security by checking every output token
+        // tokenOutHash = fields.tokenOutHash();
+        //
+        // // Iterate through all output tokens in the claim
+        // for (uint256 i; i < fields.tokenOut.length; i++) {
+        // // Extract token address from the [address, amount] pair
+        // // tokenOut[i][0] contains the address encoded as uint256
+        // address _checkTokenOut = fields.tokenOut[i][0].toAddress();
+        //
+        // // Verify token is in the whitelist - reverts if not found
+        // require($config.tokenOut.contains(_checkTokenOut));
+        //}
+        // } else {
+        // // Mode 2: Stub mode - use pre-computed hash without validation
+        // // This saves gas but relies on the hash being computed correctly off-chain
+        // tokenOutHash = fields.tokenOutStub();
+        //}
+        //
+        // /* //////////////////////////////////////////////////////////////
+        // TARGET CHAIN ID VALIDATION
+        // //////////////////////////////////////////////////////////////*/
+        // // Validate the destination chain for the claim
+        // // If inspection is disabled, any chain is allowed (wildcard mode)
+        //
+        // if (configBitmap.isInspectTargetChainId()) {
+        // // Verify the target chain is in the whitelist
+        // // This prevents claims from being executed on unauthorized chains
+        // require($config.allowedTargetChains[fields.targetChain]);
+        //}
+        // // If inspectTargetChainId bit is not set, all chains are allowed
+        //
+        // /* //////////////////////////////////////////////////////////////
+        // ORIGIN OPS VALIDATION
+        // //////////////////////////////////////////////////////////////*/
+        // // Validate operations to be executed on the origin chain before claim
+        // // These are pre-claim operations that run before the main transfer
+        //
+        // if (!configBitmap.allowPreClaimOps()) {
+        // // If pre-claim ops are not allowed by config, enforce NO_EXEC
+        // // originOps must be the empty hash (keccak256("")) indicating no operations
+        // require(fields.originOps == NO_EXEC);
+        //}
+        // // If allowPreClaimOps bit is set, any origin operations are permitted
+        //
+        // /* //////////////////////////////////////////////////////////////
+        // TARGET OPS VALIDATION
+        // //////////////////////////////////////////////////////////////*/
+        // // Validate operations to be executed on the target chain after claim
+        // // These are post-claim operations that run after the token transfer
+        //
+        // if (!configBitmap.allowTargetOps()) {
+        // // If target ops are not allowed by config, enforce NO_EXEC
+        // // targetOps must be the empty hash (keccak256("")) indicating no operations
+        // require(fields.targetOps == NO_EXEC);
+        //}
+        // // If allowTargetOps bit is set, any target operations are permitted
 
         /* //////////////////////////////////////////////////////////////
                                 FINAL DIGEST COMPUTATION
