@@ -28,6 +28,9 @@ library ConfigBitMapLib {
     using IdLib for uint256;
     using EnumerableMapLib for EnumerableMapLib.AddressToBytes32Map;
 
+    bytes32 internal constant NO_EXEC =
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+
     function getPermissionMode(bytes1 flag) internal pure returns (PermissionMode mode) {
         mode = PermissionMode(uint8(flag));
     }
@@ -49,19 +52,20 @@ library ConfigBitMapLib {
         // return configFlag;
     }
 
-    // byte29 target chain
-    function isAnyTargetChainId(bytes32 configFlag) internal pure returns (bool) {
-        return configFlag[29] == bytes1(0x01);
-    }
-
     // byte 28 preclaimops
-    function allowPreClaimOps(bytes32 configFlag) internal pure returns (bool) {
-        return configFlag[28] == bytes1(0x01);
+    function inspectPreClaimOps(bytes32 configFlag, bytes32 preClaimOps)
+        internal
+        pure
+        returns (bool)
+    {
+        if (preClaimOps == NO_EXEC) return true;
+        else return configFlag[28] == bytes1(0x01);
     }
 
     // byte 27 target ops
-    function allowTargetOps(bytes32 configFlag) internal pure returns (bool) {
-        return configFlag[27] == bytes1(0x01);
+    function inspectTargetOps(bytes32 configFlag, bytes32 targetOps) internal pure returns (bool) {
+        if (targetOps == NO_EXEC) return true;
+        else return configFlag[27] == bytes1(0x01);
     }
 
     // byte 26 claimExpires
@@ -101,13 +105,13 @@ library ConfigBitMapLib {
     // | 1 : use mapping
     // | 2 : use external policy
     function inspectRecipient(
+        bytes32 configFlag,
         address recipient,
         address sponsor,
-        bytes32 configFlag,
         Permission storage $permission
     )
         internal
-        pure
+        view
         returns (bool)
     {
         bytes1 flag = configFlag[3];
@@ -132,12 +136,12 @@ library ConfigBitMapLib {
     // | 1 : use mapping
     // | 2 : use external policy
     function inspectTokenOuts(
-        uint256[2][] memory tokenOut,
         bytes32 configFlag,
+        uint256[2][] memory tokenOut,
         Permission storage $permission
     )
         internal
-        pure
+        view
         returns (bool)
     {
         bytes1 flag = configFlag[2];
@@ -161,12 +165,12 @@ library ConfigBitMapLib {
     // | 1 : use mapping
     // | 2 : use external policy
     function inspectTokenIns(
-        uint256[2][] memory tokenIn,
         bytes32 configFlag,
+        uint256[2][] memory tokenIn,
         Permission storage $permission
     )
         internal
-        pure
+        view
         returns (bool)
     {
         bytes1 flag = configFlag[1];

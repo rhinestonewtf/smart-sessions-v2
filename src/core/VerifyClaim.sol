@@ -48,8 +48,6 @@ abstract contract VerifyClaim {
      * This sentinel value signals that no operations should be executed
      * Computed as: keccak256("")
      */
-    bytes32 internal constant NO_EXEC =
-        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     /**
      * @dev Represents the complete compact claim structure
@@ -308,94 +306,26 @@ abstract contract VerifyClaim {
 
         // Load the configuration for this sponsor and permission
         if (configFlags.isAnyTargetChainId()) {
-            $chainConfig = $chainConfig.chainConfig[SENTINEL_ANY_TARGET_CHAIN];
+            $chainConfig = $sessionConfig.chainConfig[SENTINEL_ANY_TARGET_CHAIN];
         } else {
-            $chainConfig = $chainConfig.chainConfig[fields.targetChain];
+            $chainConfig = $sessionConfig.chainConfig[fields.thisElement.mandate.targetChain];
         }
 
-        // /* //////////////////////////////////////////////////////////////
-        // RECIPIENT FIELD VALIDATION
-        // //////////////////////////////////////////////////////////////*/
-        // // Three modes for recipient validation based on config bitmap:
-        // // 1. Sponsor must equal recipient (self-transfer)
-        // // 2. Recipient determined by policy contract (dynamic validation)
-        // // 3. Recipient must be in whitelist (static validation)
-        //
-        //
-        //
-        // if (configFlags.isSponsorEqRecipient()) {
-        // // Mode 1: Enforce that sponsor is sending to themselves
-        // // This is the most restrictive mode - no third-party recipients allowed
-        // require(fields.recipient == sponsor);
-        // } else if (configFlags.isRecipientViaPolicy()) {
-        // // Mode 2: Delegate recipient validation to an external policy contract
-        // // TODO: Implement policy contract call for dynamic recipient validation
-        // // call policy
-        // } else {
-        // // Mode 3: Check if recipient is in the pre-approved whitelist
-        // // Reverts if recipient address is not in the whitelist map
-        // require($config.recipients.contains(fields.recipient));
-        //}
-        //
-        // /* //////////////////////////////////////////////////////////////
-        // TOKEN IN FIELD VALIDATION
-        // //////////////////////////////////////////////////////////////*/
-        // // Validate input tokens on the origin chain
-        // // Only enforced if the inspectTokenIn bit is set in config
-        //
-        // if (configFlags.inspectTokenIn()) {
-        // // Iterate through all input tokens in the claim
-        // for (uint256 i; i < fields.tokenIn.length; i++) {
-        // // Extract token address from the [address, amount] pair
-        // // tokenIn[i][0] contains the address encoded as uint256
-        // address _checkTokenIn = fields.tokenIn[i][0].toAddress();
-        //
-        // // Verify token is in the whitelist - reverts if not found
-        // require($config.tokenIns.contains(_checkTokenIn));
-        //}
-        //}
-        // // If inspectTokenIn bit is not set, any input tokens are allowed
-        //
-        // /* //////////////////////////////////////////////////////////////
-        // TOKEN OUT FIELD VALIDATION
-        // //////////////////////////////////////////////////////////////*/
-        // // Validate output tokens on the target chain
-        // // Two modes based on inspectTokenOut bit:
-        // // 1. Full inspection: compute hash and validate against whitelist
-        // // 2. Stub mode: use pre-computed hash without validation
-        //
-        // if (configBitmap.isInspectTokenOut()) {
-        // // Mode 1: Full inspection - compute hash and validate each token
-        // // This provides maximum security by checking every output token
-        // tokenOutHash = fields.tokenOutHash();
-        //
-        // // Iterate through all output tokens in the claim
-        // for (uint256 i; i < fields.tokenOut.length; i++) {
-        // // Extract token address from the [address, amount] pair
-        // // tokenOut[i][0] contains the address encoded as uint256
-        // address _checkTokenOut = fields.tokenOut[i][0].toAddress();
-        //
-        // // Verify token is in the whitelist - reverts if not found
-        // require($config.tokenOut.contains(_checkTokenOut));
-        //}
-        // } else {
-        // // Mode 2: Stub mode - use pre-computed hash without validation
-        // // This saves gas but relies on the hash being computed correctly off-chain
-        // tokenOutHash = fields.tokenOutStub();
-        //}
-        //
-        // /* //////////////////////////////////////////////////////////////
-        // TARGET CHAIN ID VALIDATION
-        // //////////////////////////////////////////////////////////////*/
-        // // Validate the destination chain for the claim
-        // // If inspection is disabled, any chain is allowed (wildcard mode)
-        //
-        // if (configBitmap.isInspectTargetChainId()) {
-        // // Verify the target chain is in the whitelist
-        // // This prevents claims from being executed on unauthorized chains
-        // require($config.allowedTargetChains[fields.targetChain]);
-        //}
-        // // If inspectTargetChainId bit is not set, all chains are allowed
+        valid = configFlags.inspectRecipient(
+            fields.thisElement.mandate.recipient, sponsor, $chainConfig.recipient
+        );
+
+        valid = valid
+            && configFlags.inspectTokenIns(fields.thisElement.tokenIn, $sessionConfig.tokenIns);
+
+        valid = valid
+            && configFlags.inspectTokenOuts(
+                fields.thisElement.mandate.tokenOut, $chainConfig.tokenOuts
+            );
+
+        valid = valid && configFlags.inspectPreClaimOps(fields.thisElement.mandate.originOps);
+        valid = valid && configFlags.inspectTargetOps(fields.thisElement.mandate.originOps);
+
         //
         // /* //////////////////////////////////////////////////////////////
         // ORIGIN OPS VALIDATION
@@ -429,8 +359,8 @@ abstract contract VerifyClaim {
         // Compute the final EIP-712 typed data hash for signature verification
         // This combines all validated fields into a single hash that can be signed
 
-        bytes32 digest =
-            _getTypedDataHash(this.__hashStub_tokenIn(sponsor.lockTag, lockTag, fields));
+        // bytes32 digest =
+        // _getTypedDataHash(this.__hashStub_tokenIn(sponsor.lockTag, lockTag, fields));
 
         // Note: The actual signature verification happens in the calling function
         // This function only validates the claim structure and permissions
@@ -442,5 +372,5 @@ abstract contract VerifyClaim {
      * @param hash The struct hash to convert
      * @return The EIP-712 typed data hash ready for signature verification
      */
-    function _getTypedDataHash(bytes32 hash) internal view returns (bytes32);
+    function _getTypedDataHash(bytes32 hash) internal view virtual returns (bytes32);
 }
