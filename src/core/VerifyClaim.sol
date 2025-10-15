@@ -198,96 +198,43 @@ abstract contract VerifyClaim {
         }
     }
 
-    /**
-     * @dev Computes the complete compact hash for verification
-     * @notice Hashes the compact structure including mandate, element, and all fields
-     * @param sponsor The address of the claim sponsor
-     * @param lockTag A lock identifier for preventing front-running
-     * @param fields The complete compact field data
-     * @return hash The final compact hash for EIP-712 signing
-     *
-     * @dev Process:
-     *      1. Retrieve arbiter and compute qHash
-     *      2. Hash the mandate (target attributes + ops + qHash)
-     *      3. Hash the element (arbiter + chain + tokens + mandate)
-     *      4. Verify element hash matches the one in allElements array
-     *      5. Hash the complete compact structure
-     *
-     * TODO: Change visibility to internal for security
-     */
-    function __hashStub_tokenIn(address sponsor, bytes12 lockTag, CompactFields calldata fields)
+    function __hashMandate(address sponsor, bytes12 lockTag, Element calldata element)
         external
-        returns (bytes32 hash)
+        returns (bytes32 elementHash)
     {
-        // Step 1: Get arbiter address and compute qualified hash from qualifier params
-        (address arbiter, bytes32 qHash) =
-            _getArbiter(fields.thisElement.arbiter, fields.thisElement.mandate.qParam);
-
         // Step 2: Hash the mandate structure (what happens on target chain)
         // First hash the target attributes (recipient, tokens out, chain, expiry)
         // Then combine with operation hashes and qHash
         bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
             EIP712TypeHashLib.hashTargetAttributesRaw({
-                recipient: fields.thisElement.mandate.recipient,
-                tokenOutHash: EIP712TypeHashLib.hashTokenOut(fields.thisElement.mandate.tokenOut),
-                targetChainId: fields.thisElement.mandate.targetChain,
-                fillDeadline: fields.thisElement.mandate.fillExpiry
+                recipient: element.mandate.recipient,
+                tokenOutHash: EIP712TypeHashLib.hashTokenOut(element.mandate.tokenOut),
+                targetChainId: element.mandate.targetChain,
+                fillDeadline: element.mandate.fillExpiry
             }),
-            fields.thisElement.mandate.originOps,
-            fields.thisElement.mandate.targetOps,
+            element.mandate.originOps,
+            element.mandate.targetOps,
             qHash
         );
 
-        // Step 3: Hash the element (origin chain data + mandate)
-        // bytes32 elementHash = EIP712TypeHashLib.hashElementRaw({
-        // // arbiter: arbiterIds[fields.thisElement.arbiter].arbiter,
-        // originChainId: block.chainid,
-        // tokenInHash: EIP712TypeHashLib.hashTokenIn(fields.tokenIn),
-        // mandateHash: mandateHash
-        // });
-
-        // // Step 4: Verify the computed element hash matches the expected hash in allElements
-        // // This ensures the element data hasn't been tampered with
-        // require(elementHash == fields.allElements[fields.elementPtr]);
-        //
-        // // Step 5: Hash the complete compact structure (sponsor + nonce + expiry + elements)
-        // hash = EIP712TypeHashLib.hashCompact({
-        // sponsor: sponsor,
-        // nonce: fields.nonce,
-        // expires: fields.claimExpiry,
-        // allElementsHash: abi.encodePacked(fields.allElements)
-        // });
+        elementHash = EIP712TypeHashLib.hashElementRaw({
+            // arbiter: arbiterIds[fields.thisElement.arbiter].arbiter,
+            originChainId: block.chainid,
+            tokenInHash: EIP712TypeHashLib.hashTokenIn(element.tokenIn),
+            mandateHash: mandateHash
+        });
     }
 
-    /**
-     * @dev Verifies a claim against the sponsor's configuration
-     * @notice Validates all aspects of a claim: recipient, tokens, chains, and operations
-     * @param sponsor The address sponsoring this claim
-     * @param claimHash The hash of the claim to verify
-     * @param emissaryData The encoded claim data from the emissary
-     * @param lockTag A lock identifier for synchronization
-     * @return valid True if the claim passes all validation checks
-     *
-     * @dev Validation stages:
-     *      1. Extract config ID and load configuration
-     *      2. Decode claim fields
-     *      3. Validate recipient (sponsor match, whitelist, or policy)
-     *      4. Validate input tokens (whitelist check)
-     *      5. Validate output tokens (whitelist check)
-     *      6. Validate target chain (whitelist check)
-     *      7. Validate origin operations (allow/deny)
-     *      8. Validate target operations (allow/deny)
-     *      9. Compute and verify final typed data hash
-     */
-    function _verifyClaim(
+    function _verifyCompactPolicies(
         address sponsor,
         bytes32 claimHash,
         bytes calldata emissaryData,
         bytes12 lockTag
     )
         internal
-        returns (bool valid)
+        returns (bytes32 claimHash)
     {
+        bool valid = true;
         // Extract permission ID from emissary data and convert to config ID
         // bytes32 configId = emissaryData.extractPermissionId().toCompactPolicyId();
         bytes32 configId;
@@ -311,9 +258,10 @@ abstract contract VerifyClaim {
             $chainConfig = $sessionConfig.chainConfig[fields.thisElement.mandate.targetChain];
         }
 
-        valid = configFlags.inspectRecipient(
-            fields.thisElement.mandate.recipient, sponsor, $chainConfig.recipient
-        );
+        valid = valid
+            && configFlags.inspectRecipient(
+                fields.thisElement.mandate.recipient, sponsor, $chainConfig.recipient
+            );
 
         valid = valid
             && configFlags.inspectTokenIns(fields.thisElement.tokenIn, $sessionConfig.tokenIns);
@@ -322,48 +270,9 @@ abstract contract VerifyClaim {
             && configFlags.inspectTokenOuts(
                 fields.thisElement.mandate.tokenOut, $chainConfig.tokenOuts
             );
-
         valid = valid && configFlags.inspectPreClaimOps(fields.thisElement.mandate.originOps);
+
         valid = valid && configFlags.inspectTargetOps(fields.thisElement.mandate.originOps);
-
-        //
-        // /* //////////////////////////////////////////////////////////////
-        // ORIGIN OPS VALIDATION
-        // //////////////////////////////////////////////////////////////*/
-        // // Validate operations to be executed on the origin chain before claim
-        // // These are pre-claim operations that run before the main transfer
-        //
-        // if (!configBitmap.allowPreClaimOps()) {
-        // // If pre-claim ops are not allowed by config, enforce NO_EXEC
-        // // originOps must be the empty hash (keccak256("")) indicating no operations
-        // require(fields.originOps == NO_EXEC);
-        //}
-        // // If allowPreClaimOps bit is set, any origin operations are permitted
-        //
-        // /* //////////////////////////////////////////////////////////////
-        // TARGET OPS VALIDATION
-        // //////////////////////////////////////////////////////////////*/
-        // // Validate operations to be executed on the target chain after claim
-        // // These are post-claim operations that run after the token transfer
-        //
-        // if (!configBitmap.allowTargetOps()) {
-        // // If target ops are not allowed by config, enforce NO_EXEC
-        // // targetOps must be the empty hash (keccak256("")) indicating no operations
-        // require(fields.targetOps == NO_EXEC);
-        //}
-        // // If allowTargetOps bit is set, any target operations are permitted
-
-        /* //////////////////////////////////////////////////////////////
-                                FINAL DIGEST COMPUTATION
-        //////////////////////////////////////////////////////////////*/
-        // Compute the final EIP-712 typed data hash for signature verification
-        // This combines all validated fields into a single hash that can be signed
-
-        // bytes32 digest =
-        // _getTypedDataHash(this.__hashStub_tokenIn(sponsor.lockTag, lockTag, fields));
-
-        // Note: The actual signature verification happens in the calling function
-        // This function only validates the claim structure and permissions
     }
 
     /**
