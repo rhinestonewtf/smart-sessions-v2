@@ -33,7 +33,7 @@ library SSXLibSet {
     /// @param enabled Whether the configuration is enabled (true) or disabled (false)
     /// @return Updated configuration bytes32
     function setEnabled(bytes32 configFlag, bool enabled) internal pure returns (bytes32) {
-        return _setByte(configFlag, BYTE_IS_ENABLED, enabled ? 0x01 : 0x00);
+        return _setByte(configFlag, BYTE_IS_ENABLED, enabled ? bytes1(0x01) : bytes1(0x00));
     }
 
     /// @notice Sets the chain ID target flag
@@ -45,7 +45,9 @@ library SSXLibSet {
         pure
         returns (bytes32)
     {
-        return _setByte(configFlag, BYTE_ANY_TARGET_CHAIN_ID, anyChainId ? 0x01 : 0x00);
+        return _setByte(
+            configFlag, BYTE_ANY_TARGET_CHAIN_ID, anyChainId ? bytes1(0x01) : bytes1(0x00)
+        );
     }
 
     /// @notice Sets the preClaimOps inspection flag
@@ -53,7 +55,7 @@ library SSXLibSet {
     /// @param inspect Whether to inspect preClaimOps (true) or skip inspection (false)
     /// @return Updated configuration bytes32
     function setPreClaimOps(bytes32 configFlag, bool inspect) internal pure returns (bytes32) {
-        return _setByte(configFlag, BYTE_PRE_CLAIM_OPS, inspect ? 0x01 : 0x00);
+        return _setByte(configFlag, BYTE_PRE_CLAIM_OPS, inspect ? bytes1(0x01) : bytes1(0x00));
     }
 
     /// @notice Sets the targetOps inspection flag
@@ -61,7 +63,7 @@ library SSXLibSet {
     /// @param inspect Whether to inspect targetOps (true) or skip inspection (false)
     /// @return Updated configuration bytes32
     function setTargetOps(bytes32 configFlag, bool inspect) internal pure returns (bytes32) {
-        return _setByte(configFlag, BYTE_TARGET_OPS, inspect ? 0x01 : 0x00);
+        return _setByte(configFlag, BYTE_TARGET_OPS, inspect ? bytes1(0x01) : bytes1(0x00));
     }
 
     /// @notice Sets the claim expiry inspection mode

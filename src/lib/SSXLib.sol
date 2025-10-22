@@ -189,6 +189,7 @@ library ConfigBitMapLib {
     // | 2 : use external policy
     function inspectTokenIns(
         bytes32 configFlag,
+        bytes12 lockTag,
         uint256[2][] memory tokenIn,
         Permission storage $permission
     )
@@ -202,7 +203,9 @@ library ConfigBitMapLib {
             return true;
         } else if (mode == PermissionMode.LOCAL_MAPPING) {
             for (uint256 i; i < tokenIn.length; i++) {
-                if (!$permission.localPermission.contains(tokenIn[i][0].toAddress())) {
+                uint256 tokenId = tokenIn[i][0];
+                require(lockTag == tokenId.toLockTag());
+                if (!$permission.localPermission.contains(tokenId.toAddress())) {
                     return false;
                 }
             }

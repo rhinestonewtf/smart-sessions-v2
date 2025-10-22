@@ -175,6 +175,7 @@ abstract contract VerifyClaim {
 
     function _getArbiter(address arbiter, bytes memory qInput)
         internal
+        view
         returns (address _arbiter, bytes32 qHash)
     {
         // Load arbiter configuration from storage
@@ -198,10 +199,7 @@ abstract contract VerifyClaim {
         }
     }
 
-    function hashElement(address sponsor, bytes12 lockTag, Element calldata element)
-        internal
-        returns (bytes32 elementHash)
-    {
+    function hashElement(Element calldata element) internal view returns (bytes32 elementHash) {
         (address arbiter, bytes32 qHash) = _getArbiter(element.arbiter, element.mandate.qParam);
         // Step 2: Hash the mandate structure (what happens on target chain)
         // First hash the target attributes (recipient, tokens out, chain, expiry)
@@ -234,6 +232,7 @@ abstract contract VerifyClaim {
         bytes12 lockTag
     )
         internal
+        view
         returns (bool valid)
     {
         valid = true;
@@ -248,13 +247,7 @@ abstract contract VerifyClaim {
             fields := emissaryData.offset
         }
 
-        require(
-            fields.allElements[fields.elementPtr]
-                == hashElement(sponsor, lockTag, fields.thisElement)
-        );
-        //k
-        // function hashCompact(address sponsor, uint256 nonce, uint256 expires, bytes32
-        // allElementsHash) internal pure returns (bytes32 hash) {
+        require(fields.allElements[fields.elementPtr] == hashElement(fields.thisElement));
 
         SessionConfig storage $sessionConfig = configs[configId][sponsor];
         // Extract the bitmap that defines which validations to perform
@@ -276,7 +269,9 @@ abstract contract VerifyClaim {
             );
 
         valid = valid
-            && configFlags.inspectTokenIns(fields.thisElement.tokenIn, $sessionConfig.tokenIns);
+            && configFlags.inspectTokenIns(
+                lockTag, fields.thisElement.tokenIn, $sessionConfig.tokenIns
+            );
 
         valid = valid
             && configFlags.inspectTokenOuts(
@@ -289,7 +284,10 @@ abstract contract VerifyClaim {
         valid = valid
             && claimHash
                 == EIP712TypeHashLib.hashCompact(
-                    sponsor, fields.nonce, fields.expires, abi.encodePacked(fields.allElements)
+                    sponsor,
+                    fields.nonce,
+                    fields.expires,
+                    keccak256(abi.encodePacked(fields.allElements))
                 );
     }
 
