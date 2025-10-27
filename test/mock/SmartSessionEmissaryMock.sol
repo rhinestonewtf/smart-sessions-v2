@@ -7,7 +7,6 @@ import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
 
 // Libraries
-import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 
 // Types
@@ -25,12 +24,6 @@ import { Session } from "@types/DataTypes.sol";
 
 /// @dev Extended SmartSessionEmissary with helpers for testing purposes.
 contract SmartSessionEmissaryMock is SmartSessionEmissary {
-    /*//////////////////////////////////////////////////////////////
-                                LIBRARIES
-    //////////////////////////////////////////////////////////////*/
-
-    using Compressed for *;
-
     /*//////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
     //////////////////////////////////////////////////////////////*/
@@ -50,45 +43,6 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
                         TEST HELPER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Helper to set up stateless validator config for testing
-    function setupStatelessValidatorConfig(
-        address account,
-        uint8 configId,
-        bytes12 lockTag,
-        IStatelessValidator validator,
-        bytes memory validatorConfig
-    )
-        external
-    {
-        $statelessValidatorConfig[account][configId][lockTag][validator].sstore(validatorConfig);
-    }
-
-    /// @notice Helper to set up ECDSA config for testing
-    function setupECDSAConfig(
-        address account,
-        uint8 configId,
-        bytes12 lockTag,
-        uint256 threshold,
-        address[] memory owners
-    )
-        external
-    {
-        bytes memory configData = abi.encode(threshold, owners);
-        $ecdsaPasskeyConfig[account][configId][lockTag].sstore(configData);
-    }
-
-    /// @notice Helper to set up Passkey config for testing
-    function setupPasskeyConfig(
-        address account,
-        uint8 configId,
-        bytes12 lockTag,
-        bytes memory passkeyConfigData
-    )
-        external
-    {
-        $ecdsaPasskeyConfig[account][configId][lockTag].sstore(passkeyConfigData);
-    }
 
     /*//////////////////////////////////////////////////////////////
                         CACHE HELPER FUNCTIONS

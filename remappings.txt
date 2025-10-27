@@ -49,3 +49,4 @@ permit2/=node_modules/@uniswap/permit2/
 @policies=src/policies
 
 node_modules/@rhinestone/compact-utils/src/:src/=node_modules/@rhinestone/compact-utils/src/
+node_modules/@rhinestone/compact-utils/:@excessivelySafeCall/=node_modules/excessively-safe-call/src/

@@ -7,10 +7,8 @@ pragma solidity ^0.8.28;
 
 type EmissaryMode is bytes1;
 
-EmissaryMode constant EMISSARY_STATELESS_VALIDATOR = EmissaryMode.wrap(0x00);
-EmissaryMode constant EMISSARY_ECDSA = EmissaryMode.wrap(0x01);
-EmissaryMode constant EMISSARY_PASSKEY = EmissaryMode.wrap(0x02);
-EmissaryMode constant EMISSARY_SMART_SESSION = EmissaryMode.wrap(0x03);
+EmissaryMode constant EMISSARY_VANILLA = EmissaryMode.wrap(0x00);
+EmissaryMode constant EMISSARY_SMART_SESSION = EmissaryMode.wrap(0x01);
 
 using { eqMode as == } for EmissaryMode global;
 

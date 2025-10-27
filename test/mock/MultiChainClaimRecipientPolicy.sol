@@ -64,8 +64,8 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
     mapping(
         ConfigId id
             => mapping(
-                address msgSender => mapping(address userOpSender => address allowedRecipient)
-            )
+            address msgSender => mapping(address userOpSender => address allowedRecipient)
+        )
     ) internal $recipientConfig;
 
     /*//////////////////////////////////////////////////////////////
@@ -190,12 +190,13 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
         );
 
         // Hash the mandate
-        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
-            targetHash,
-            multichainCompact.notarizedElement.mandate.preClaimOps,
-            multichainCompact.notarizedElement.mandate.targetOps,
-            multichainCompact.notarizedElement.mandate.q
-        );
+        // bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
+        //     targetHash,
+        //     multichainCompact.notarizedElement.mandate.preClaimOps,
+        //     multichainCompact.notarizedElement.mandate.targetOps,
+        //     multichainCompact.notarizedElement.mandate.q
+        // );
+        bytes32 mandateHash;
 
         // Hash the notarized element
         bytes32 notarizedElementHash = EIP712TypeHashLib.hashElementRaw(
@@ -249,9 +250,9 @@ contract MultiChainClaimRecipientPolicy is I1271Policy {
     /// @notice Checks if the policy supports the given interface ID
     function supportsInterface(bytes4 interfaceID) external pure override returns (bool) {
         // Check if the interface ID matches the I1271Policy interface
-        return (
-            interfaceID == type(IERC165).interfaceId || interfaceID == type(I1271Policy).interfaceId
-        );
+        return
+            (interfaceID == type(IERC165).interfaceId
+                    || interfaceID == type(I1271Policy).interfaceId);
     }
 
     function __QUALIFIER_EIP712Hash(bytes calldata) public pure returns (bytes32) {

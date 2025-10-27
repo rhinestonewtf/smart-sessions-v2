@@ -2,28 +2,24 @@
 pragma solidity ^0.8.28;
 
 // Contracts
-import { EmissaryBase } from "@core/EmissaryBase.sol";
+import { Emissary as VanillaEmissary } from "@compact-utils/emissary/Emissary.sol";
 import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
 
+// Interfaces
+import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
+
 // Libraries
-import {
-    ModeLib,
-    EmissaryMode,
-    EMISSARY_STATELESS_VALIDATOR,
-    EMISSARY_ECDSA,
-    EMISSARY_PASSKEY,
-    EMISSARY_SMART_SESSION
-} from "@lib/ModeLib.sol";
+import { ModeLib, EmissaryMode, EMISSARY_VANILLA, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 
 // Types
-import { INVALID_RETURN } from "@types/DataTypes.sol";
+import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
 ///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
-contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
+contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -49,28 +45,25 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
     )
         public
         view
+        override(VanillaEmissary, ISmartSessionEmissary)
         returns (bytes4)
     {
         // Extract mode from first byte of emissaryData
         EmissaryMode mode = emissaryData.decodeMode();
 
         // Mode-based dispatch for claim verification
-        if (mode == EMISSARY_STATELESS_VALIDATOR) {
-            // Stateless Validator mode
-            return _verifyClaimStatelessValidator(sponsor, digest, emissaryData[1:], lockTag);
-        } else if (mode == EMISSARY_ECDSA) {
-            // ECDSA mode
-            return _verifyClaimECDSA(sponsor, digest, emissaryData[1:], lockTag);
-        } else if (mode == EMISSARY_PASSKEY) {
-            // Passkey mode
-            return _verifyClaimPasskey(sponsor, digest, emissaryData[1:], lockTag);
+        if (mode == EMISSARY_VANILLA) {
+            // Validate using vanilla emissary signature validation
+            return _validateSignature(sponsor, digest, emissaryData, lockTag)
+                ? this.verifyClaim.selector
+                : INVALID_SIGNATURE;
         } else if (mode == EMISSARY_SMART_SESSION) {
-            // SmartSession mode
+            // Validate using SmartSession verification
             return _verifyClaimSmartSession(sponsor, digest, emissaryData[1:], lockTag);
         }
 
         // Default case for unsupported modes
-        return INVALID_RETURN;
+        return INVALID_SIGNATURE;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -98,25 +91,19 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         EmissaryMode mode = emissaryData.decodeMode();
 
         // Mode-based dispatch for execution verification
-        if (mode == EMISSARY_STATELESS_VALIDATOR) {
-            // Stateless Validator mode
-            return _verifyExecutionStatelessValidator(
-                sponsor, digest, emissaryData[1:], executions, lockTag
-            );
-        } else if (mode == EMISSARY_ECDSA) {
-            // ECDSA mode
-            return _verifyExecutionECDSA(sponsor, digest, emissaryData[1:], executions, lockTag);
-        } else if (mode == EMISSARY_PASSKEY) {
-            // Passkey mode
-            return _verifyExecutionPasskey(sponsor, digest, emissaryData[1:], executions, lockTag);
+        if (mode == EMISSARY_VANILLA) {
+            // Validate using vanilla emissary signature validation
+            return _validateSignature(sponsor, digest, emissaryData, lockTag)
+                ? this.verifyExecution.selector
+                : INVALID_SIGNATURE;
         } else if (mode == EMISSARY_SMART_SESSION) {
-            // SmartSession mode
+            // Validate using SmartSession verification
             return
                 _verifyExecutionSmartSession(sponsor, digest, emissaryData[1:], executions, lockTag);
         }
 
         // Default case for unsupported modes
-        return INVALID_RETURN;
+        return INVALID_SIGNATURE;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -138,19 +125,11 @@ contract SmartSessionEmissary is EmissaryBase, SmartSessionMixin, EIP712 {
         version = "0.0.1";
     }
 
-    /// @notice Returns the EIP-712 domain separator for this contract
-    /// @dev Calculates the domain separator based on the domain name, version, chain ID, and
-    ///      contract address.
-    /// @return The EIP-712 domain separator.
-    function DOMAIN_SEPARATOR() public view returns (bytes32) {
-        return _domainSeparator();
-    }
-
     /// @notice Returns the EIP-712 typed data hash for a given hash without chain ID
     function _getTypedDataHashSansChainId(bytes32 hash)
         internal
         view
-        override(EmissaryBase, SmartSessionMixin)
+        override(SmartSessionMixin)
         returns (bytes32)
     {
         return _hashTypedDataSansChainId(hash);
