@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
+import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
 
 // Libraries
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
@@ -35,7 +36,7 @@ import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
 /// @dev Bridges lockTag-based emissary system with permissionId-based SmartSession system
-abstract contract SmartSessionMixin is SmartSessionManager {
+abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -153,7 +154,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             policyType: PolicyType.ERC1271,
             permissionId: config.permissionId,
             configId: config.permissionId.toErc1271PolicyId().toConfigId(),
-            policyDatas: enableData.session.sessionToEnable.erc1271Policies,
+            policyDatas: enableData.session.sessionToEnable.erc7739Policies.erc1271Policies,
             useRegistry: false,
             account: account
         });
@@ -431,6 +432,65 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             account: sponsor,
             permissionId: permissionId,
             signature: signature[64:policyDataOffset] // extract the validator signature
+        });
+    }
+
+    /// @notice Validates an ERC-1271 signature with additional ERC-7739 content checks
+    /// @dev This function performs several checks to validate the signature:
+    ///      1. Verifies that the permissionId is enabled for the sender
+    ///      2. Ensures the ERC-7739 content is enabled for the given permissionId
+    ///      3. Checks the ERC-1271 policy
+    ///      4. Validates the signature using ISessionValidator
+    /// @dev This function returns false if a permissionId supplied within the signature is not
+    /// enabled @dev This function returns false if the ERC-7739 content is not enabled for the
+    /// given permissionId
+    /// @param sender The address initiating the signature validation
+    /// @param hash The hash of the data to be signed
+    /// @param signature The signature to be validated (first 32 bytes contain the permissionId)
+    /// @param contents The ERC-7739 content to be validated
+    /// @return valid Boolean indicating whether the signature is valid
+    function _erc1271IsValidSignatureNowCalldata(
+        address sender,
+        bytes32 hash,
+        bytes calldata signature,
+        bytes32 appDomainSeparator,
+        bytes calldata contents
+    )
+        internal
+        view
+        virtual
+        override
+        returns (bool)
+    {
+        bytes32 contentHash = string(contents).hashERC7739Content();
+        // isolate the PermissionId and actual signature from the supplied signature param
+        PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
+        signature = signature[32:];
+
+        // forgefmt: disable-next-item
+        if (
+            // return false if the permissionId is not enabled
+            !$enabledSessions.contains(msg.sender, PermissionId.unwrap(permissionId))
+            // return false if the content is not enabled
+            || !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(msg.sender, contentHash)
+        ) return false;
+
+        // check the ERC-1271 policy
+        bool valid = $erc1271Policies.checkERC1271({
+            account: msg.sender,
+            requestSender: sender,
+            hash: hash,
+            signature: signature,
+            permissionId: permissionId,
+            configId: permissionId.toErc1271PolicyId().toConfigId(),
+            minPoliciesToEnforce: 1
+        });
+
+        // if the erc1271 policy check failed, return false
+        if (!valid) return valid;
+        // this call reverts if the ISessionValidator is not set
+        return $sessionValidators.isValidISessionValidator({
+            hash: hash, account: msg.sender, permissionId: permissionId, signature: signature
         });
     }
 

@@ -5,6 +5,7 @@ pragma solidity ^0.8.28;
 import { Emissary as VanillaEmissary } from "@compact-utils/emissary/Emissary.sol";
 import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
+import { ERC7579ValidatorBase } from "@modulekit/module-bases/ERC7579ValidatorBase.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -14,17 +15,63 @@ import { ModeLib, EmissaryMode, EMISSARY_VANILLA, EMISSARY_SMART_SESSION } from 
 
 // Types
 import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
+import { PackedUserOperation } from "@modulekit/external/ERC4337.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title Smart Session Emissary
 /// @notice An extended emissary contract that supports multiple verification modes including
 ///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
-contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
+abstract contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev Used to decode emissary mode from emissary data
     using ModeLib for bytes;
+
+    /*//////////////////////////////////////////////////////////////
+                                  1271
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice SessionKey ERC-1271 signature validation
+    ///         this function implements the ERC-1271 forwarding function defined by ERC-7579
+    ///         SessionKeys can be used to sign messages and validate ERC-1271 on behalf of Accounts
+    ///         In order to validate a signature, the signature must be wrapped with ERC-7739
+    /// @param sender The address of ERC-1271 sender
+    /// @param hash The hash of the message
+    /// @param signature The signature of the message
+    ///        signature is expected to be in the format:
+    ///       (PermissionId (32 bytes),
+    ///        ERC7739 (abi.encodePacked(signatureForSessionValidator,
+    ///                                  _DOMAIN_SEP_B,
+    ///                                  contents,
+    ///                                  contentsType,
+    ///                                  uint16(contentsType.length))
+    function isValidSignatureWithSender(
+        address sender,
+        bytes32 hash,
+        bytes calldata signature
+    )
+        external
+        view
+        returns (bytes4 result)
+    {
+        // ERC-7739 support detection
+        if (hash == 0x7739773977397739773977397739773977397739773977397739773977397739) {
+            return bytes4(0x77390001);
+        }
+        // disallow that session can be authorized by other sessions
+        if (sender == address(this)) return INVALID_SIGNATURE;
+        bool success = _erc1271IsValidSignatureViaNestedEIP712(
+            sender, hash, _erc1271UnwrapSignature(signature[12:])
+        );
+        /// @solidity memory-safe-assembly
+        assembly {
+            // `success ? bytes4(keccak256("isValidSignature(bytes32,bytes)")) : 0xffffffff`.
+            // We use `0xffffffff` for invalid, in convention with the reference implementation.
+            result := shl(224, or(0x1626ba7e, sub(0, iszero(success))))
+        }
+    }
 
     /*//////////////////////////////////////////////////////////////
                                  CLAIM

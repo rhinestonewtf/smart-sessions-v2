@@ -55,6 +55,9 @@ interface ISmartSessionEmissary is IEmissary {
     /// @notice Thrown when the Emissary enable data user signature is not valid
     error InvalidUserSignature();
 
+    /// @notice Thrown when attempting to install the Smart Session module more than once
+    error SmartSessionModuleAlreadyInstalled();
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/

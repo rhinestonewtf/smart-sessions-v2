@@ -7,7 +7,13 @@ import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.s
 
 // Types
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
-import { PermissionId, ChainDigest, ActionData, PolicyData } from "@smartsessions/DataTypes.sol";
+import {
+    PermissionId,
+    ChainDigest,
+    ActionData,
+    PolicyData,
+    ERC7739Data
+} from "@smartsessions/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                             CONSTANTS
@@ -53,18 +59,18 @@ struct DisableSession {
 ///         A session key owner can have multiple sessions with the same parameters. To facilitate
 ///         this, a salt is necessary to avoid collision.
 ///
-///     erc1271Policies (PolicyData[]): An array of policy data for specifying ERC-1271 policies.
-///
 ///     actions (ActionData[]): An array of action data for specifying function-specific policies.
 ///         A common use case of session keys is to scope access to a specific target and function
 ///         selector. SmartSession calls this "Action". With ActionData, we can specify policies
 ///         that are only run if a 7579 execution contains a specific action.
+///
+///      erc7739Policies (ERC7739Data): ERC1271 Policies specific to the ERC7739 standard.
 struct Session {
     ISessionValidator sessionValidator;
     bytes sessionValidatorInitData;
     bytes32 salt;
-    PolicyData[] erc1271Policies;
     ActionData[] actions;
+    ERC7739Data erc7739Policies;
 }
 
 /// @notice Configuration for the Smart Session Emissary.

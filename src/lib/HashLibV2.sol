@@ -77,7 +77,7 @@ bytes32 constant _MULTICHAIN_DOMAIN_SEPARATOR =
  *     address account, // User account address
  *     PermissionId permissionId, // Permission ID to disable
  *     bytes12 lockTag, // Lock tag for the session
- *     address sender, // Sender address   
+ *     address sender, // Sender address
  *     uint256 expires, // Expiration timestamp
  *     uint256 nonce // Nonce value
  * )
@@ -93,7 +93,7 @@ bytes32 constant CHAIN_DISABLE_TYPEHASH =
 bytes32 constant MULTICHAIN_DISABLE_TYPEHASH =
     0x0812907e4d4edbf1f5d71d2e93e0020f6fb5cd5edc9f44672ac70ae89efd1245;
 
-/* 
+/*
  * SetConfig(
  *     address sponsor, // Sponsor address for the configuration
  *     address validator, // Stateless validator contract address
@@ -211,7 +211,7 @@ library HashLibV2 {
             abi.encode(
                 SIGNED_PERMISSIONS_TYPEHASH,
                 permitFallback, // permitGenericPolicy
-                session.erc1271Policies.hashPolicyDataArray(), // erc1271Policies
+                session.erc7739Policies.erc1271Policies.hashPolicyDataArray(), // erc1271Policies
                 actionDataArrayHash // actions
             )
         );
