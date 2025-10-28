@@ -19,9 +19,9 @@ import { PackedUserOperation } from "@modulekit/external/ERC4337.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 
 /// @title Smart Session Emissary
-/// @notice An extended emissary contract that supports multiple verification modes including
-///         SmartSessions, stateless validators, and ECDSA/Passkey configurations.
-abstract contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
+/// @notice A 7579 1271 validator that also serves as an emissary supporting both vanilla and
+///         Smart Session signature verification and execution validation.
+contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
