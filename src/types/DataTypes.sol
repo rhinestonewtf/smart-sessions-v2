@@ -14,7 +14,7 @@ import { PermissionId, ChainDigest, ActionData, PolicyData } from "@smartsession
 //////////////////////////////////////////////////////////////*/
 
 /// @dev Invalid return value for unsupported or invalid operations
-bytes4 constant INVALID_RETURN = 0xFFFFFFFF;
+bytes4 constant INVALID_SIGNATURE = 0xFFFFFFFF;
 
 /*//////////////////////////////////////////////////////////////
                             STRUCTS

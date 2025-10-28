@@ -68,15 +68,6 @@ interface ISmartSessionEmissary is IEmissary {
     /// @notice Emitted when an address whitelist status is updated
     event WhitelistStatusUpdated(address source, bool status);
 
-    /// @notice Emitted when a new validator configuration is successfully set for an account and
-    ///         lock tag.
-    /// @param account The sponsor account whose configuration was updated.
-    /// @param validator The stateless validator address associated with the configuration.
-    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
-    event EmissaryConfigUpdated(
-        address indexed account, IStatelessValidator indexed validator, bytes12 indexed lockTag
-    );
-
     /// @notice Emitted when a Smart Session Emissary configuration is successfully set for an
     ///         account.
     /// @param account The address of the account for which the configuration was set.
@@ -98,17 +89,6 @@ interface ISmartSessionEmissary is IEmissary {
         address account,
         SmartSessionEmissaryConfig calldata config,
         SmartSessionEmissaryEnable calldata enable
-    )
-        external;
-
-    /// @notice Sets the vanilla Emissary configuration for a specific account.
-    /// @param account The address of the account for which the configuration is being set.
-    /// @param config The Emissary configuration.
-    /// @param enable The Emissary enable data.
-    function setConfig(
-        address account,
-        EmissaryConfig calldata config,
-        EmissaryEnable calldata enable
     )
         external;
 

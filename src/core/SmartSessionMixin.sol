@@ -25,7 +25,7 @@ import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
 import {
     DisableSession,
-    INVALID_RETURN,
+    INVALID_SIGNATURE,
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable
@@ -137,9 +137,8 @@ abstract contract SmartSessionMixin is SmartSessionManager {
     {
         // Increment nonce to prevent replay attacks
         uint256 nonce = $emissaryNonce[account][lockTag]++;
-        bytes32 hash = enableData.session.getAndVerifyDigest(
-            account, nonce, enableData.expires, lockTag, config.sender
-        );
+        bytes32 hash = enableData.session
+            .getAndVerifyDigest(account, nonce, enableData.expires, lockTag, config.sender);
 
         // Check if the permissionId is already enabled for the account
         bool isInit = $smartSessionConfig[config.sender][lockTag].length(account) == 0;
@@ -184,10 +183,8 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         }
 
         // Mark the session as enabled
-        $smartSessionConfig[config.sender][lockTag].add({
-            account: account,
-            value: PermissionId.unwrap(config.permissionId)
-        });
+        $smartSessionConfig[config.sender][lockTag]
+        .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
     }
 
     /// @notice Disables policies for an account, using the provided disable data after verifying
@@ -299,7 +296,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         });
 
         // Return the function selector on success, or a specific failure code otherwise.
-        return validSig ? this.verifyExecution.selector : INVALID_RETURN;
+        return validSig ? this.verifyExecution.selector : INVALID_SIGNATURE;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -327,11 +324,8 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         returns (bool validSig)
     {
         // ensure that the permissionId is enabled
-        if (
-            !$smartSessionConfig[msg.sender][lockTag].contains(
-                account, PermissionId.unwrap(permissionId)
-            )
-        ) {
+        if (!$smartSessionConfig[msg.sender][lockTag]
+            .contains(account, PermissionId.unwrap(permissionId))) {
             revert InvalidPermissionId(permissionId);
         }
 
@@ -340,12 +334,13 @@ abstract contract SmartSessionMixin is SmartSessionManager {
         //////////////////////////////////////////////////////////////*/
 
         // Check action policies for the given permissionId and batch execution
-        $actionPolicies.actionPolicies.checkBatch7579Exec({
-            executions: executions,
-            permissionId: permissionId,
-            minPolicies: 1, // minimum of one actionPolicy must be set.
-            account: account
-        });
+        $actionPolicies.actionPolicies
+            .checkBatch7579Exec({
+                executions: executions,
+                permissionId: permissionId,
+                minPolicies: 1, // minimum of one actionPolicy must be set.
+                account: account
+            });
 
         /*//////////////////////////////////////////////////////////////
                                 CHECK SESSION KEY
@@ -436,7 +431,7 @@ abstract contract SmartSessionMixin is SmartSessionManager {
             account: sponsor,
             permissionId: permissionId,
             signature: signature[64:policyDataOffset] // extract the validator signature
-         });
+        });
     }
 
     /*//////////////////////////////////////////////////////////////

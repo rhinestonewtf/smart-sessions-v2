@@ -263,9 +263,9 @@ library DecodeLib {
         }
 
         // Calculate Mandate struct hash
-        mandateHash = EIP712TypeHashLib.hashMandateRaw(
-            targetHash, preClaimOpsHash, targetOpsHash, qualificationHash
-        );
+        // mandateHash = EIP712TypeHashLib.hashMandateRaw(
+        //     targetHash, preClaimOpsHash, targetOpsHash, qualificationHash
+        // );
         return (true, mandateHash);
     }
 
