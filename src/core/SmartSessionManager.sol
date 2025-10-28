@@ -25,7 +25,9 @@ import {
     EnumerableActionPolicy,
     PolicyType,
     EMPTY_PERMISSIONID,
-    Policy
+    Policy,
+    EnumerableERC7739Config,
+    ERC7579_MODULE_TYPE_VALIDATOR
 } from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
 
@@ -49,8 +51,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     /// @notice Maps lockTag to enabled permissionIds for verifyClaim lookups
     /// @dev Bridge storage connecting emissary lockTags to SmartSession permissionIds
-    mapping(address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs))
-        internal $smartSessionConfig;
+    mapping(
+        address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs)
+    ) internal $smartSessionConfig;
     /// @notice Mapping of action policies organized by action IDs and permission IDs
     EnumerableActionPolicy internal $actionPolicies;
     /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
@@ -59,6 +62,10 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     ///         addresses
     mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf)) internal
         $sessionValidators;
+    /// @notice Set of all enabled sessions for each smart account
+    EnumerableSet.Bytes32Set internal $enabledSessions;
+    /// @notice Set of all enabled ERC7739 configurations for each smart account and permissionId
+    EnumerableERC7739Config internal $enabledERC7739;
 
     /*//////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
@@ -95,7 +102,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 policyType: PolicyType.ERC1271,
                 permissionId: permissionId,
                 configId: permissionId.toErc1271PolicyId().toConfigId(account),
-                policyDatas: session.erc1271Policies,
+                policyDatas: session.erc7739Policies.erc1271Policies,
                 useRegistry: useRegistry,
                 account: account
             });
@@ -109,10 +116,8 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             });
 
             // Add the session to the list of enabled sessions for the caller
-            $smartSessionConfig[sender][lockTag].add({
-                account: account,
-                value: PermissionId.unwrap(permissionId)
-            });
+            $smartSessionConfig[sender][lockTag]
+            .add({ account: account, value: PermissionId.unwrap(permissionId) });
 
             // Enable the ISessionValidator for this session
             if (!_isISessionValidatorSet(permissionId, account)) {
@@ -126,6 +131,53 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             }
             permissionIds[i] = permissionId;
             emit SessionCreated(permissionId, account);
+        }
+    }
+
+    /// @notice Enable multiple sessions with their associated policies, for msg.sender
+    /// @param sessions An array of Session structures to be enabled
+    function _enableSessions(Session[] calldata sessions)
+        internal
+        returns (PermissionId[] memory permissionIds)
+    {
+        uint256 length = sessions.length;
+        if (length == 0) revert InvalidData();
+
+        permissionIds = new PermissionId[](length);
+
+        for (uint256 i; i < length; i++) {
+            Session calldata session = sessions[i];
+            PermissionId permissionId = session.toPermissionId();
+
+            // Enable ERC1271 policies
+            $erc1271Policies.enable({
+                policyType: PolicyType.ERC1271,
+                permissionId: permissionId,
+                configId: permissionId.toErc1271PolicyId().toConfigId(),
+                policyDatas: session.erc7739Policies.erc1271Policies,
+                useRegistry: false
+            });
+            $enabledERC7739.enable(session.erc7739Policies.allowedERC7739Content, permissionId);
+
+            // Enable Action policies
+            $actionPolicies.enable({
+                permissionId: permissionId, actionPolicyDatas: session.actions, useRegistry: false
+            });
+
+            // Add the session to the list of enabled sessions for the caller
+            $enabledSessions.add({ account: msg.sender, value: PermissionId.unwrap(permissionId) });
+
+            // Enable the ISessionValidator for this session
+            if (!_isISessionValidatorSet(permissionId, msg.sender)) {
+                $sessionValidators.enable({
+                    permissionId: permissionId,
+                    sessionValidator: session.sessionValidator,
+                    sessionValidatorConfig: session.sessionValidatorInitData,
+                    useRegistry: false
+                });
+            }
+            permissionIds[i] = permissionId;
+            emit SessionCreated(permissionId, msg.sender);
         }
     }
 
@@ -161,11 +213,34 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
 
         // Remove all ERC1271 policies for this session
-        $smartSessionConfig[sender][lockTag].remove({
-            account: account,
-            value: PermissionId.unwrap(permissionId)
-        });
+        $smartSessionConfig[sender][lockTag]
+        .remove({ account: account, value: PermissionId.unwrap(permissionId) });
         emit SessionRemoved(permissionId, account);
+    }
+
+    function removeSession(PermissionId permissionId) public {
+        if (permissionId == EMPTY_PERMISSIONID) revert InvalidSession(permissionId);
+
+        // Remove all ERC1271 policies for this session
+        $erc1271Policies.policyList[permissionId].removeAll(msg.sender);
+
+        // Remove all Action policies for this session
+        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(msg.sender);
+        for (uint256 i; i < actionLength; i++) {
+            ActionId actionId =
+                ActionId.wrap($actionPolicies.enabledActionIds[permissionId].at(msg.sender, i));
+            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(msg.sender);
+        }
+
+        // removing all stored actionIds
+        $actionPolicies.enabledActionIds[permissionId].removeAll(msg.sender);
+
+        $sessionValidators.disable({ permissionId: permissionId, smartAccount: msg.sender });
+
+        // Remove all ERC1271 policies for this session
+        $enabledSessions.remove({ account: msg.sender, value: PermissionId.unwrap(permissionId) });
+        $enabledERC7739.removeAll({ permissionId: permissionId, smartAccount: msg.sender });
+        emit SessionRemoved(permissionId, msg.sender);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -192,11 +267,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     {
         uint256 nonce = $emissaryNonce[account][lockTag];
         return data.sessionDigest({
-            account: account,
-            lockTag: lockTag,
-            expires: expires,
-            nonce: nonce,
-            sender: sender
+            account: account, lockTag: lockTag, expires: expires, nonce: nonce, sender: sender
         });
     }
 
@@ -246,9 +317,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         view
         returns (bool)
     {
-        return $smartSessionConfig[sender][lockTag].contains(
-            account, PermissionId.unwrap(permissionId)
-        );
+        return
+            $smartSessionConfig[sender][lockTag]
+            .contains(account, PermissionId.unwrap(permissionId));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -339,5 +410,76 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         assembly {
             permissionIds := _permissionIds
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                  7579
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Initialize the module with the given data
+    /// @param data The data to initialize the module with, encoded as per the expected format:
+    ///        abi.encodePacked(SmartSessionMode, abi.encode(Session[]))
+    /// @dev If no data is provided, the module will be installed without any sessions
+    function onInstall(bytes calldata data)
+        external
+    {
+
+        // Its possible that the module was installed before and when uninstalling the module, the
+        // smart session storage for that smart account was not zero'ed correctly. In such cases, we
+        // need to check if the smart account has
+        // still some enabled permissions / sessions set.
+        // re-enabling these sessions will cause the smart account to be in the same state as
+        // before, potentially activating sessions that the user thought were terminated. This MUST
+        // be avoided.
+        // if this case happens, it's not possible for the account to install the module again,
+        // unless the account calls into the removreSession functions to disable all dangling
+        // permissions
+        // forgefmt: disable-next-item
+        if ($enabledSessions.length({ account: msg.sender }) != 0) revert SmartSessionModuleAlreadyInstalled();
+        // It's allowed to install smartsessions on a ERC7579 account without any params
+        if (data.length == 0) return;
+
+        // data is expected to be in the format of abi.encode(Session[])
+        Session[] calldata sessions;
+
+        // equivalent of abi.decode(data,Session[])
+        assembly ("memory-safe") {
+            let dataPointer := add(data.offset, calldataload(data.offset))
+
+            sessions.offset := add(dataPointer, 32)
+            sessions.length := calldataload(dataPointer)
+        }
+        _enableSessions(sessions);
+    }
+
+    /// @notice Uninstall the module and clean up associated sessions for the msg.sender
+    function onUninstall(
+        bytes calldata /*data*/
+    )
+        external
+    {
+        // TODO: Need to have enumerable sender/locktag? to clear $smaertSessionConfig mapping?
+        // Get the count of enabled sessions for the msg.sender
+        uint256 configIdsCnt = $enabledSessions.length({ account: msg.sender });
+        for (uint256 i; i < configIdsCnt; i++) {
+            // always remove index 0 since the array is shifted down when the first item is removed
+            PermissionId configId =
+                PermissionId.wrap($enabledSessions.at({ account: msg.sender, index: 0 }));
+            removeSession(configId);
+        }
+    }
+
+    /// @notice Check if the module is initialized for a specific smart account
+    /// @param smartAccount The smart account address to check
+    /// @return Boolean indicating whether the module is initialized
+    function isInitialized(address smartAccount) external view returns (bool) {
+        return $enabledSessions.length({ account: smartAccount }) != 0;
+    }
+
+    /// @notice Check if the module type matches the validator type
+    /// @param typeID The type ID to check
+    /// @return Boolean indicating whether the module type matches
+    function isModuleType(uint256 typeID) external pure returns (bool) {
+        return typeID == ERC7579_MODULE_TYPE_VALIDATOR;
     }
 }
