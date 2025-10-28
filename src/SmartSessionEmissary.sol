@@ -86,7 +86,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     function verifyClaim(
         address sponsor,
         bytes32 digest,
-        bytes32, /*/ claimHash */
+        bytes32 claimHash,
         bytes calldata emissaryData,
         bytes12 lockTag
     )
@@ -106,7 +106,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
                 : INVALID_SIGNATURE;
         } else if (mode == EMISSARY_SMART_SESSION) {
             // Validate using SmartSession verification
-            return _verifyClaimSmartSession(sponsor, digest, emissaryData[1:], lockTag);
+            return _verifyClaimSmartSession(sponsor, claimHash, emissaryData[1:], lockTag);
         }
 
         // Default case for unsupported modes
@@ -180,5 +180,15 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes32)
     {
         return _hashTypedDataSansChainId(hash);
+    }
+
+    /// @notice Returns the EIP-712 typed data hash for a given hash with chain ID
+    function _hashTypedDataV4(bytes32 hash)
+        internal
+        view
+        override(SmartSessionMixin)
+        returns (bytes32)
+    {
+        return _hashTypedData(hash);
     }
 }
