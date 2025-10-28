@@ -74,14 +74,11 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Enable multiple sessions with their associated policies
     /// @param sessions An array of Session structures to be enabled
     /// @param account The account address associated with the sessions
-    /// @param useRegistry A flag to indicate whether to use a registry check for the policies and
-    ///        session validator
     /// @param sender The address of the sender for the session, if applicable
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function _enableSessions(
         Session[] calldata sessions,
         address account,
-        bool useRegistry,
         bytes12 lockTag,
         address sender
     )
@@ -103,16 +100,12 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 permissionId: permissionId,
                 configId: permissionId.toErc1271PolicyId().toConfigId(account),
                 policyDatas: session.erc7739Policies.erc1271Policies,
-                useRegistry: useRegistry,
                 account: account
             });
 
             // Enable Action policies
             $actionPolicies.enable({
-                permissionId: permissionId,
-                actionPolicyDatas: session.actions,
-                useRegistry: useRegistry,
-                account: account
+                permissionId: permissionId, actionPolicyDatas: session.actions, account: account
             });
 
             // Add the session to the list of enabled sessions for the caller
@@ -125,7 +118,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                     permissionId: permissionId,
                     sessionValidator: session.sessionValidator,
                     sessionValidatorConfig: session.sessionValidatorInitData,
-                    useRegistry: useRegistry,
                     account: account
                 });
             }
@@ -154,14 +146,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 policyType: PolicyType.ERC1271,
                 permissionId: permissionId,
                 configId: permissionId.toErc1271PolicyId().toConfigId(),
-                policyDatas: session.erc7739Policies.erc1271Policies,
-                useRegistry: false
+                policyDatas: session.erc7739Policies.erc1271Policies
             });
             $enabledERC7739.enable(session.erc7739Policies.allowedERC7739Content, permissionId);
 
             // Enable Action policies
             $actionPolicies.enable({
-                permissionId: permissionId, actionPolicyDatas: session.actions, useRegistry: false
+                permissionId: permissionId, actionPolicyDatas: session.actions
             });
 
             // Add the session to the list of enabled sessions for the caller
@@ -172,8 +163,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 $sessionValidators.enable({
                     permissionId: permissionId,
                     sessionValidator: session.sessionValidator,
-                    sessionValidatorConfig: session.sessionValidatorInitData,
-                    useRegistry: false
+                    sessionValidatorConfig: session.sessionValidatorInitData
                 });
             }
             permissionIds[i] = permissionId;

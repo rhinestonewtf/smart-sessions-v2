@@ -18,7 +18,6 @@ import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import {
     PermissionId,
     SignerConf,
-    registry,
     ERC7579_MODULE_TYPE_STATELESS_VALIDATOR,
     EnumerableActionPolicy,
     ActionData,
@@ -51,12 +50,12 @@ library ConfigLibV2 {
 
     /// @dev Adjusted enable from ConfigLib to work with address instead of msg.sender
     function enable(
-        mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf))
-            storage $sessionValidators,
+        mapping(
+            PermissionId permissionId => mapping(address smartAccount => SignerConf conf)
+        ) storage $sessionValidators,
         PermissionId permissionId,
         ISessionValidator sessionValidator,
         bytes memory sessionValidatorConfig,
-        bool useRegistry,
         address account
     )
         internal
@@ -67,15 +66,6 @@ library ConfigLibV2 {
                 || !sessionValidator.isModuleType(ERC7579_MODULE_TYPE_STATELESS_VALIDATOR)
         ) {
             revert ISmartSession.InvalidISessionValidator(sessionValidator);
-        }
-
-        // this will revert if the policy is not attested to
-        if (useRegistry) {
-            registry.checkForAccount({
-                smartAccount: account,
-                module: address(sessionValidator),
-                moduleType: ModuleType.wrap(ERC7579_MODULE_TYPE_STATELESS_VALIDATOR)
-            });
         }
 
         // Get the storage reference for the signer configuration
@@ -93,7 +83,6 @@ library ConfigLibV2 {
         EnumerableActionPolicy storage $self,
         PermissionId permissionId,
         ActionData[] memory actionPolicyDatas,
-        bool useRegistry,
         address account
     )
         internal
@@ -121,12 +110,12 @@ library ConfigLibV2 {
             }
 
             // Record the enabled action ID
-            $self.actionPolicies[actionId].enable({
+            $self.actionPolicies[actionId]
+            .enable({
                 policyType: PolicyType.ACTION,
                 permissionId: permissionId,
                 configId: permissionId.toConfigId(actionId),
                 policyDatas: actionPolicyData.actionPolicies,
-                useRegistry: useRegistry,
                 account: account
             });
 
@@ -142,7 +131,6 @@ library ConfigLibV2 {
         PermissionId permissionId,
         ConfigId configId,
         PolicyData[] memory policyDatas,
-        bool useRegistry,
         address account
     )
         internal
@@ -154,21 +142,15 @@ library ConfigLibV2 {
 
             policy.requirePolicyType(policyType);
 
-            // this will revert if the policy is not attested to
-            if (useRegistry) {
-                registry.checkForAccount({ smartAccount: account, module: policy });
-            }
-
             // Add the policy to the list for the given permission and smart account
             $policy.policyList[permissionId].add({ account: account, value: policy });
 
             // Initialize the policy with the provided configuration
             // overwrites the config
-            IPolicy(policy).initializeWithMultiplexer({
-                account: account,
-                configId: configId,
-                initData: policyDatas[i].initData
-            });
+            IPolicy(policy)
+                .initializeWithMultiplexer({
+                    account: account, configId: configId, initData: policyDatas[i].initData
+                });
 
             emit ISmartSession.PolicyEnabled(permissionId, policyType, policy, account);
         }

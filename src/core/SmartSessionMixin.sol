@@ -155,7 +155,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             permissionId: config.permissionId,
             configId: config.permissionId.toErc1271PolicyId().toConfigId(),
             policyDatas: enableData.session.sessionToEnable.erc7739Policies.erc1271Policies,
-            useRegistry: false,
             account: account
         });
 
@@ -163,7 +162,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         $actionPolicies.enable({
             permissionId: config.permissionId,
             actionPolicyDatas: enableData.session.sessionToEnable.actions,
-            useRegistry: false,
             account: account
         });
 
@@ -178,7 +176,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
                 permissionId: config.permissionId,
                 sessionValidator: enableData.session.sessionToEnable.sessionValidator,
                 sessionValidatorConfig: enableData.session.sessionToEnable.sessionValidatorInitData,
-                useRegistry: false,
                 account: account
             });
         }
