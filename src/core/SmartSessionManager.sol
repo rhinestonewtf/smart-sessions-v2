@@ -184,6 +184,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 account: account
             });
         }
+
+        // Add the lockTag to the enabled lockTags for the account
+        $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
     }
 
     /// TODO: CHECK IF THIS FUNCTION IS NEEDED ANYMORE
@@ -274,6 +277,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             permissionIds[i] = permissionId;
             emit SessionCreated(permissionId, account);
         }
+
+        // Add the lockTag to the enabled lockTags for the account
+        $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
     }
 
     /// @notice Disables sessions for an account, using the provided disable data after verifying
@@ -357,6 +363,14 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         // Remove the permissionId from the executionSessions mapping
         $executionSessions[sender][lockTag]
         .remove({ account: account, value: PermissionId.unwrap(permissionId) });
+
+        // Remove the lockTag from the enabled lockTags if no more sessions are active
+        if (
+            $executionSessions[sender][lockTag].length(account) == 0
+                && $claimSessions[lockTag].length(account) == 0
+        ) {
+            $enabledLockTags.remove({ account: account, value: bytes32(lockTag) });
+        }
 
         emit SessionRemoved(permissionId, account);
     }
