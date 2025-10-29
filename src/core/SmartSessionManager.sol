@@ -306,6 +306,8 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         bytes32 hash =
             disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
 
+        // TODO: We should only require sigs for non sentinel lockTags?
+
         // Verify the user and allocator signatures
         hash.verifySignatures(allocator, account, allocatorSig, userSig, false);
 
