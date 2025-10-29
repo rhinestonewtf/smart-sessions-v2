@@ -150,8 +150,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             );
 
             // Add to claim sessions
-            $claimSessions[lockTag]
-            .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
+            $claimSessions[lockTag] // TODO: What if we want to enable for multiple lockTags? (i.e
+                    // sentinel and real)?
+                .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
         }
 
         // Only add the session to executionSessions if there are action policies to enable
