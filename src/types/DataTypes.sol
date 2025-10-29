@@ -22,6 +22,9 @@ import {
 /// @dev Invalid return value for unsupported or invalid operations
 bytes4 constant INVALID_SIGNATURE = 0xFFFFFFFF;
 
+/// @dev Sentinel lockTag value used for sessions without a lockTag
+bytes12 constant NO_LOCKTAG = bytes12(0);
+
 /*//////////////////////////////////////////////////////////////
                             STRUCTS
 //////////////////////////////////////////////////////////////*/

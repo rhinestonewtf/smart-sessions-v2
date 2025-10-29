@@ -37,7 +37,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         external
         returns (PermissionId[] memory permissionIds)
     {
-        return _enableSessions(sessions, msg.sender, true, lockTag, sender);
+        return _enableSessions(sessions, msg.sender, lockTag, sender);
     }
 
     /*//////////////////////////////////////////////////////////////

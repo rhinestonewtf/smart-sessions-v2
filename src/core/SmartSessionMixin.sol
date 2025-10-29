@@ -13,12 +13,10 @@ import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { SignerLib } from "@smartsessions/lib/SignerLib.sol";
-import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
 import { IdLib as CompactIdLib } from "@the-compact/lib/IdLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
-import { SignatureLib } from "@lib/SignatureLib.sol";
 import { EncodeLibV2 } from "@lib/EncodeLibV2.sol";
 import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 
@@ -27,6 +25,7 @@ import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
 import {
     DisableSession,
     INVALID_SIGNATURE,
+    NO_LOCKTAG,
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable
@@ -51,10 +50,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using SignerLib for *;
     using HashLib for *;
     using HashLibV2 for *;
-    using ConfigLibV2 for *;
     using CompactIdLib for *;
     using SignatureCheckerLib for *;
-    using SignatureLib for *;
     using DigestCacheLib for *;
 
     /*//////////////////////////////////////////////////////////////
@@ -80,7 +77,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
 
         // Enable policies
-        _enablePolicies(account, enableData, config, lockTag);
+        _enableSession(account, enableData, config, lockTag);
 
         // Emit event if the session is enabled
         emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
@@ -105,8 +102,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // Verify data expires after current block timestamp
         require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
 
-        // Disable policies
-        _disablePolicies(
+        // Disable sessions
+        _disableSessions(
             account,
             disableData.session,
             config.permissionId,
@@ -120,106 +117,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         // Emit event if the session is removed
         emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
-    }
-
-    /// @notice Enables policies for an account, using the provided enable data after verifying
-    ///         required signatures.
-    /// @param account The address of the account for which policies are being enabled
-    /// @param enableData The data containing session and policy information to be enabled
-    /// @param config The Smart Session Emissary configuration
-    /// @param lockTag The lock tag associated with the session
-    function _enablePolicies(
-        address account,
-        SmartSessionEmissaryEnable calldata enableData,
-        SmartSessionEmissaryConfig calldata config,
-        bytes12 lockTag
-    )
-        internal
-    {
-        // Increment nonce to prevent replay attacks
-        uint256 nonce = $emissaryNonce[account][lockTag]++;
-        bytes32 hash = enableData.session
-            .getAndVerifyDigest(account, nonce, enableData.expires, lockTag, config.sender);
-
-        // Check if the permissionId is already enabled for the account
-        bool isInit = $smartSessionConfig[config.sender][lockTag].length(account) == 0;
-
-        // Verify the user and allocator signatures
-        hash.verifySignatures(
-            config.allocator, account, enableData.allocatorSig, enableData.userSig, isInit
-        );
-
-        // Enable ERC1271 policies
-        $erc1271Policies.enable({
-            policyType: PolicyType.ERC1271,
-            permissionId: config.permissionId,
-            configId: config.permissionId.toErc1271PolicyId().toConfigId(),
-            policyDatas: enableData.session.sessionToEnable.erc7739Policies.erc1271Policies,
-            account: account
-        });
-
-        // Enable action policies
-        $actionPolicies.enable({
-            permissionId: config.permissionId,
-            actionPolicyDatas: enableData.session.sessionToEnable.actions,
-            account: account
-        });
-
-        // Enable mode can involve enabling ISessionValidator (new Permission)
-        // or just adding policies (existing permission)
-        // a) ISessionValidator is not set => enable ISessionValidator
-        // b) ISessionValidator is set => just add policies (above)
-        // Attention: if the same policy that has already been configured is added again,
-        // the policy will be overwritten with the new configuration
-        if (!_isISessionValidatorSet(config.permissionId, account)) {
-            $sessionValidators.enable({
-                permissionId: config.permissionId,
-                sessionValidator: enableData.session.sessionToEnable.sessionValidator,
-                sessionValidatorConfig: enableData.session.sessionToEnable.sessionValidatorInitData,
-                account: account
-            });
-        }
-
-        // Mark the session as enabled
-        $smartSessionConfig[config.sender][lockTag]
-        .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
-    }
-
-    /// @notice Disables policies for an account, using the provided disable data after verifying
-    ///         required signatures.
-    /// @param account The address of the account for which policies are being disabled
-    /// @param disableData The data containing session and policy information to be disabled
-    /// @param permissionId The unique identifier for the permission set
-    /// @param sender The address of the sender for the session
-    /// @param lockTag The lock tag associated with the session
-    /// @param allocator The address of the allocator for the session
-    /// @param allocatorSig The signature from the allocator authorizing the session
-    /// @param userSig The signature from the user authorizing the session disable
-    function _disablePolicies(
-        address account,
-        DisableSession memory disableData,
-        PermissionId permissionId,
-        address sender,
-        bytes12 lockTag,
-        uint256 expires,
-        address allocator,
-        bytes calldata allocatorSig,
-        bytes calldata userSig
-    )
-        internal
-    {
-        // Increment nonce to prevent replay attacks
-        uint256 nonce = $emissaryNonce[account][lockTag]++;
-
-        // Get the hash for the disable operation
-        bytes32 hash =
-            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
-
-        // Verify the user and allocator signatures
-        hash.verifySignatures(allocator, account, allocatorSig, userSig, false);
-
-        // Remove the session from the smart session config
-        _removeSession(permissionId, account, lockTag, sender);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -243,7 +140,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         virtual
         returns (bytes4 result)
     {
-        bool success = _erc1271IsValidSignatureNowCalldata(
+        bool success = _claimIsValidSignatureNowCalldata(
             msg.sender, claimHash, emissaryData, sponsor, lockTag
         );
         /// @solidity memory-safe-assembly
@@ -301,7 +198,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
                                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Enforces policies and checks ISessionValidator signature for a session
+    /// @notice Enforces action policies and checks ISessionValidator signature for a session
     /// @dev This function is the core of policy enforcement in SmartSession
     /// @param permissionId The unique identifier for the permission set
     /// @param hash Message hash to be validated
@@ -321,8 +218,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         internal
         returns (bool validSig)
     {
-        // ensure that the permissionId is enabled
-        if (!$smartSessionConfig[msg.sender][lockTag]
+        // ensure that the permissionId is enabled for the sender, account, and lockTag
+        if (!$executionSessions[msg.sender][lockTag]
             .contains(account, PermissionId.unwrap(permissionId))) {
             revert InvalidPermissionId(permissionId);
         }
@@ -369,19 +266,18 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Validates an ERC-1271 signature
     /// @dev This function performs several checks to validate the signature:
-    ///      1. Verifies that the permissionId is enabled for the sender
+    ///      1. Verifies that the permissionId is enabled for the lockTag and account
     ///      2. Extracts the session validator signature using the provided length
     ///      3. Checks the ERC-1271 policy with the remaining policy data
     ///      4. Validates the signature using ISessionValidator
     /// @dev Signature format:
     /// [permissionId(32)][sigLength(32)][validatorSig(sigLength)][policyData]
-    /// @param sender The address initiating the signature validation
     /// @param hash The hash of the data to be signed
     /// @param signature The signature to be validated
     /// @param sponsor The address of the account for which the signature is being validated
     /// @param lockTag The lock tag associated with the session
     /// @return valid Boolean indicating whether the signature is valid
-    function _erc1271IsValidSignatureNowCalldata(
+    function _claimIsValidSignatureNowCalldata(
         address sender,
         bytes32 hash,
         bytes calldata signature,
@@ -398,7 +294,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // forgefmt: disable-next-item
         if (
             // return false if permissionId is not enabled for lockTag and sender
-             !$smartSessionConfig[sender][lockTag].contains(
+             !$claimSessions[lockTag].contains(
                 sponsor, PermissionId.unwrap(permissionId)
             )
         ) return false;
@@ -440,7 +336,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Validates an ERC-1271 signature with additional ERC-7739 content checks
     /// @dev This function performs several checks to validate the signature:
-    ///      1. Verifies that the permissionId is enabled for the sender
+    ///      1. Verifies that the permissionId is enabled for the msg.sender
     ///      2. Ensures the ERC-7739 content is enabled for the given permissionId
     ///      3. Checks the ERC-1271 policy
     ///      4. Validates the signature using ISessionValidator
@@ -473,27 +369,36 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // forgefmt: disable-next-item
         if (
             // return false if the permissionId is not enabled
-            !$enabledSessions.contains(msg.sender, PermissionId.unwrap(permissionId))
+            !$claimSessions[NO_LOCKTAG].contains(msg.sender, PermissionId.unwrap(permissionId))
             // return false if the content is not enabled
             || !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(msg.sender, contentHash)
         ) return false;
+
+        // Extract the offset for the policy data
+        uint256 policyDataOffset = uint256(bytes32(signature[32:64]));
 
         // check the ERC-1271 policy
         bool valid = $erc1271Policies.checkERC1271({
             account: msg.sender,
             requestSender: sender,
             hash: hash,
-            signature: signature,
+            signature: signature[policyDataOffset:], // extract the policy data after the
+                // validator signature
             permissionId: permissionId,
             configId: permissionId.toErc1271PolicyId().toConfigId(),
             minPoliciesToEnforce: 1
         });
 
+        // TODO: Do we want do do digest caching here as well?
+
         // if the erc1271 policy check failed, return false
         if (!valid) return valid;
         // this call reverts if the ISessionValidator is not set
         return $sessionValidators.isValidISessionValidator({
-            hash: hash, account: msg.sender, permissionId: permissionId, signature: signature
+            hash: hash,
+            account: msg.sender,
+            permissionId: permissionId,
+            signature: signature[64:policyDataOffset] // extract the validator signature
         });
     }
 
