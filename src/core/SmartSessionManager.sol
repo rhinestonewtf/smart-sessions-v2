@@ -71,7 +71,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Maps lockTag to enabled permissionIds per account for verifyClaim, 1271 lookups
     /// @dev bytes12 lockTag 0x0 is reserved for sessions without a lockTag, for 1271 sessions that
     ///      do not have a lockTag associated, we can use a sentinel value of bytes12(0x0)
-    mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs) internal $claimSessions;
+    mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs) internal $claimSessions; // TODO:
+        // rethink sentinel approach, maybe we could have ANOTHER mapping just for 1271, but this
+        // seems wasteful
 
     // -- Policy Storage -- //
 

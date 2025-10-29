@@ -71,7 +71,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag =
-            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod);
+            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod); // TODO:
+            // this doesn't work for sentinel/regular 1271
 
         // Verify data expires after current block timestamp
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
@@ -97,7 +98,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag =
-            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod);
+            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod); // TODO:
+            // this doesn't work for sentinel/regular 1271
 
         // Verify data expires after current block timestamp
         require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
