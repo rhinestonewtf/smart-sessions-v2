@@ -30,6 +30,33 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     using ModeLib for bytes;
 
     /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Address of the Intent Executor contract
+    address public immutable INTENT_EXECUTOR;
+
+    /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Constructor to initialize the Smart Session Emissary
+    /// @param intentExecutor The address of the Intent Executor contract
+    constructor(address intentExecutor) {
+        INTENT_EXECUTOR = intentExecutor;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Modifier to restrict access to only Intent Executor
+    modifier onlyIntentExecutor() {
+        require(msg.sender == INTENT_EXECUTOR, ISmartSessionEmissary.UnauthorizedSource());
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                   1271
     //////////////////////////////////////////////////////////////*/
 
@@ -132,6 +159,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         bytes12 lockTag
     )
         public
+        onlyIntentExecutor
         returns (bytes4)
     {
         // Extract mode from first byte
