@@ -35,7 +35,8 @@ import {
     Session,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryConfig,
-    DisableSession
+    DisableSession,
+    NO_LOCKTAG
 } from "@types/DataTypes.sol";
 
 abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
@@ -65,10 +66,12 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     // -- Policy Storage -- //
 
-    /// @notice Mapping of action policies organized by action IDs and permission IDs
-    EnumerableActionPolicy internal $actionPolicies;
+    /// @notice Mapping of claim policies organized by permission IDs and smart account
+    Policy internal $claimPolicies;
     /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
     Policy internal $erc1271Policies;
+    /// @notice Mapping of action policies organized by action IDs and permission IDs
+    EnumerableActionPolicy internal $actionPolicies;
     /// @notice Set of all enabled ERC7739 configurations for each smart account and permissionId
     EnumerableERC7739Config internal $enabledERC7739;
 
@@ -115,6 +118,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             config.allocator, account, enableData.allocatorSig, enableData.userSig, isInit
         );
 
+        // Enable ERC7739 content
+        $enabledERC7739.enable(
+            enableData.session.sessionToEnable.erc7739Policies.allowedERC7739Content,
+            config.permissionId // TODO: Can we do this? Or do we need to do
+                // session.toPermissionId()?
+        );
+
         // Enable ERC1271 policies
         $erc1271Policies.enable({
             policyType: PolicyType.ERC1271,
@@ -124,19 +134,30 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             account: account
         });
 
-        // Enable ERC7739 content
-        $enabledERC7739.enable(
-            enableData.session.sessionToEnable.erc7739Policies.allowedERC7739Content,
-            config.permissionId // TODO: Can we do this? Or do we need to do
-                // session.toPermissionId()?
-        );
+        // Only enable Action and Claim policies if the lockTag is not NO_LOCKTAG
+        if (lockTag != NO_LOCKTAG) {
+            // Enable action policies
+            $actionPolicies.enable({
+                permissionId: config.permissionId,
+                actionPolicyDatas: enableData.session.sessionToEnable.actions,
+                account: account
+            });
 
-        // Enable action policies
-        $actionPolicies.enable({
-            permissionId: config.permissionId,
-            actionPolicyDatas: enableData.session.sessionToEnable.actions,
-            account: account
-        });
+            // Enable Claim policies
+            $claimPolicies.enable({
+                policyType: PolicyType.ERC1271,
+                permissionId: config.permissionId,
+                configId: config.permissionId.toErc1271PolicyId().toConfigId(),
+                policyDatas: enableData.session.sessionToEnable.claimPolicies,
+                account: account
+            });
+            // Add the lockTag to the enabled lockTags for the account
+            $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+
+            // Add to enabled sessions
+            $enabledSessions[lockTag]
+            .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
+        }
 
         // Enable mode can involve enabling ISessionValidator (new Permission)
         // or just adding policies (existing permission)
@@ -152,13 +173,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 account: account
             });
         }
-
-        // Add the lockTag to the enabled lockTags for the account
-        $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
-
-        // Add to enabled sessions
-        $enabledSessions[lockTag]
-        .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
     }
 
     /// TODO: CHECK IF THIS FUNCTION IS NEEDED ANYMORE
@@ -185,6 +199,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             Session calldata session = sessions[i];
             PermissionId permissionId = session.toPermissionId();
 
+            // Enable ERC7739 content
+            $enabledERC7739.enable(
+                session.erc7739Policies.allowedERC7739Content,
+                permissionId // TODO: Can we do this? Or do we need to do
+                    // session.toPermissionId()?
+            );
+
             // Enable ERC1271 policies
             $erc1271Policies.enable({
                 policyType: PolicyType.ERC1271,
@@ -194,31 +215,29 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 account: account
             });
 
-            // Enable Action policies
-            $actionPolicies.enable({
-                permissionId: permissionId, actionPolicyDatas: session.actions, account: account
-            });
+            // Only enable Action and Claim policies if the lockTag is not NO_LOCKTAG
+            if (lockTag != NO_LOCKTAG) {
+                // Enable Action policies
+                $actionPolicies.enable({
+                    permissionId: permissionId, actionPolicyDatas: session.actions, account: account
+                });
 
-            // Enable ERC1271 policies
-            $erc1271Policies.enable({
-                policyType: PolicyType.ERC1271,
-                permissionId: permissionId,
-                configId: permissionId.toErc1271PolicyId().toConfigId(),
-                policyDatas: session.erc7739Policies.erc1271Policies,
-                account: account
-            });
+                // Enable Claim policies
+                $claimPolicies.enable({
+                    policyType: PolicyType.ERC1271,
+                    permissionId: permissionId,
+                    configId: permissionId.toErc1271PolicyId().toConfigId(),
+                    policyDatas: session.claimPolicies,
+                    account: account
+                });
 
-            // Enable ERC7739 content
-            $enabledERC7739.enable(
-                session.erc7739Policies.allowedERC7739Content,
-                permissionId // TODO: Can we do this? Or do we need to do
-                    // session.toPermissionId()?
-            );
+                // Add to enabled sessions
+                $enabledSessions[lockTag]
+                .add({ account: account, value: PermissionId.unwrap(permissionId) });
 
-            // Enable action policies
-            $actionPolicies.enable({
-                permissionId: permissionId, actionPolicyDatas: session.actions, account: account
-            });
+                // Add the lockTag to the enabled lockTags for the account
+                $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+            }
 
             // Enable the ISessionValidator for this session
             if (!_isISessionValidatorSet(permissionId, account)) {
@@ -231,14 +250,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             }
             permissionIds[i] = permissionId;
             emit SessionCreated(permissionId, account);
-
-            // Add to enabled sessions
-            $enabledSessions[lockTag]
-            .add({ account: account, value: PermissionId.unwrap(permissionId) });
         }
-
-        // Add the lockTag to the enabled lockTags for the account
-        $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
     }
 
     /// @notice Disables sessions for an account, using the provided disable data after verifying
@@ -271,8 +283,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         bytes32 hash =
             disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
 
-        // TODO: We should only require sigs for non sentinel lockTags?
-
         // Verify the user and allocator signatures
         hash.verifySignatures(allocator, account, allocatorSig, userSig, false);
 
@@ -297,6 +307,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
         // Remove all ERC1271 policies for this session
         $erc1271Policies.policyList[permissionId].removeAll(account);
+
+        // Remove all Claim policies for this session
+        $claimPolicies.policyList[permissionId].removeAll(account);
 
         // Remove all Action policies for this session
         uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);

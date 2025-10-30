@@ -13,7 +13,6 @@ import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { SignerLib } from "@smartsessions/lib/SignerLib.sol";
-import { IdLib as CompactIdLib } from "@the-compact/lib/IdLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
@@ -50,7 +49,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using SignerLib for *;
     using HashLib for *;
     using HashLibV2 for *;
-    using CompactIdLib for *;
     using SignatureCheckerLib for *;
     using DigestCacheLib for *;
 
@@ -70,9 +68,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         public
     {
         // Derive lockTag from allocator, scope, resetPeriod
-        bytes12 lockTag =
-            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod); // TODO:
-            // this doesn't work for sentinel/regular 1271
+        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
 
         // Verify data expires after current block timestamp
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
@@ -97,9 +93,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         external
     {
         // Derive lockTag from allocator, scope, resetPeriod
-        bytes12 lockTag =
-            config.allocator.toAllocatorId().toLockTag(config.scope, config.resetPeriod); // TODO:
-            // this doesn't work for sentinel/regular 1271
+        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
 
         // Verify data expires after current block timestamp
         require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
@@ -182,8 +176,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // unpacking data packed in data
         (PermissionId permissionId, bytes calldata packedSig) = emissaryData.unpack();
 
-        // Enforce policies without enabling new ones
-        validSig = _enforcePolicies({
+        // Enforce action policies
+        validSig = _enforceActionPolicies({
             permissionId: permissionId,
             hash: hash,
             executions: executions,
@@ -209,7 +203,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param account The account for which policies are being enforced
     /// @param lockTag The lock tag associated with the session
     /// @return validSig True if the signature is valid, false otherwise
-    function _enforcePolicies(
+    function _enforceActionPolicies(
         PermissionId permissionId,
         bytes32 hash,
         Execution[] calldata executions,
@@ -303,8 +297,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // Extract the offset for the policy data
         uint256 policyDataOffset = uint256(bytes32(signature[32:64]));
 
-        // check the ERC-1271 policy
-        bool valid = $erc1271Policies.checkERC1271({
+        // check the claim policy
+        bool valid = $claimPolicies.checkERC1271({
             account: sponsor,
             requestSender: sender,
             hash: hash,
@@ -315,7 +309,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             minPoliciesToEnforce: 1
         });
 
-        // if the erc1271 policy check failed, return false
+        // if the claim policy check failed, return false
         if (!valid) return valid;
 
         // Calculate digest using 712
@@ -369,10 +363,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         // forgefmt: disable-next-item
         if (
-            // return false if the permissionId is not enabled
-            !$enabledSessions[NO_LOCKTAG].contains(msg.sender, PermissionId.unwrap(permissionId))
             // return false if the content is not enabled
-            || !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(msg.sender, contentHash)
+            !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(msg.sender, contentHash)
         ) return false;
 
         // Extract the offset for the policy data

@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Libraries
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
+import { IdLib as CompactIdLib, ResetPeriod, Scope } from "@the-compact/lib/IdLib.sol";
 
 // Types
 import { PermissionId, ActionId, ConfigId } from "@smartsessions/DataTypes.sol";
@@ -14,6 +15,7 @@ library IdLibV2 {
     //////////////////////////////////////////////////////////////*/
 
     using IdLib for *;
+    using CompactIdLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 CONVERT
@@ -56,5 +58,23 @@ library IdLibV2 {
                 abi.encode(session.sessionValidator, session.sessionValidatorInitData, session.salt)
             )
         );
+    }
+
+    /// @dev Calculates lockTag from allocator, scope, resetPeriod, defaults to NO_LOCKTAG if no
+    /// allocator is set
+    function deriveLockTag(
+        address allocator,
+        Scope scope,
+        ResetPeriod resetPeriod
+    )
+        internal
+        pure
+        returns (bytes12 lockTag)
+    {
+        // If no allocator is set, use NO_LOCKTAG, otherwise derive from allocator
+        if (allocator == address(0)) {
+            lockTag = allocator.toAllocatorId().toLockTag(scope, resetPeriod);
+        }
+        // Defaults to NO_LOCKTAG
     }
 }
