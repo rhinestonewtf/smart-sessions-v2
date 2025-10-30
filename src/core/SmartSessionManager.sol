@@ -13,6 +13,8 @@ import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
+import { SignatureLib } from "@lib/SignatureLib.sol";
+import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -29,7 +31,13 @@ import {
     EnumerableERC7739Config,
     ERC7579_MODULE_TYPE_VALIDATOR
 } from "@smartsessions/DataTypes.sol";
-import { Session } from "@types/DataTypes.sol";
+import {
+    Session,
+    SmartSessionEmissaryEnable,
+    SmartSessionEmissaryConfig,
+    DisableSession,
+    NO_LOCKTAG
+} from "@types/DataTypes.sol";
 
 abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
@@ -43,45 +51,139 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     using IdLibV2 for *;
     using HashLibV2 for *;
     using PolicyLib for *;
+    using PolicyLibV2 for *;
     using FlatBytesLib for *;
+    using SignatureLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Maps lockTag to enabled permissionIds for verifyClaim lookups
-    /// @dev Bridge storage connecting emissary lockTags to SmartSession permissionIds
-    mapping(
-        address sender => mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs)
-    ) internal $smartSessionConfig;
-    /// @notice Mapping of action policies organized by action IDs and permission IDs
-    EnumerableActionPolicy internal $actionPolicies;
+    // -- Permission Storage -- //
+
+    /// @notice Mapping of lockTags to enabled permission IDs per account
+    mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs) internal $enabledSessions;
+
+    // -- Policy Storage -- //
+
+    /// @notice Mapping of claim policies organized by permission IDs and smart account
+    Policy internal $claimPolicies;
     /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
     Policy internal $erc1271Policies;
+    /// @notice Mapping of action policies organized by action IDs and permission IDs
+    EnumerableActionPolicy internal $actionPolicies;
+    /// @notice Set of all enabled ERC7739 configurations for each smart account and permissionId
+    EnumerableERC7739Config internal $enabledERC7739;
+
+    // -- Validator Config Storage -- //
+
     /// @notice Mapping of session validators organized by permission IDs and smart account
     ///         addresses
     mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf)) internal
         $sessionValidators;
-    /// @notice Set of all enabled sessions for each smart account
-    EnumerableSet.Bytes32Set internal $enabledSessions;
-    /// @notice Set of all enabled ERC7739 configurations for each smart account and permissionId
-    EnumerableERC7739Config internal $enabledERC7739;
+
+    // -- Locktag Config Storage -- //
+
+    /// @notice Maps enabled lockTags per account
+    EnumerableSet.Bytes32Set internal $enabledLockTags;
 
     /*//////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Enables a sessions for an account, using the provided enable data after verifying
+    ///         required signatures.
+    /// @param account The address of the account for which policies are being enabled
+    /// @param enableData The data containing session and policy information to be enabled
+    /// @param config The Smart Session Emissary configuration
+    /// @param lockTag The lock tag associated with the session
+    function _enableSession(
+        address account,
+        SmartSessionEmissaryEnable calldata enableData,
+        SmartSessionEmissaryConfig calldata config,
+        bytes12 lockTag
+    )
+        internal
+    {
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
+        bytes32 hash = enableData.session
+            .getAndVerifyDigest(account, nonce, enableData.expires, lockTag, config.sender);
+
+        // Check if the permissionId is already enabled for the account
+        bool isInit = $enabledSessions[lockTag].length(account) == 0;
+
+        // Verify the user and allocator signatures
+        hash.verifySignatures(
+            config.allocator, account, enableData.allocatorSig, enableData.userSig, isInit
+        );
+
+        // Enable ERC7739 content
+        $enabledERC7739.enable(
+            enableData.session.sessionToEnable.erc7739Policies.allowedERC7739Content,
+            config.permissionId // TODO: Can we do this? Or do we need to do
+                // session.toPermissionId()?
+        );
+
+        // Enable ERC1271 policies
+        $erc1271Policies.enable({
+            policyType: PolicyType.ERC1271,
+            permissionId: config.permissionId,
+            configId: config.permissionId.toErc1271PolicyId().toConfigId(),
+            policyDatas: enableData.session.sessionToEnable.erc7739Policies.erc1271Policies,
+            account: account
+        });
+
+        // Only enable Action and Claim policies if the lockTag is not NO_LOCKTAG
+        if (lockTag != NO_LOCKTAG) {
+            // Enable action policies
+            $actionPolicies.enable({
+                permissionId: config.permissionId,
+                actionPolicyDatas: enableData.session.sessionToEnable.actions,
+                account: account
+            });
+
+            // Enable Claim policies
+            $claimPolicies.enable({
+                policyType: PolicyType.ERC1271,
+                permissionId: config.permissionId,
+                configId: config.permissionId.toErc1271PolicyId().toConfigId(),
+                policyDatas: enableData.session.sessionToEnable.claimPolicies,
+                account: account
+            });
+            // Add the lockTag to the enabled lockTags for the account
+            $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+
+            // Add to enabled sessions
+            $enabledSessions[lockTag]
+            .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
+        }
+
+        // Enable mode can involve enabling ISessionValidator (new Permission)
+        // or just adding policies (existing permission)
+        // a) ISessionValidator is not set => enable ISessionValidator
+        // b) ISessionValidator is set => just add policies (above)
+        // Attention: if the same policy that has already been configured is added again,
+        // the policy will be overwritten with the new configuration
+        if (!_isISessionValidatorSet(config.permissionId, account)) {
+            $sessionValidators.enable({
+                permissionId: config.permissionId,
+                sessionValidator: enableData.session.sessionToEnable.sessionValidator,
+                sessionValidatorConfig: enableData.session.sessionToEnable.sessionValidatorInitData,
+                account: account
+            });
+        }
+    }
+
+    /// TODO: CHECK IF THIS FUNCTION IS NEEDED ANYMORE
     /// @notice Enable multiple sessions with their associated policies
     /// @param sessions An array of Session structures to be enabled
     /// @param account The account address associated with the sessions
-    /// @param useRegistry A flag to indicate whether to use a registry check for the policies and
-    ///        session validator
     /// @param sender The address of the sender for the session, if applicable
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function _enableSessions(
         Session[] calldata sessions,
         address account,
-        bool useRegistry,
         bytes12 lockTag,
         address sender
     )
@@ -97,27 +199,45 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             Session calldata session = sessions[i];
             PermissionId permissionId = session.toPermissionId();
 
+            // Enable ERC7739 content
+            $enabledERC7739.enable(
+                session.erc7739Policies.allowedERC7739Content,
+                permissionId // TODO: Can we do this? Or do we need to do
+                    // session.toPermissionId()?
+            );
+
             // Enable ERC1271 policies
             $erc1271Policies.enable({
                 policyType: PolicyType.ERC1271,
                 permissionId: permissionId,
                 configId: permissionId.toErc1271PolicyId().toConfigId(account),
                 policyDatas: session.erc7739Policies.erc1271Policies,
-                useRegistry: useRegistry,
                 account: account
             });
 
-            // Enable Action policies
-            $actionPolicies.enable({
-                permissionId: permissionId,
-                actionPolicyDatas: session.actions,
-                useRegistry: useRegistry,
-                account: account
-            });
+            // Only enable Action and Claim policies if the lockTag is not NO_LOCKTAG
+            if (lockTag != NO_LOCKTAG) {
+                // Enable Action policies
+                $actionPolicies.enable({
+                    permissionId: permissionId, actionPolicyDatas: session.actions, account: account
+                });
 
-            // Add the session to the list of enabled sessions for the caller
-            $smartSessionConfig[sender][lockTag]
-            .add({ account: account, value: PermissionId.unwrap(permissionId) });
+                // Enable Claim policies
+                $claimPolicies.enable({
+                    policyType: PolicyType.ERC1271,
+                    permissionId: permissionId,
+                    configId: permissionId.toErc1271PolicyId().toConfigId(),
+                    policyDatas: session.claimPolicies,
+                    account: account
+                });
+
+                // Add to enabled sessions
+                $enabledSessions[lockTag]
+                .add({ account: account, value: PermissionId.unwrap(permissionId) });
+
+                // Add the lockTag to the enabled lockTags for the account
+                $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+            }
 
             // Enable the ISessionValidator for this session
             if (!_isISessionValidatorSet(permissionId, account)) {
@@ -125,7 +245,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                     permissionId: permissionId,
                     sessionValidator: session.sessionValidator,
                     sessionValidatorConfig: session.sessionValidatorInitData,
-                    useRegistry: useRegistry,
                     account: account
                 });
             }
@@ -134,51 +253,41 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         }
     }
 
-    /// @notice Enable multiple sessions with their associated policies, for msg.sender
-    /// @param sessions An array of Session structures to be enabled
-    function _enableSessions(Session[] calldata sessions)
+    /// @notice Disables sessions for an account, using the provided disable data after verifying
+    ///         required signatures.
+    /// @param account The address of the account for which policies are being disabled
+    /// @param disableData The data containing session and policy information to be disabled
+    /// @param permissionId The unique identifier for the permission set
+    /// @param sender The address of the sender for the session
+    /// @param lockTag The lock tag associated with the session
+    /// @param allocator The address of the allocator for the session
+    /// @param allocatorSig The signature from the allocator authorizing the session
+    /// @param userSig The signature from the user authorizing the session disable
+    function _disableSessions(
+        address account,
+        DisableSession memory disableData,
+        PermissionId permissionId,
+        address sender,
+        bytes12 lockTag,
+        uint256 expires,
+        address allocator,
+        bytes calldata allocatorSig,
+        bytes calldata userSig
+    )
         internal
-        returns (PermissionId[] memory permissionIds)
     {
-        uint256 length = sessions.length;
-        if (length == 0) revert InvalidData();
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
 
-        permissionIds = new PermissionId[](length);
+        // Get the hash for the disable operation
+        bytes32 hash =
+            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
 
-        for (uint256 i; i < length; i++) {
-            Session calldata session = sessions[i];
-            PermissionId permissionId = session.toPermissionId();
+        // Verify the user and allocator signatures
+        hash.verifySignatures(allocator, account, allocatorSig, userSig, false);
 
-            // Enable ERC1271 policies
-            $erc1271Policies.enable({
-                policyType: PolicyType.ERC1271,
-                permissionId: permissionId,
-                configId: permissionId.toErc1271PolicyId().toConfigId(),
-                policyDatas: session.erc7739Policies.erc1271Policies,
-                useRegistry: false
-            });
-            $enabledERC7739.enable(session.erc7739Policies.allowedERC7739Content, permissionId);
-
-            // Enable Action policies
-            $actionPolicies.enable({
-                permissionId: permissionId, actionPolicyDatas: session.actions, useRegistry: false
-            });
-
-            // Add the session to the list of enabled sessions for the caller
-            $enabledSessions.add({ account: msg.sender, value: PermissionId.unwrap(permissionId) });
-
-            // Enable the ISessionValidator for this session
-            if (!_isISessionValidatorSet(permissionId, msg.sender)) {
-                $sessionValidators.enable({
-                    permissionId: permissionId,
-                    sessionValidator: session.sessionValidator,
-                    sessionValidatorConfig: session.sessionValidatorInitData,
-                    useRegistry: false
-                });
-            }
-            permissionIds[i] = permissionId;
-            emit SessionCreated(permissionId, msg.sender);
-        }
+        // Remove the session from the smart session config
+        _removeSession(permissionId, account, lockTag, sender);
     }
 
     /// @notice Remove a session and all its associated policies
@@ -199,6 +308,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         // Remove all ERC1271 policies for this session
         $erc1271Policies.policyList[permissionId].removeAll(account);
 
+        // Remove all Claim policies for this session
+        $claimPolicies.policyList[permissionId].removeAll(account);
+
         // Remove all Action policies for this session
         uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
         for (uint256 i; i < actionLength; i++) {
@@ -210,37 +322,22 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         // removing all stored actionIds
         $actionPolicies.enabledActionIds[permissionId].removeAll(account);
 
+        // Remove the enabled erc7739 config for this session
+        $enabledERC7739.removeAll({ permissionId: permissionId, smartAccount: account });
+
+        // Disable the session validator
         $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
 
-        // Remove all ERC1271 policies for this session
-        $smartSessionConfig[sender][lockTag]
+        // Remove the permissionId from enabled sessions
+        $enabledSessions[lockTag]
         .remove({ account: account, value: PermissionId.unwrap(permissionId) });
-        emit SessionRemoved(permissionId, account);
-    }
 
-    function removeSession(PermissionId permissionId) public {
-        if (permissionId == EMPTY_PERMISSIONID) revert InvalidSession(permissionId);
-
-        // Remove all ERC1271 policies for this session
-        $erc1271Policies.policyList[permissionId].removeAll(msg.sender);
-
-        // Remove all Action policies for this session
-        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(msg.sender);
-        for (uint256 i; i < actionLength; i++) {
-            ActionId actionId =
-                ActionId.wrap($actionPolicies.enabledActionIds[permissionId].at(msg.sender, i));
-            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(msg.sender);
+        // Remove the lockTag from the enabled lockTags if no more sessions are active
+        if ($enabledSessions[lockTag].length(account) == 0) {
+            $enabledLockTags.remove({ account: account, value: bytes32(lockTag) });
         }
 
-        // removing all stored actionIds
-        $actionPolicies.enabledActionIds[permissionId].removeAll(msg.sender);
-
-        $sessionValidators.disable({ permissionId: permissionId, smartAccount: msg.sender });
-
-        // Remove all ERC1271 policies for this session
-        $enabledSessions.remove({ account: msg.sender, value: PermissionId.unwrap(permissionId) });
-        $enabledERC7739.removeAll({ permissionId: permissionId, smartAccount: msg.sender });
-        emit SessionRemoved(permissionId, msg.sender);
+        emit SessionRemoved(permissionId, account);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -301,30 +398,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                               STATUS CHECKS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Check if a permission is enabled for an account
-    /// @param permissionId The permission ID to check
-    /// @param account The account address
-    /// @param lockTag The lock tag used to identify the session
-    /// @param sender The address of the sender for the session, if applicable
-    /// @return Boolean indicating whether the permission is enabled
-    function isPermissionEnabled(
-        PermissionId permissionId,
-        bytes12 lockTag,
-        address account,
-        address sender
-    )
-        external
-        view
-        returns (bool)
-    {
-        return
-            $smartSessionConfig[sender][lockTag]
-            .contains(account, PermissionId.unwrap(permissionId));
-    }
+    // TODO: Port from SmartSessionsV1? This might not be needed/fit
 
     /*//////////////////////////////////////////////////////////////
                               GETTERS
     //////////////////////////////////////////////////////////////*/
+
+    // TODO: Port remaining getters from SmartSessionsV1
 
     /// @notice Get the action policies for a specific action ID
     /// @param account The account address
@@ -391,27 +471,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         sessionValidatorData = $s.config.load();
     }
 
-    /// @notice Gets all permission IDs for a specific account and lock tag
-    /// @param account The address of the account to query
-    /// @param lockTag The lock tag used to identify the session configuration
-    /// @param sender The address of the sender for the session, if applicable
-    /// @return permissionIds Array of permission IDs associated with the account
-    function getPermissionIDs(
-        address account,
-        bytes12 lockTag,
-        address sender
-    )
-        external
-        view
-        returns (PermissionId[] memory permissionIds)
-    {
-        bytes32[] memory _permissionIds = $smartSessionConfig[sender][lockTag].values(account);
-        // solhint-disable-next-line no-inline-assembly
-        assembly {
-            permissionIds := _permissionIds
-        }
-    }
-
     /*//////////////////////////////////////////////////////////////
                                   7579
     //////////////////////////////////////////////////////////////*/
@@ -420,60 +479,24 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param data The data to initialize the module with, encoded as per the expected format:
     ///        abi.encodePacked(SmartSessionMode, abi.encode(Session[]))
     /// @dev If no data is provided, the module will be installed without any sessions
-    function onInstall(bytes calldata data)
-        external
-    {
-
-        // Its possible that the module was installed before and when uninstalling the module, the
-        // smart session storage for that smart account was not zero'ed correctly. In such cases, we
-        // need to check if the smart account has
-        // still some enabled permissions / sessions set.
-        // re-enabling these sessions will cause the smart account to be in the same state as
-        // before, potentially activating sessions that the user thought were terminated. This MUST
-        // be avoided.
-        // if this case happens, it's not possible for the account to install the module again,
-        // unless the account calls into the removreSession functions to disable all dangling
-        // permissions
-        // forgefmt: disable-next-item
-        if ($enabledSessions.length({ account: msg.sender }) != 0) revert SmartSessionModuleAlreadyInstalled();
-        // It's allowed to install smartsessions on a ERC7579 account without any params
-        if (data.length == 0) return;
-
-        // data is expected to be in the format of abi.encode(Session[])
-        Session[] calldata sessions;
-
-        // equivalent of abi.decode(data,Session[])
-        assembly ("memory-safe") {
-            let dataPointer := add(data.offset, calldataload(data.offset))
-
-            sessions.offset := add(dataPointer, 32)
-            sessions.length := calldataload(dataPointer)
-        }
-        _enableSessions(sessions);
+    function onInstall(bytes calldata data) external {
+        /// TODO: Call setConfig
     }
 
     /// @notice Uninstall the module and clean up associated sessions for the msg.sender
     function onUninstall(
         bytes calldata /*data*/
     )
-        external
-    {
-        // TODO: Need to have enumerable sender/locktag? to clear $smaertSessionConfig mapping?
-        // Get the count of enabled sessions for the msg.sender
-        uint256 configIdsCnt = $enabledSessions.length({ account: msg.sender });
-        for (uint256 i; i < configIdsCnt; i++) {
-            // always remove index 0 since the array is shifted down when the first item is removed
-            PermissionId configId =
-                PermissionId.wrap($enabledSessions.at({ account: msg.sender, index: 0 }));
-            removeSession(configId);
-        }
+        external {
+        /// TODO: This will require allocator sig
     }
 
     /// @notice Check if the module is initialized for a specific smart account
     /// @param smartAccount The smart account address to check
     /// @return Boolean indicating whether the module is initialized
     function isInitialized(address smartAccount) external view returns (bool) {
-        return $enabledSessions.length({ account: smartAccount }) != 0;
+        // Check if there are any enabled lockTags for the smart account
+        return $enabledLockTags.length({ account: smartAccount }) != 0;
     }
 
     /// @notice Check if the module type matches the validator type

@@ -22,6 +22,9 @@ import {
 /// @dev Invalid return value for unsupported or invalid operations
 bytes4 constant INVALID_SIGNATURE = 0xFFFFFFFF;
 
+/// @dev Sentinel lockTag value used for sessions without a lockTag
+bytes12 constant NO_LOCKTAG = bytes12(0);
+
 /*//////////////////////////////////////////////////////////////
                             STRUCTS
 //////////////////////////////////////////////////////////////*/
@@ -64,12 +67,19 @@ struct DisableSession {
 ///         selector. SmartSession calls this "Action". With ActionData, we can specify policies
 ///         that are only run if a 7579 execution contains a specific action.
 ///
-///      erc7739Policies (ERC7739Data): ERC1271 Policies specific to the ERC7739 standard.
+///     claimPolicies (PolicyData[]): ERC-1271 policies for Compact claim verification.
+///         These policies are enforced during verifyClaim calls and are stored per lockTag,
+///         allowing different signing permissions for different Compact allocator contexts.
+///
+///     erc7739Policies (ERC7739Data): ERC-1271 policies specific to the ERC-7739 standard.
+///         These policies are used for general message signing via isValidSignature and are
+///         stored globally (not lockTag-specific), enabling broad signing capabilities.
 struct Session {
     ISessionValidator sessionValidator;
     bytes sessionValidatorInitData;
     bytes32 salt;
     ActionData[] actions;
+    PolicyData[] claimPolicies;
     ERC7739Data erc7739Policies;
 }
 

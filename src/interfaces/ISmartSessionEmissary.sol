@@ -19,7 +19,7 @@ interface ISmartSessionEmissary is IEmissary {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Thrown when the sender is not a whitelisted source
+    /// @notice Thrown when the msg.sender is not the intent executor
     error UnauthorizedSource();
 
     /// @notice Thrown when the calldata selector is not supported

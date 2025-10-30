@@ -25,6 +25,14 @@ import { Session } from "@types/DataTypes.sol";
 /// @dev Extended SmartSessionEmissary with helpers for testing purposes.
 contract SmartSessionEmissaryMock is SmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Constructor to initialize the Smart Session Emissary Mock
+    /// @param intentExecutor The address of the Intent Executor contract
+    constructor(address intentExecutor) SmartSessionEmissary(intentExecutor) { }
+
+    /*//////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
     //////////////////////////////////////////////////////////////*/
 
@@ -37,7 +45,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         external
         returns (PermissionId[] memory permissionIds)
     {
-        return _enableSessions(sessions, msg.sender, true, lockTag, sender);
+        return _enableSessions(sessions, msg.sender, lockTag, sender);
     }
 
     /*//////////////////////////////////////////////////////////////
