@@ -111,11 +111,11 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             .getAndVerifyDigest(account, nonce, enableData.expires, lockTag, config.sender);
 
         // Check if the permissionId is already enabled for the account
-        bool isInit = $lockTagPermissions[lockTag].length(account) == 0;
+        bool isInit = $enabledLockTags.contains({ account: account, value: bytes32(lockTag) });
 
         // Verify the user and allocator signatures
         hash.verifySignatures(
-            config.allocator, account, enableData.allocatorSig, enableData.userSig, isInit
+            config.allocator, account, enableData.allocatorSig, enableData.userSig, !isInit
         );
 
         // Enable ERC7739 content
@@ -134,12 +134,29 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             account: account
         });
 
-        // Enable action policies
-        $actionPolicies.enable({
-            permissionId: config.permissionId,
-            actionPolicyDatas: enableData.session.sessionToEnable.actions,
-            account: account
-        });
+        // Enable action and claim policies only if lockTag is not NO_LOCKTAG
+        if (lockTag != NO_LOCKTAG) {
+            // Enable action policies
+            $actionPolicies[lockTag]
+            .enable({
+                permissionId: config.permissionId,
+                actionPolicyDatas: enableData.session.sessionToEnable.actions,
+                account: account
+            });
+
+            // Enable claim policies
+            $claimPolicies[lockTag]
+            .enable({
+                policyType: PolicyType.ERC1271,
+                permissionId: config.permissionId,
+                configId: config.permissionId.toErc1271PolicyId().toConfigId(),
+                policyDatas: enableData.session.sessionToEnable.claimPolicies,
+                account: account
+            });
+
+            // Add the lockTag to the enabled lockTags for the account
+            $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+        }
 
         // Enable mode can involve enabling ISessionValidator (new Permission)
         // or just adding policies (existing permission)
@@ -156,12 +173,8 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             });
         }
 
-        // Add the lockTag to the enabled lockTags for the account
-        $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
-
         // Add to enabled sessions
-        $lockTagPermissions[lockTag]
-        .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
+        $enabledSessions.add({ account: account, value: PermissionId.unwrap(config.permissionId) });
     }
 
     /// TODO: CHECK IF THIS FUNCTION IS NEEDED ANYMORE
@@ -204,10 +217,27 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 account: account
             });
 
-            // Enable Action policies
-            $actionPolicies.enable({
-                permissionId: permissionId, actionPolicyDatas: session.actions, account: account
-            });
+            // Only enable claim and action policies if lockTag is not NO_LOCKTAG
+            if (lockTag != NO_LOCKTAG) {
+                // Enable claim policies
+                $claimPolicies[lockTag]
+                .enable({
+                    policyType: PolicyType.ERC1271,
+                    permissionId: permissionId,
+                    configId: permissionId.toErc1271PolicyId().toConfigId(account),
+                    policyDatas: session.claimPolicies,
+                    account: account
+                });
+
+                // Enable action policies
+                $actionPolicies[lockTag]
+                .enable({
+                    permissionId: permissionId, actionPolicyDatas: session.actions, account: account
+                });
+
+                // Add the lockTag to the enabled lockTags for the account
+                $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+            }
 
             // Enable the ISessionValidator for this session
             if (!_isISessionValidatorSet(permissionId, account)) {
@@ -222,11 +252,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             emit SessionCreated(permissionId, account);
 
             // Add to enabled sessions
-            $lockTagPermissions[lockTag]
-            .add({ account: account, value: PermissionId.unwrap(permissionId) });
-
-            // Add the lockTag to the enabled lockTags for the account
-            $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+            $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });
         }
     }
 
@@ -294,7 +320,10 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         }
 
         // removing all stored actionIds
-        $actionPolicies.enabledActionIds[permissionId].removeAll(account);
+        $actionPolicies[lockTag].enabledActionIds[permissionId].removeAll(account);
+
+        // Remove all claim policies for this session
+        $claimPolicies[lockTag].policyList[permissionId].removeAll(account);
 
         // Remove the enabled erc7739 config for this session
         $enabledERC7739.removeAll({ permissionId: permissionId, smartAccount: account });
@@ -303,13 +332,10 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
 
         // Remove the permissionId from enabled sessions
-        $lockTagPermissions[lockTag]
-        .remove({ account: account, value: PermissionId.unwrap(permissionId) });
+        $enabledSessions.remove({ account: account, value: PermissionId.unwrap(permissionId) });
 
-        // Remove the lockTag from the enabled lockTags if no more sessions are active
-        if ($lockTagPermissions[lockTag].length(account) == 0) {
-            $enabledLockTags.remove({ account: account, value: bytes32(lockTag) });
-        }
+        // Remove the lockTag from the enabled lockTag
+        $enabledLockTags.remove({ account: account, value: bytes32(lockTag) });
 
         emit SessionRemoved(permissionId, account);
     }
