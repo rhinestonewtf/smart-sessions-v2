@@ -157,14 +157,12 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param hash The hash of the user operation
     /// @param emissaryData Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function _verifyExecutionSmartSession(
         address account,
         bytes32 hash,
         bytes calldata emissaryData,
-        Execution[] calldata executions,
-        bytes12 lockTag
+        Execution[] calldata executions
     )
         internal
         virtual
@@ -182,8 +180,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             hash: hash,
             executions: executions,
             decompressedSignature: packedSig,
-            account: account,
-            lockTag: lockTag
+            account: account
         });
 
         // Return the function selector on success, or a specific failure code otherwise.

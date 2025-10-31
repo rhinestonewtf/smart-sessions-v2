@@ -73,12 +73,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
     Policy internal $erc1271Policies;
+    /// @notice Mapping of action policies organized by action IDs, permission IDs, and smart
+    ///         account addresses
+    EnumerableActionPolicy internal $actionPolicies;
     /// @notice Set of all enabled ERC7739 configurations for each smart account and permissionId
     EnumerableERC7739Config internal $enabledERC7739;
     /// @notice Mapping of lockTag to claim policies
     mapping(bytes12 lockTag => Policy claimPolicies) internal $claimPolicies;
-    /// @notice Mapping of lockTag to enabled action policies
-    mapping(bytes12 lockTag => EnumerableActionPolicy) internal $actionPolicies;
 
     // -- Validator Config Storage -- //
 
