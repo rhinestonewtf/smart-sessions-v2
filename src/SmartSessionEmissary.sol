@@ -149,19 +149,36 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     /// @param digest The hash of the user operation
     /// @param emissaryData Data containing mode and mode-specific execution data
     /// @param executions The execution data for the user operation
+    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        Execution[] calldata executions
+        Execution[] calldata executions,
+        bytes12 lockTag
     )
         public
         onlyIntentExecutor
         returns (bytes4)
     {
-        // Validate using SmartSession verification
-        return _verifyExecutionSmartSession(sponsor, digest, emissaryData, executions);
+        // Extract mode from first byte
+        EmissaryMode mode = emissaryData.decodeMode();
+
+        // Mode-based dispatch for execution verification
+        if (mode == EMISSARY_VANILLA) {
+            // Validate using vanilla emissary signature validation
+            return _validateSignature(sponsor, digest, emissaryData, lockTag)
+                ? this.verifyExecution.selector
+                : INVALID_SIGNATURE;
+        } else if (mode == EMISSARY_SMART_SESSION) {
+            // Validate using SmartSession verification
+            return
+                _verifyExecutionSmartSession(sponsor, digest, emissaryData[1:], executions, lockTag);
+        }
+
+        // Default case for unsupported modes
+        return INVALID_SIGNATURE;
     }
 
     /*//////////////////////////////////////////////////////////////
