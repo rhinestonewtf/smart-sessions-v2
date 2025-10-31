@@ -61,13 +61,12 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
     // -- Permission Storage -- //
 
-    /// @notice Mapping of lockTags to enabled permission IDs per account
-    mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs) internal $enabledSessions;
+    /// @notice Mapping of lockTags to enabled permission IDs per account, these are sessions
+    ///         used for verifyClaim and verifyExecution functions
+    mapping(bytes12 lockTag => EnumerableSet.Bytes32Set permissionIDs) internal $lockTagPermissions;
 
     // -- Policy Storage -- //
 
-    /// @notice Mapping of claim policies organized by permission IDs and smart account
-    Policy internal $claimPolicies;
     /// @notice Mapping of erc1271 policies organized by permission IDs and smart account
     Policy internal $erc1271Policies;
     /// @notice Mapping of action policies organized by action IDs and permission IDs
@@ -111,7 +110,7 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             .getAndVerifyDigest(account, nonce, enableData.expires, lockTag, config.sender);
 
         // Check if the permissionId is already enabled for the account
-        bool isInit = $enabledSessions[lockTag].length(account) == 0;
+        bool isInit = $lockTagPermissions[lockTag].length(account) == 0;
 
         // Verify the user and allocator signatures
         hash.verifySignatures(
@@ -134,30 +133,12 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             account: account
         });
 
-        // Only enable Action and Claim policies if the lockTag is not NO_LOCKTAG
-        if (lockTag != NO_LOCKTAG) {
-            // Enable action policies
-            $actionPolicies.enable({
-                permissionId: config.permissionId,
-                actionPolicyDatas: enableData.session.sessionToEnable.actions,
-                account: account
-            });
-
-            // Enable Claim policies
-            $claimPolicies.enable({
-                policyType: PolicyType.ERC1271,
-                permissionId: config.permissionId,
-                configId: config.permissionId.toErc1271PolicyId().toConfigId(),
-                policyDatas: enableData.session.sessionToEnable.claimPolicies,
-                account: account
-            });
-            // Add the lockTag to the enabled lockTags for the account
-            $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
-
-            // Add to enabled sessions
-            $enabledSessions[lockTag]
-            .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
-        }
+        // Enable action policies
+        $actionPolicies.enable({
+            permissionId: config.permissionId,
+            actionPolicyDatas: enableData.session.sessionToEnable.actions,
+            account: account
+        });
 
         // Enable mode can involve enabling ISessionValidator (new Permission)
         // or just adding policies (existing permission)
@@ -173,6 +154,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 account: account
             });
         }
+
+        // Add the lockTag to the enabled lockTags for the account
+        $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
+
+        // Add to enabled sessions
+        $lockTagPermissions[lockTag]
+        .add({ account: account, value: PermissionId.unwrap(config.permissionId) });
     }
 
     /// TODO: CHECK IF THIS FUNCTION IS NEEDED ANYMORE
@@ -215,29 +203,10 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
                 account: account
             });
 
-            // Only enable Action and Claim policies if the lockTag is not NO_LOCKTAG
-            if (lockTag != NO_LOCKTAG) {
-                // Enable Action policies
-                $actionPolicies.enable({
-                    permissionId: permissionId, actionPolicyDatas: session.actions, account: account
-                });
-
-                // Enable Claim policies
-                $claimPolicies.enable({
-                    policyType: PolicyType.ERC1271,
-                    permissionId: permissionId,
-                    configId: permissionId.toErc1271PolicyId().toConfigId(),
-                    policyDatas: session.claimPolicies,
-                    account: account
-                });
-
-                // Add to enabled sessions
-                $enabledSessions[lockTag]
-                .add({ account: account, value: PermissionId.unwrap(permissionId) });
-
-                // Add the lockTag to the enabled lockTags for the account
-                $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
-            }
+            // Enable Action policies
+            $actionPolicies.enable({
+                permissionId: permissionId, actionPolicyDatas: session.actions, account: account
+            });
 
             // Enable the ISessionValidator for this session
             if (!_isISessionValidatorSet(permissionId, account)) {
@@ -250,6 +219,13 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             }
             permissionIds[i] = permissionId;
             emit SessionCreated(permissionId, account);
+
+            // Add to enabled sessions
+            $lockTagPermissions[lockTag]
+            .add({ account: account, value: PermissionId.unwrap(permissionId) });
+
+            // Add the lockTag to the enabled lockTags for the account
+            $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
         }
     }
 
@@ -308,9 +284,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         // Remove all ERC1271 policies for this session
         $erc1271Policies.policyList[permissionId].removeAll(account);
 
-        // Remove all Claim policies for this session
-        $claimPolicies.policyList[permissionId].removeAll(account);
-
         // Remove all Action policies for this session
         uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
         for (uint256 i; i < actionLength; i++) {
@@ -329,11 +302,11 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
 
         // Remove the permissionId from enabled sessions
-        $enabledSessions[lockTag]
+        $lockTagPermissions[lockTag]
         .remove({ account: account, value: PermissionId.unwrap(permissionId) });
 
         // Remove the lockTag from the enabled lockTags if no more sessions are active
-        if ($enabledSessions[lockTag].length(account) == 0) {
+        if ($lockTagPermissions[lockTag].length(account) == 0) {
             $enabledLockTags.remove({ account: account, value: bytes32(lockTag) });
         }
 

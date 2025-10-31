@@ -215,7 +215,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         returns (bool validSig)
     {
         // ensure that the permissionId is enabled for the sender, account, and lockTag
-        if (!$enabledSessions[lockTag].contains(account, PermissionId.unwrap(permissionId))) {
+        if (!$lockTagPermissions[lockTag].contains(account, PermissionId.unwrap(permissionId))) {
             revert InvalidPermissionId(permissionId);
         }
 
@@ -289,7 +289,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // forgefmt: disable-next-item
         if (
             // return false if permissionId is not enabled for lockTag and sender
-             !$enabledSessions[lockTag].contains(
+             !$lockTagPermissions[lockTag].contains(
                 sponsor, PermissionId.unwrap(permissionId)
             )
         ) return false;
@@ -298,7 +298,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         uint256 policyDataOffset = uint256(bytes32(signature[32:64]));
 
         // check the claim policy
-        bool valid = $claimPolicies.checkERC1271({
+        bool valid = $erc1271Policies.checkERC1271({
             account: sponsor,
             requestSender: sender,
             hash: hash,
@@ -363,6 +363,10 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         // forgefmt: disable-next-item
         if (
+            // return false if permissionId is not enabled for msg.sender
+            !$lockTagPermissions[NO_LOCKTAG].contains(
+                msg.sender, PermissionId.unwrap(permissionId)
+            ) ||
             // return false if the content is not enabled
             !$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(msg.sender, contentHash)
         ) return false;
