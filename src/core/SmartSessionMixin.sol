@@ -103,7 +103,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             account,
             disableData.session,
             config.permissionId,
-            config.sender,
             lockTag,
             disableData.expires,
             config.allocator,
@@ -289,7 +288,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // forgefmt: disable-next-item
         if (
             // return false if permissionId is not enabled for lockTag and sender
-             !$enabledSessions[lockTag].contains(
+             !$enabledSessions.contains(
                 sponsor, PermissionId.unwrap(permissionId)
             )
         ) return false;

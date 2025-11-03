@@ -107,8 +107,8 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     {
         // Increment nonce to prevent replay attacks
         uint256 nonce = $emissaryNonce[account][lockTag]++;
-        bytes32 hash = enableData.session
-            .getAndVerifyDigest(account, nonce, enableData.expires, lockTag, config.sender);
+        bytes32 hash =
+            enableData.session.getAndVerifyDigest(account, nonce, enableData.expires, lockTag);
 
         // Check if the permissionId is already enabled for the account
         bool isInit = $enabledLockTags.contains({ account: account, value: bytes32(lockTag) });
@@ -181,13 +181,11 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Enable multiple sessions with their associated policies
     /// @param sessions An array of Session structures to be enabled
     /// @param account The account address associated with the sessions
-    /// @param sender The address of the sender for the session, if applicable
     /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
     function _enableSessions(
         Session[] calldata sessions,
         address account,
-        bytes12 lockTag,
-        address sender
+        bytes12 lockTag
     )
         internal
         returns (PermissionId[] memory permissionIds)
@@ -261,7 +259,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param account The address of the account for which policies are being disabled
     /// @param disableData The data containing session and policy information to be disabled
     /// @param permissionId The unique identifier for the permission set
-    /// @param sender The address of the sender for the session
     /// @param lockTag The lock tag associated with the session
     /// @param allocator The address of the allocator for the session
     /// @param allocatorSig The signature from the allocator authorizing the session
@@ -270,7 +267,6 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         address account,
         DisableSession memory disableData,
         PermissionId permissionId,
-        address sender,
         bytes12 lockTag,
         uint256 expires,
         address allocator,
@@ -284,25 +280,23 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
 
         // Get the hash for the disable operation
         bytes32 hash =
-            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag, sender);
+            disableData.getAndVerifyDigest(permissionId, account, nonce, expires, lockTag);
 
         // Verify the user and allocator signatures
         hash.verifySignatures(allocator, account, allocatorSig, userSig, false);
 
         // Remove the session from the smart session config
-        _removeSession(permissionId, account, lockTag, sender);
+        _removeSession(permissionId, account, lockTag);
     }
 
     /// @notice Remove a session and all its associated policies
     /// @param permissionId The unique identifier for the session to be removed
     /// @param account The account address associated with the session
     /// @param lockTag The lock tag used to identify the session
-    /// @param sender The address of the sender for the session, if applicable
     function _removeSession(
         PermissionId permissionId,
         address account,
-        bytes12 lockTag,
-        address sender
+        bytes12 lockTag
     )
         internal
     {
@@ -312,11 +306,14 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         $erc1271Policies.policyList[permissionId].removeAll(account);
 
         // Remove all Action policies for this session
-        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
+        uint256 actionLength =
+            $actionPolicies[lockTag].enabledActionIds[permissionId].length(account);
         for (uint256 i; i < actionLength; i++) {
-            ActionId actionId =
-                ActionId.wrap($actionPolicies.enabledActionIds[permissionId].at(account, i));
-            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(account);
+            ActionId actionId = ActionId.wrap(
+                $actionPolicies[lockTag].enabledActionIds[permissionId].at(account, i)
+            );
+            $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId]
+            .removeAll(account);
         }
 
         // removing all stored actionIds
@@ -363,9 +360,10 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         returns (bytes32)
     {
         uint256 nonce = $emissaryNonce[account][lockTag];
-        return data.sessionDigest({
-            account: account, lockTag: lockTag, expires: expires, nonce: nonce, sender: sender
-        });
+        return
+            data.sessionDigest({
+                account: account, lockTag: lockTag, expires: expires, nonce: nonce
+            });
     }
 
     /// @notice Get the permission ID from a session
@@ -410,17 +408,21 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param account The account address
     /// @param permissionId The permission ID
     /// @param actionId The action ID
+    /// @param lockTag The associated lock tag
     /// @return Array of policy addresses
     function getActionPolicies(
         address account,
         PermissionId permissionId,
-        ActionId actionId
+        ActionId actionId,
+        bytes12 lockTag
     )
         external
         view
         returns (address[] memory)
     {
-        return $actionPolicies.actionPolicies[actionId].policyList[permissionId].values(account);
+        return
+            $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId]
+            .values(account);
     }
 
     /// @notice Get the ERC1271 policies for a specific permission ID
@@ -441,16 +443,18 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @notice Get all enabled actions for an account
     /// @param account The account address
     /// @param permissionId The permission ID
+    /// @param lockTag The associated lock tag
     /// @return Array of enabled action IDs as bytes32
     function getEnabledActions(
         address account,
-        PermissionId permissionId
+        PermissionId permissionId,
+        bytes12 lockTag
     )
         external
         view
         returns (bytes32[] memory)
     {
-        return $actionPolicies.enabledActionIds[permissionId].values(account);
+        return $actionPolicies[lockTag].enabledActionIds[permissionId].values(account);
     }
 
     /// @notice Get the session validator and its configuration

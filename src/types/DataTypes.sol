@@ -87,7 +87,6 @@ struct Session {
 /// @dev This configuration is used to set up the Smart Session Emissary with multiple sessions,
 ///      a scope, a reset period, and an allocator address.
 struct SmartSessionEmissaryConfig {
-    address sender;
     Scope scope;
     ResetPeriod resetPeriod;
     address allocator;
