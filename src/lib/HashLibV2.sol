@@ -30,7 +30,7 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
  *     address account,                                  // User account address
  *     SignedPermissions permissions,                    // Signed permissions struct
  *     │   bool  permitGenericPolicy,                    // Allow policy fallback
- *     │   PolicyData[] erc1271Policies                  // ERC1271 policies array
+ *     │   PolicyData[] claimPolicies                    // Claim policies array
  *     │   ├── address policy                            // Policy address
  *     │   └── bytes initData                            // Init data
  *     │   ActionData[] actions                          // Actions array
@@ -39,14 +39,20 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
  *     │   └── PolicyData[] actionPolicies               // Action policies array
  *     │       ├── address policy                        // Policy address
  *     │       └── bytes initData                        // Init data
+ *     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
+ *     │   ├── ERC7739Context[] allowedERC7739Content    // Allowed content array
+ *     │   │   ├── bytes32 appDomainSeparator            // Domain separator
+ *     │   │   └── string[] contentName                  // Content identifiers
+ *     │   └── PolicyData[] erc1271Policies              // ERC1271 policies array
+ *     │       ├── address policy                        // Policy address
+ *     │       └── bytes initData                        // Init data
  *     address sessionValidator,                         // Validator contract address
  *     bytes sessionValidatorInitData,                   // Validator initialization data
  *     bytes32 salt,                                     // Unique salt value
  *     address smartSessionEmissary,                     // Smart Session Emissary contract address
  *     uint256 nonce                                     // Nonce value
  *     uint256 expires,                                  // Expiration timestamp
- *     bytes12 lockTag,                                  // Lock tag for the session
- *     address sender                                    // Sender address
+ *     bytes12 lockTag                                   // Lock tag for the session
  * )
  */
 bytes32 constant SESSION_TYPEHASH =
@@ -154,15 +160,13 @@ library HashLibV2 {
     /// @param nonce The nonce value for the session
     /// @param expires The expiration timestamp for the session
     /// @param lockTag The lock tag for the session
-    /// @param sender The sender address for the session
     /// @return digest The computed digest for the session
     function _sessionDigest(
         Session memory session,
         address account,
         uint256 nonce,
         uint256 expires,
-        bytes12 lockTag,
-        address sender
+        bytes12 lockTag
     )
         internal
         view
@@ -181,8 +185,7 @@ library HashLibV2 {
                     address(this), // Smart Session Emissary contract address
                     nonce, // Session nonce
                     expires, // Expiration timestamp
-                    lockTag, // Lock tag for the session
-                    sender // Sender address
+                    lockTag // Lock tag for the session
                 )
             );
         }
@@ -194,14 +197,13 @@ library HashLibV2 {
         address account,
         uint256 nonce,
         uint256 expires,
-        bytes12 lockTag,
-        address sender
+        bytes12 lockTag
     )
         internal
         view
         returns (bytes32)
     {
-        return _sessionDigest(session, account, nonce, expires, lockTag, sender);
+        return _sessionDigest(session, account, nonce, expires, lockTag);
     }
 
     /// @dev Adjusted hashPermissions function to exclude unused fields from SmartSessions
