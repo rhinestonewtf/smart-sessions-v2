@@ -29,17 +29,19 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
 /*
  * SignedSession(
  *     address account,                                  // User account address
+ *     uint256 expires,                                  // Expiration timestamp
+ *     bytes12 lockTag,                                  // Lock tag for the session
+ *     uint256 nonce,                                    // Nonce value
  *     SignedPermissions permissions,                    // Signed permissions struct
- *     │   bool  permitGenericPolicy,                    // Allow policy fallback
- *     │   PolicyData[] claimPolicies                    // Claim policies array
- *     │   ├── address policy                            // Policy address
- *     │   └── bytes initData                            // Init data
  *     │   ActionData[] actions                          // Actions array
  *     │   ├── bytes4 actionTargetSelector               // Function selector
  *     │   ├── address actionTarget                      // Target contract
  *     │   └── PolicyData[] actionPolicies               // Action policies array
  *     │       ├── address policy                        // Policy address
  *     │       └── bytes initData                        // Init data
+ *     │   PolicyData[] claimPolicies                    // Claim policies array
+ *     │   ├── address policy                            // Policy address
+ *     │   └── bytes initData                            // Init data
  *     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
  *     │   ├── ERC7739Context[] allowedERC7739Content    // Allowed content array
  *     │   │   ├── bytes32 appDomainSeparator            // Domain separator
@@ -47,13 +49,11 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
  *     │   └── PolicyData[] erc1271Policies              // ERC1271 policies array
  *     │       ├── address policy                        // Policy address
  *     │       └── bytes initData                        // Init data
+ *     │   bool  permitGenericPolicy,                    // Allow policy fallback
+ *     bytes32 salt,                                     // Unique salt value
  *     address sessionValidator,                         // Validator contract address
  *     bytes sessionValidatorInitData,                   // Validator initialization data
- *     bytes32 salt,                                     // Unique salt value
- *     address smartSessionEmissary,                     // Smart Session Emissary contract address
- *     uint256 nonce                                     // Nonce value
- *     uint256 expires,                                  // Expiration timestamp
- *     bytes12 lockTag                                   // Lock tag for the session
+ *     address smartSessionEmissary                      // Smart Session Emissary contract address
  * )
  */
 bytes32 constant SESSION_TYPEHASH =
@@ -113,6 +113,7 @@ bytes32 constant MULTICHAIN_DISABLE_TYPEHASH =
 ///      - permitAdminAccess: bool
 ///      - permitERC4337Paymaster: bool
 ///      - userOpPolicies: PolicyData[]
+/// TODO: Alphanumerically order the fields in the comments above and recalc all typehashes
 library HashLibV2 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -164,14 +165,14 @@ library HashLibV2 {
                 abi.encode(
                     SESSION_TYPEHASH, // Typehash for the SignedSession struct
                     account, // User account address (sponsor)
+                    expires, // Expiration timestamp
+                    lockTag, // Lock tag for the session
+                    nonce, // Session nonce
                     hashPermissions(session), // Hashed permissions data
+                    session.salt, // Session salt
                     address(session.sessionValidator), // Validator contract address
                     keccak256(session.sessionValidatorInitData), // Validator initialization data
-                    session.salt, // Session salt
-                    address(this), // Smart Session Emissary contract address
-                    nonce, // Session nonce
-                    expires, // Expiration timestamp
-                    lockTag // Lock tag for the session
+                    address(this) // Smart Session Emissary contract address
                 )
             );
         }
@@ -198,10 +199,10 @@ library HashLibV2 {
         return keccak256(
             abi.encode(
                 SIGNED_PERMISSIONS_TYPEHASH,
-                permitFallback, // permitGenericPolicy
+                actionDataArrayHash, // actions
                 session.claimPolicies.hashPolicyDataArray(), // claimPolicies
                 session.erc7739Policies.hashERC7739Data(), // erc1271Policies
-                actionDataArrayHash // actions
+                permitFallback // permitGenericPolicy
             )
         );
     }
