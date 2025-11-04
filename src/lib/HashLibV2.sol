@@ -39,16 +39,16 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
  *     │   └── PolicyData[] actionPolicies               // Action policies array
  *     │       ├── address policy                        // Policy address
  *     │       └── bytes initData                        // Init data
- *     │   PolicyData[] claimPolicies                    // Claim policies array
- *     │   ├── address policy                            // Policy address
- *     │   └── bytes initData                            // Init data
- *     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
+*     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
  *     │   ├── ERC7739Context[] allowedERC7739Content    // Allowed content array
  *     │   │   ├── bytes32 appDomainSeparator            // Domain separator
  *     │   │   └── string[] contentName                  // Content identifiers
  *     │   └── PolicyData[] erc1271Policies              // ERC1271 policies array
  *     │       ├── address policy                        // Policy address
  *     │       └── bytes initData                        // Init data
+ *     │   PolicyData[] claimPolicies                    // Claim policies array
+ *     │   ├── address policy                            // Policy address
+ *     │   └── bytes initData                            // Init data
  *     │   bool  permitGenericPolicy,                    // Allow policy fallback
  *     bytes32 salt,                                     // Unique salt value
  *     address sessionValidator,                         // Validator contract address
@@ -200,8 +200,8 @@ library HashLibV2 {
             abi.encode(
                 SIGNED_PERMISSIONS_TYPEHASH,
                 actionDataArrayHash, // actions
-                session.claimPolicies.hashPolicyDataArray(), // claimPolicies
                 session.erc7739Policies.hashERC7739Data(), // erc1271Policies
+                session.claimPolicies.hashPolicyDataArray(), // claimPolicies
                 permitFallback // permitGenericPolicy
             )
         );
