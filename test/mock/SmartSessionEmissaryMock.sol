@@ -39,13 +39,12 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
     /// @notice Enable multiple sessions with their associated policies
     function enableSessions(
         Session[] calldata sessions,
-        bytes12 lockTag,
-        address sender
+        bytes12 lockTag
     )
         external
         returns (PermissionId[] memory permissionIds)
     {
-        return _enableSessions(sessions, msg.sender, lockTag, sender);
+        return _enableSessions(sessions, msg.sender, lockTag);
     }
 
     /*//////////////////////////////////////////////////////////////
