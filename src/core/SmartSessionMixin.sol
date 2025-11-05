@@ -18,6 +18,8 @@ import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { EncodeLibV2 } from "@lib/EncodeLibV2.sol";
 import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
+import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
+import { ExecutionLibV2 } from "@lib/ExecutionLibV2.sol";
 
 // Types
 import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
@@ -30,6 +32,7 @@ import {
     SmartSessionEmissaryDisable
 } from "@types/DataTypes.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
+import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
@@ -44,6 +47,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using IdLibV2 for *;
     using EnumerableSet for *;
     using ExecutionLib for *;
+    using ExecutionLibV2 for *;
     using PolicyLib for *;
     using PolicyLibV2 for *;
     using SignerLib for *;
@@ -51,6 +55,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using HashLibV2 for *;
     using SignatureCheckerLib for *;
     using DigestCacheLib for *;
+    using SmartExecutionLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                 CONFIG
@@ -162,7 +167,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         address account,
         bytes32 hash,
         bytes calldata emissaryData,
-        Execution[] calldata executions,
+        Types.Operation calldata executions,
         bytes12 lockTag
     )
         internal
@@ -179,7 +184,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         validSig = _enforceActionPolicies({
             permissionId: permissionId,
             hash: hash,
-            executions: executions,
+            executions: executions.safeToERC7579().parse(),
             decompressedSignature: packedSig,
             account: account,
             lockTag: lockTag

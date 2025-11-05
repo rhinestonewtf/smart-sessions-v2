@@ -23,6 +23,9 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
     /// @notice The SmartSessionEmissary contract instance.
     SmartSessionEmissaryMock internal smartSessionEmissary;
 
+    /// @notice Mock intent executor address.
+    address internal MOCK_INTENT_EXECUTOR;
+
     /*//////////////////////////////////////////////////////////////
                                   SETUP
     //////////////////////////////////////////////////////////////*/
@@ -30,8 +33,10 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
     function setUp() public virtual override {
         // Call the base setup function.
         super.setUp();
+        // Define the mock intent executor address.
+        MOCK_INTENT_EXECUTOR = makeAddr("MockIntentExecutor");
         // Deploy the SmartSessionEmissary contract.
-        smartSessionEmissary = new SmartSessionEmissaryMock();
+        smartSessionEmissary = new SmartSessionEmissaryMock(MOCK_INTENT_EXECUTOR);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -64,9 +69,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         );
 
         enableData = EnableSession({
-            chainDigestIndex: 1,
-            hashesAndChainIds: chainDigests,
-            sessionToEnable: session
+            chainDigestIndex: 1, hashesAndChainIds: chainDigests, sessionToEnable: session
         });
     }
 }

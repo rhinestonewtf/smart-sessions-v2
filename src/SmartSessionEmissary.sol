@@ -17,6 +17,7 @@ import { ModeLib, EmissaryMode, EMISSARY_VANILLA, EMISSARY_SMART_SESSION } from 
 import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
 import { PackedUserOperation } from "@modulekit/external/ERC4337.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
+import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 /// @title Smart Session Emissary
 /// @notice A 7579 1271 validator that also serves as an emissary supporting both vanilla and
@@ -155,7 +156,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        Execution[] calldata executions,
+        Types.Operation calldata executions,
         bytes12 lockTag
     )
         public

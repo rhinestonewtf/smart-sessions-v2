@@ -12,7 +12,7 @@ import {
     SmartSessionEmissaryEnable
 } from "@types/DataTypes.sol";
 import { PermissionId } from "@smartsessions/DataTypes.sol";
-import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
+import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 interface ISmartSessionEmissary is IEmissary {
     /*//////////////////////////////////////////////////////////////
@@ -113,7 +113,7 @@ interface ISmartSessionEmissary is IEmissary {
         address account,
         bytes32 hash,
         bytes calldata data,
-        Execution[] calldata executions,
+        Types.Operation calldata executions,
         bytes12 lockTag
     )
         external

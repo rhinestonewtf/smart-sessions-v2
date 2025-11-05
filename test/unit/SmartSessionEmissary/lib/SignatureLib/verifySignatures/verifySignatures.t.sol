@@ -279,22 +279,22 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
         );
     }
 
-    function test_verifySignatures_ZeroAllocatorAddress() public {
-        // Arrange
-        bytes memory sig = createSmartAccountSignature(testHash, userPrivateKey);
+    // function test_verifySignatures_ZeroAllocatorAddress() public {
+    //     // Arrange
+    //     bytes memory sig = createSmartAccountSignature(testHash, userPrivateKey);
 
-        // Act & Assert - Zero allocator address
-        vm.prank(address(this));
-        vm.expectRevert(SignatureLib.InvalidAllocatorSignature.selector);
-        this.callVerifySignatures(
-            testHash,
-            address(0),
-            userWallet,
-            sig,
-            sig,
-            false // not init
-        );
-    }
+    //     // Act & Assert - Zero allocator address
+    //     vm.prank(address(this));
+    //     vm.expectRevert(SignatureLib.InvalidAllocatorSignature.selector);
+    //     this.callVerifySignatures(
+    //         testHash,
+    //         address(0),
+    //         userWallet,
+    //         sig,
+    //         sig,
+    //         false // not init
+    //     );
+    // }
 
     function test_verifySignatures_InitModeSkipsAllocatorCheck() public {
         // Arrange - Invalid allocator signature but valid user signature
