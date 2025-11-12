@@ -364,7 +364,6 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         bytes32 contentHash = string(contents).hashERC7739Content();
         // isolate the PermissionId and actual signature from the supplied signature param
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
-        signature = signature[32:];
 
         // forgefmt: disable-next-item
         if (

@@ -121,8 +121,9 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
         // Enable ERC7739 content
         $enabledERC7739.enable(
             enableData.session.sessionToEnable.erc7739Policies.allowedERC7739Content,
-            config.permissionId // TODO: Can we do this? Or do we need to do
+            config.permissionId, // TODO: Can we do this? Or do we need to do
                 // session.toPermissionId()?
+            account
         );
 
         // Enable ERC1271 policies
@@ -200,11 +201,11 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
             PermissionId permissionId = session.toPermissionId();
 
             // Enable ERC7739 content
-            $enabledERC7739.enable(
-                session.erc7739Policies.allowedERC7739Content,
-                permissionId // TODO: Can we do this? Or do we need to do
-                    // session.toPermissionId()?
-            );
+            $enabledERC7739.enable({
+                contexts: session.erc7739Policies.allowedERC7739Content,
+                permissionId: permissionId, // TODO: Can we do this?
+                account: account
+            });
 
             // Enable ERC1271 policies
             $erc1271Policies.enable({
@@ -346,14 +347,12 @@ abstract contract SmartSessionManager is NonceManager, ISmartSessionEmissary {
     /// @param lockTag The lock tag used to identify the session
     /// @param data The session data
     /// @param expires The expiration timestamp for the session
-    /// @param sender The address of the sender for the session, if applicable
     /// @return The session digest
     function getSessionDigest(
         address account,
         Session memory data,
         bytes12 lockTag,
-        uint256 expires,
-        address sender
+        uint256 expires
     )
         public
         view

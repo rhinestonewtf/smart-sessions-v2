@@ -39,7 +39,7 @@ import { EnableSession, DisableSession, Session } from "@types/DataTypes.sol";
  *     │   └── PolicyData[] actionPolicies               // Action policies array
  *     │       ├── address policy                        // Policy address
  *     │       └── bytes initData                        // Init data
-*     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
+ *     │   ERC7739Data erc7739Policies                   // ERC7739 policies struct
  *     │   ├── ERC7739Context[] allowedERC7739Content    // Allowed content array
  *     │   │   ├── bytes32 appDomainSeparator            // Domain separator
  *     │   │   └── string[] contentName                  // Content identifiers

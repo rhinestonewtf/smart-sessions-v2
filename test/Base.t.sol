@@ -8,8 +8,9 @@ import { NoSessionValidator } from "@test/mock/NoSessionValidator.sol";
 import { NoValidator } from "@test/mock/NoValidator.sol";
 import { NoPolicy } from "@smartsessions-test/mock/NoPolicy.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
-import { SmartSessionCompatibilityFallback } from
-    "@smartsessions/SmartSessionCompatibilityFallback.sol";
+import {
+    SmartSessionCompatibilityFallback
+} from "@smartsessions/SmartSessionCompatibilityFallback.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
@@ -114,6 +115,8 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         noValidator = new NoValidator();
         // Deploy the NoPolicy contract.
         noPolicy = new NoPolicy();
+        // Deploy fallback module
+        fallbackModule = new SmartSessionCompatibilityFallback();
     }
 
     /*//////////////////////////////////////////////////////////////
