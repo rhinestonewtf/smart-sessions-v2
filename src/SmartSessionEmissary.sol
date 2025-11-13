@@ -91,7 +91,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         // disallow that session can be authorized by other sessions
         if (sender == address(this)) return INVALID_SIGNATURE;
         bool success = _erc1271IsValidSignatureViaNestedEIP712(
-            sender, hash, _erc1271UnwrapSignature(signature[12:])
+            sender, hash, _erc1271UnwrapSignature(signature)
         );
         /// @solidity memory-safe-assembly
         assembly {

@@ -48,7 +48,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         address, /*validator*/
         bytes12 lockTag,
         uint256 expires,
-        address sender,
+        address,
         address /*allocator*/
     )
         internal
@@ -56,11 +56,7 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         returns (EnableSession memory enableData)
     {
         bytes32 sessionDigest = smartSessionEmissary.getSessionDigest({
-            lockTag: lockTag,
-            account: instance.account,
-            data: session,
-            expires: expires,
-            sender: sender
+            lockTag: lockTag, account: instance.account, data: session, expires: expires
         });
 
         ChainDigest[] memory chainDigests = IntegrationEncodeLib.encodeHashesAndChainIds(
