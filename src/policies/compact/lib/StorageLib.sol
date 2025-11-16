@@ -6,32 +6,53 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
-import { ParamRules } from "@policies/claim/types/DataTypes.sol";
+import { ParamRules } from "@policies/compact/types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                              STRUCTS
 //////////////////////////////////////////////////////////////*/
 
 struct PolicyStorage {
-    // Mapping to store the policy configuration bitmap for each account and config ID
+    // ========== CONFIG BITMAP ==========
+    // 2 bits per field (9 fields = 18 bits)
+    // Bits [1:0]   - Arbiter mode
+    // Bits [3:2]   - ClaimExpires mode
+    // Bits [5:4]   - TokenIn mode
+    // Bits [7:6]   - Recipient mode
+    // Bits [9:8]   - FillExpiry mode
+    // Bits [11:10] - TokenOut mode
+    // Bits [13:12] - OriginOps mode
+    // Bits [15:14] - DestOps mode
+    // Bits [17:16] - Qualification mode
+    mapping(
+        ConfigId id
+            => mapping(address msgSender => mapping(address userOpSender => uint32 modeConfig))
+    ) modeConfig;
+
+    // =========== SUB-POLICY CONFIGS ==========
     mapping(
         ConfigId id
             => mapping(
-            address msgSender => mapping(address userOpSender => PolicyConfig conditionsBitmap)
+            address msgSender
+                => mapping(address userOpSender => mapping(uint8 fieldId => address policy))
         )
-    ) policyConfig;
-    // Arbiter validation
+    ) subPolicies;
+
+    // ========== STORAGE-BASED CONFIGS ==========
+
+    // Arbiter validation (single value, not per chain)
     mapping(
         ConfigId id
             => mapping(address msgSender => mapping(address userOpSender => address arbiter))
     ) arbiterConfig;
+
     // Claim expires validation (packed: uint128 min | uint128 max)
     mapping(
         ConfigId id
             => mapping(address msgSender => mapping(address userOpSender => uint256 packedExpires))
     ) claimExpiresConfig;
-    // TokenIn: per chainId (chainId = 0 for catch-all)
+
+    // TokenIn: per chainId (chainId = 0 for catch-all if mode = MODE_CHECK_CATCHALL)
     // EnumerableSet of packed configs: address (20 bytes) + lockTag (12 bytes) = bytes32
     mapping(
         ConfigId id
@@ -42,7 +63,8 @@ struct PolicyStorage {
             )
         )
     ) tokenInSet;
-    // Recipient: per targetChainId (targetChainId = 0 for catch-all)
+
+    // Recipient: per targetChainId (targetChainId = 0 for catch-all if mode = MODE_CHECK_CATCHALL)
     mapping(
         ConfigId id
             => mapping(
@@ -52,7 +74,8 @@ struct PolicyStorage {
             )
         )
     ) recipientConfig;
-    // FillExpiry: per targetChainId (targetChainId = 0 for catch-all)
+
+    // FillExpiry: per targetChainId (targetChainId = 0 for catch-all if mode = MODE_CHECK_CATCHALL)
     // Packed: uint128 min | uint128 max
     mapping(
         ConfigId id
@@ -63,7 +86,8 @@ struct PolicyStorage {
             )
         )
     ) fillExpiryConfig;
-    // TokenOut: per targetChainId (targetChainId = 0 for catch-all)
+
+    // TokenOut: per targetChainId (targetChainId = 0 for catch-all if mode = MODE_CHECK_CATCHALL)
     // EnumerableSet of addresses
     mapping(
         ConfigId id
@@ -75,18 +99,32 @@ struct PolicyStorage {
             )
         )
     ) tokenOutSet;
-    // Ops requirements: per chainId (chainId = 0 for catch-all)
-    // Packed: bool requireOriginOps (bit 0) | bool requireDestOps (bit 1)
+
+    // OriginOps requirements: per chainId (chainId = 0 for catch-all if mode = MODE_CHECK_CATCHALL)
+    // Just a bool: true = must have non-empty originOps
     mapping(
         ConfigId id
             => mapping(
             address msgSender
                 => mapping(
-                address userOpSender => mapping(uint256 chainId => uint8 packedOpsRequirement)
+                address userOpSender => mapping(uint256 chainId => bool requireOriginOps)
             )
         )
-    ) opsRequirementConfig;
-    // Qualification params: per chainId (chainId = 0 for catch-all)
+    ) originOpsConfig;
+
+    // DestOps requirements: per targetChainId (targetChainId = 0 for catch-all if mode =
+    // MODE_CHECK_CATCHALL) Just a bool: true = must have non-empty destOps
+    mapping(
+        ConfigId id
+            => mapping(
+            address msgSender
+                => mapping(
+                address userOpSender => mapping(uint256 targetChainId => bool requireDestOps)
+            )
+        )
+    ) destOpsConfig;
+
+    // Qualification params: per chainId (chainId = 0 for catch-all if mode = MODE_CHECK_CATCHALL)
     mapping(
         ConfigId id
             => mapping(
@@ -117,7 +155,7 @@ library StorageLib {
     //////////////////////////////////////////////////////////////*/
 
     // TODO: Hardcode and truncate this
-    bytes32 internal constant POLICY_STORAGE_POSITION = keccak256("claim.recipient.policy.storage");
+    bytes32 internal constant POLICY_STORAGE_POSITION = keccak256("compact.claim.policy.storage");
 
     /*//////////////////////////////////////////////////////////////
                                STORAGE ACCESS
@@ -129,5 +167,42 @@ library StorageLib {
         assembly {
             ps.slot := position
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            MODE EXTRACTION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Extracts the mode for a specific field from the packed mode config
+    /// @param modeConfig The packed mode configuration (uint32)
+    /// @param fieldId The field ID (0-8)
+    /// @return mode The 2-bit mode value (0-3)
+    function getFieldMode(
+        uint32 modeConfig,
+        uint8 fieldId
+    )
+        internal
+        pure
+        returns (uint8 mode)
+    {
+        mode = uint8((modeConfig >> (fieldId * 2)) & 0x3);
+    }
+
+    /// @notice Sets the mode for a specific field in the packed mode config
+    /// @param modeConfig The current packed mode configuration
+    /// @param fieldId The field ID (0-8)
+    /// @param mode The 2-bit mode value (0-3)
+    /// @return newConfig The updated mode configuration
+    function setFieldMode(
+        uint32 modeConfig,
+        uint8 fieldId,
+        uint8 mode
+    )
+        internal
+        pure
+        returns (uint32 newConfig)
+    {
+        uint32 mask = ~(uint32(0x3) << (fieldId * 2));
+        newConfig = (modeConfig & mask) | (uint32(mode) << (fieldId * 2));
     }
 }

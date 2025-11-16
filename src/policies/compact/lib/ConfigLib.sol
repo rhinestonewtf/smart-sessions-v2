@@ -4,21 +4,36 @@ pragma solidity ^0.8.28;
 // Types
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
-    TokenInConfig,
-    RecipientConfig,
-    FillExpiryConfig,
-    TokenOutConfig,
-    OpsRequirementConfig,
-    QualificationConfig,
+    SubPolicyConfig,
     ParamRules,
-    ParamRule
+    ParamRule,
+    TokenInStorageConfig,
+    RecipientStorageConfig,
+    FillExpiryStorageConfig,
+    TokenOutStorageConfig,
+    OriginOpsStorageConfig,
+    DestOpsStorageConfig,
+    QualificationStorageConfig,
+    MODE_SKIP,
+    MODE_CHECK_STORAGE,
+    MODE_CHECK_CATCHALL,
+    MODE_CHECK_SUBPOLICY,
+    FIELD_ARBITER,
+    FIELD_CLAIM_EXPIRES,
+    FIELD_TOKEN_IN,
+    FIELD_RECIPIENT,
+    FIELD_FILL_EXPIRY,
+    FIELD_TOKEN_OUT,
+    FIELD_ORIGIN_OPS,
+    FIELD_DEST_OPS,
+    FIELD_QUALIFICATION
 } from "@policies/compact/types/DataTypes.sol";
 
 /* //////////////////////////////////////////////////////////////
                             TYPES
 //////////////////////////////////////////////////////////////*/
 
-type PolicyConfig is uint16; // Bitmap to determine which conditions to check + catch-all flags
+type PolicyConfig is uint32; // Mode configuration: 2 bits per field
 
 using { neQConfig as != } for PolicyConfig global;
 using { eqConfig as == } for PolicyConfig global;
@@ -40,149 +55,87 @@ library ConfigLib {
                                  TYPES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Initialization data structure
     struct InitData {
-        // Which conditions to enable
-        // Bits 0-8: Condition checks
-        // 0 - CHECK_ARBITER
-        // 1 - CHECK_CLAIM_EXPIRES
-        // 2 - CHECK_TOKEN_IN
-        // 3 - CHECK_RECIPIENT
-        // 4 - CHECK_FILL_EXPIRY
-        // 5 - CHECK_TOKEN_OUT
-        // 6 - CHECK_HAS_ORIGIN_OPS
-        // 7 - CHECK_HAS_DEST_OPS
-        // 8 - CHECK_QUALIFICATION
-        //
-        // Bits 9-14: Catch-all flags
-        // 9 - HAS_TOKEN_IN_CATCHALL
-        // 10 - HAS_RECIPIENT_CATCHALL
-        // 11 - HAS_FILL_EXPIRY_CATCHALL
-        // 12 - HAS_TOKEN_OUT_CATCHALL
-        // 13 - HAS_OPS_REQUIREMENT_CATCHALL
-        // 14 - HAS_QUALIFICATION_CATCHALL
-        uint16 conditionsBitmap;
-        // CHECK_ARBITER (condition 0)
+        // Mode configuration (2 bits per field, 9 fields)
+        uint32 modeConfig;
+        // Storage-based configs
         address arbiter;
-        // CHECK_CLAIM_EXPIRES (condition 1)
         uint128 minClaimExpires;
         uint128 maxClaimExpires;
-        // CHECK_TOKEN_IN (condition 2)
-        // Can have multiple tokenIn configurations per chain (chainId = 0 for catch-all)
-        TokenInConfig[] tokenInConfigs;
-        // CHECK_RECIPIENT (condition 3)
-        // Can have multiple recipient configurations per targetChainId (0 for catch-all)
-        RecipientConfig[] recipientConfigs;
-        // CHECK_FILL_EXPIRY (condition 4)
-        // Can have multiple fillExpiry configurations per targetChainId (0 for catch-all)
-        FillExpiryConfig[] fillExpiryConfigs;
-        // CHECK_TOKEN_OUT (condition 5)
-        // Can have multiple tokenOut configurations per target chain
-        TokenOutConfig[] tokenOutConfigs;
-        // CHECK_HAS_ORIGIN_OPS / CHECK_HAS_DEST_OPS (conditions 6 & 7)
-        // Can have multiple ops requirement configurations per chainId (0 for catch-all)
-        OpsRequirementConfig[] opsRequirementConfigs;
-        // CHECK_QUALIFICATION (condition 8)
-        // Can have multiple qualification configurations per chainId (0 for catch-all)
-        QualificationConfig[] qualificationConfigs;
+        TokenInStorageConfig[] tokenInConfigs;
+        RecipientStorageConfig[] recipientConfigs;
+        FillExpiryStorageConfig[] fillExpiryConfigs;
+        TokenOutStorageConfig[] tokenOutConfigs;
+        OriginOpsStorageConfig[] originOpsConfigs;
+        DestOpsStorageConfig[] destOpsConfigs;
+        QualificationStorageConfig[] qualificationConfigs;
+        // Sub-policy configs
+        SubPolicyConfig[] subPolicies;
     }
 
     /* //////////////////////////////////////////////////////////////
-                                 BITMAP
+                            MODE EXTRACTION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Returns if the bitmap has the arbiter condition set
-    /// @return true if the arbiter condition is set, false otherwise
+    /// @notice Gets the mode for a specific field
+    /// @param config The policy configuration
+    /// @param fieldId The field ID (0-8)
+    /// @return mode The 2-bit mode (0-3)
+    function getFieldMode(
+        PolicyConfig config,
+        uint8 fieldId
+    )
+        internal
+        pure
+        returns (uint8 mode)
+    {
+        uint32 modeConfig = PolicyConfig.unwrap(config);
+        mode = uint8((modeConfig >> (fieldId * 2)) & 0x3);
+    }
+
+    /// @notice Checks if arbiter validation is enabled (mode != SKIP)
     function hasCheckArbiter(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 1 != 0;
+        return getFieldMode(config, FIELD_ARBITER) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the claim expires condition set
-    /// @return true if the claim expires condition is set, false otherwise
+    /// @notice Checks if claim expires validation is enabled (mode != SKIP)
     function hasCheckClaimExpires(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 2 != 0;
+        return getFieldMode(config, FIELD_CLAIM_EXPIRES) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the tokenIn condition set
-    /// @return true if the tokenIn condition is set, false otherwise
+    /// @notice Checks if tokenIn validation is enabled (mode != SKIP)
     function hasCheckTokenIn(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 4 != 0;
+        return getFieldMode(config, FIELD_TOKEN_IN) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the recipient condition set
-    /// @return true if the recipient condition is set, false otherwise
+    /// @notice Checks if recipient validation is enabled (mode != SKIP)
     function hasCheckRecipient(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 8 != 0;
+        return getFieldMode(config, FIELD_RECIPIENT) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the fillExpiry condition set
-    /// @return true if the fillExpiry condition is set, false otherwise
+    /// @notice Checks if fillExpiry validation is enabled (mode != SKIP)
     function hasCheckFillExpiry(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 16 != 0;
+        return getFieldMode(config, FIELD_FILL_EXPIRY) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the tokenOut condition set
-    /// @return true if the tokenOut condition is set, false otherwise
+    /// @notice Checks if tokenOut validation is enabled (mode != SKIP)
     function hasCheckTokenOut(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 32 != 0;
+        return getFieldMode(config, FIELD_TOKEN_OUT) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the hasOriginOps condition set
-    /// @return true if the hasOriginOps condition is set, false otherwise
-    function hasCheckHasOriginOps(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 64 != 0;
+    /// @notice Checks if originOps validation is enabled (mode != SKIP)
+    function hasCheckOriginOps(PolicyConfig config) internal pure returns (bool) {
+        return getFieldMode(config, FIELD_ORIGIN_OPS) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the hasDestOps condition set
-    /// @return true if the hasDestOps condition is set, false otherwise
-    function hasCheckHasDestOps(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 128 != 0;
+    /// @notice Checks if destOps validation is enabled (mode != SKIP)
+    function hasCheckDestOps(PolicyConfig config) internal pure returns (bool) {
+        return getFieldMode(config, FIELD_DEST_OPS) != MODE_SKIP;
     }
 
-    /// @notice Returns if the bitmap has the qualifications condition set
-    /// @return true if the qualifications condition is set, false otherwise
+    /// @notice Checks if qualification validation is enabled (mode != SKIP)
     function hasCheckQualification(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 256 != 0;
-    }
-
-    /* //////////////////////////////////////////////////////////////
-                            CATCH-ALL FLAGS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Returns if tokenIn has a catch-all configuration (chainId = 0)
-    /// @return true if catch-all exists, false otherwise
-    function hasTokenInCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 512 != 0;
-    }
-
-    /// @notice Returns if recipient has a catch-all configuration (targetChainId = 0)
-    /// @return true if catch-all exists, false otherwise
-    function hasRecipientCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 1024 != 0;
-    }
-
-    /// @notice Returns if fillExpiry has a catch-all configuration (targetChainId = 0)
-    /// @return true if catch-all exists, false otherwise
-    function hasFillExpiryCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 2048 != 0;
-    }
-
-    /// @notice Returns if tokenOut has a catch-all configuration (targetChainId = 0)
-    /// @return true if catch-all exists, false otherwise
-    function hasTokenOutCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 4096 != 0;
-    }
-
-    /// @notice Returns if ops requirement has a catch-all configuration (chainId = 0)
-    /// @return true if catch-all exists, false otherwise
-    function hasOpsRequirementCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 8192 != 0;
-    }
-
-    /// @notice Returns if qualification has a catch-all configuration (chainId = 0)
-    /// @return true if catch-all exists, false otherwise
-    function hasQualificationCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 16_384 != 0;
+        return getFieldMode(config, FIELD_QUALIFICATION) != MODE_SKIP;
     }
 
     /* //////////////////////////////////////////////////////////////
@@ -217,26 +170,53 @@ library ConfigLib {
         data = initData[32:];
     }
 
+    /// @notice Decodes the tokenIn configuration from the initialization data
+    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) + 12 (lockTag) = 64 bytes
+    /// @param initData The initialization data containing tokenIn configs
+    /// @return packedConfigs Array of packed tokenIn configurations
+    /// @return chainIds Array of chainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeTokenInConfig(bytes calldata initData)
+        internal
+        pure
+        returns (bytes32[] memory packedConfigs, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        packedConfigs = new bytes32[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 64;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+            address token = address(bytes20(initData[offset + 32:offset + 52]));
+            bytes12 lockTag = bytes12(initData[offset + 52:offset + 64]);
+
+            // Pack into bytes32: address (20 bytes) in lower bits, lockTag (12 bytes) in upper bits
+            packedConfigs[i] = bytes32(uint256(uint160(token))) | (bytes32(lockTag) >> 160);
+        }
+
+        data = initData[32 + count * 64:];
+    }
+
     /// @notice Decodes the recipient configuration from the initialization data
     /// @dev Each RecipientConfig: 32 (targetChainId) + 20 (recipient) = 52 bytes
     /// @param initData The initialization data containing recipient configs
-    /// @return configs Array of recipient configurations
+    /// @return recipients Array of recipient addresses
     /// @return chainIds Array of targetChainIds corresponding to configs
     /// @return data The remaining initialization data after decoding
     function decodeRecipientConfig(bytes calldata initData)
         internal
         pure
-        returns (RecipientConfig[] memory configs, uint256[] memory chainIds, bytes calldata data)
+        returns (address[] memory recipients, uint256[] memory chainIds, bytes calldata data)
     {
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new RecipientConfig[](count);
+        recipients = new address[](count);
         chainIds = new uint256[](count);
 
         for (uint256 i = 0; i < count; i++) {
             uint256 offset = 32 + i * 52;
             chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            configs[i] =
-                RecipientConfig({ recipient: address(bytes20(initData[offset + 32:offset + 52])) });
+            recipients[i] = address(bytes20(initData[offset + 32:offset + 52]));
         }
 
         data = initData[32 + count * 52:];
@@ -245,16 +225,16 @@ library ConfigLib {
     /// @notice Decodes the fillExpiry configuration from the initialization data
     /// @dev Each FillExpiryConfig: 32 (targetChainId) + 16 (minFillExpiry) + 16 (maxFillExpiry) =
     /// 64 bytes @param initData The initialization data containing fillExpiry configs
-    /// @return configs Array of fillExpiry configurations
+    /// @return packedExpiries Array of packed fill expiry values
     /// @return chainIds Array of targetChainIds corresponding to configs
     /// @return data The remaining initialization data after decoding
     function decodeFillExpiryConfig(bytes calldata initData)
         internal
         pure
-        returns (FillExpiryConfig[] memory configs, uint256[] memory chainIds, bytes calldata data)
+        returns (uint256[] memory packedExpiries, uint256[] memory chainIds, bytes calldata data)
     {
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new FillExpiryConfig[](count);
+        packedExpiries = new uint256[](count);
         chainIds = new uint256[](count);
 
         for (uint256 i = 0; i < count; i++) {
@@ -264,32 +244,106 @@ library ConfigLib {
             uint128 minFillExpiry = uint128(bytes16(initData[offset + 32:offset + 48]));
             uint128 maxFillExpiry = uint128(bytes16(initData[offset + 48:offset + 64]));
 
-            configs[i] =
-                FillExpiryConfig({ packedFillExpiry: packUint128(minFillExpiry, maxFillExpiry) });
+            packedExpiries[i] = packUint128(minFillExpiry, maxFillExpiry);
         }
 
         data = initData[32 + count * 64:];
     }
 
+    /// @notice Decodes the tokenOut configuration from the initialization data
+    /// @dev Each TokenOutConfig: 32 (targetChainId) + 20 (token) = 52 bytes
+    /// @param initData The initialization data containing tokenOut configs
+    /// @return tokens Array of token addresses
+    /// @return chainIds Array of targetChainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeTokenOutConfig(bytes calldata initData)
+        internal
+        pure
+        returns (address[] memory tokens, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        tokens = new address[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 52;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+            tokens[i] = address(bytes20(initData[offset + 32:offset + 52]));
+        }
+
+        data = initData[32 + count * 52:];
+    }
+
+    /// @notice Decodes the origin ops requirement configuration from the initialization data
+    /// @dev Each OriginOpsConfig: 32 (chainId) + 1 (requireOriginOps) = 33 bytes
+    /// @param initData The initialization data containing origin ops requirement configs
+    /// @return requireFlags Array of bool flags
+    /// @return chainIds Array of chainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeOriginOpsConfig(bytes calldata initData)
+        internal
+        pure
+        returns (bool[] memory requireFlags, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        requireFlags = new bool[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 33;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+            requireFlags[i] = uint8(initData[offset + 32]) != 0;
+        }
+
+        data = initData[32 + count * 33:];
+    }
+
+    /// @notice Decodes the dest ops requirement configuration from the initialization data
+    /// @dev Each DestOpsConfig: 32 (targetChainId) + 1 (requireDestOps) = 33 bytes
+    /// @param initData The initialization data containing dest ops requirement configs
+    /// @return requireFlags Array of bool flags
+    /// @return chainIds Array of targetChainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeDestOpsConfig(bytes calldata initData)
+        internal
+        pure
+        returns (bool[] memory requireFlags, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        requireFlags = new bool[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 33;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+            requireFlags[i] = uint8(initData[offset + 32]) != 0;
+        }
+
+        data = initData[32 + count * 33:];
+    }
+
     /// @notice Decodes the qualification configuration from the initialization data
     /// @dev Format: count (32) + [chainId (32) + typehash (32) + rootNodeIndex (1) + ruleCount (32)
-    /// + rules + packedNodes] * count @param initData The initialization data containing
-    /// qualification configs
+    /// + rules + packedNodesLength (32) + packedNodes] * count @param initData The initialization
+    /// data containing qualification configs
     /// @return configs Array of qualification configurations
     /// @return chainIds Array of chainIds corresponding to configs
+    /// @return typehashes Array of typehashes corresponding to configs
     /// @return data The remaining initialization data after decoding
     function decodeQualificationConfig(bytes calldata initData)
         internal
         pure
         returns (
-            QualificationConfig[] memory configs,
+            ParamRules[] memory configs,
             uint256[] memory chainIds,
+            bytes32[] memory typehashes,
             bytes calldata data
         )
     {
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new QualificationConfig[](count);
+        configs = new ParamRules[](count);
         chainIds = new uint256[](count);
+        typehashes = new bytes32[](count);
         uint256 offset = 32;
 
         for (uint256 j = 0; j < count; j++) {
@@ -298,7 +352,7 @@ library ConfigLib {
             offset += 32;
 
             // Decode qualification typehash
-            bytes32 qualificationTypehash = bytes32(initData[offset:offset + 32]);
+            typehashes[j] = bytes32(initData[offset:offset + 32]);
             offset += 32;
 
             // Decode the root node index
@@ -331,94 +385,51 @@ library ConfigLib {
                 offset += 32;
             }
 
-            configs[j] = QualificationConfig({
-                chainId: chainIds[j],
-                qualificationTypehash: qualificationTypehash,
-                rules: ParamRules({
-                    rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
-                })
+            configs[j] = ParamRules({
+                rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
             });
         }
 
         data = initData[offset:];
     }
 
-    /// @notice Decodes the tokenIn configuration from the initialization data
-    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) + 12 (lockTag) = 64 bytes
-    /// @param initData The initialization data containing tokenIn configs
-    /// @return packedConfigs Array of packed tokenIn configurations
-    /// @return chainIds Array of chainIds corresponding to configs
+    /// @notice Decodes sub-policy configurations from the initialization data
+    /// @dev Format: count (32) + [fieldId (1) + policyAddress (20) + initDataLength (32) +
+    /// initData] * count @param initData The initialization data containing sub-policy configs
+    /// @return configs Array of sub-policy configurations
     /// @return data The remaining initialization data after decoding
-    function decodeTokenInConfig(bytes calldata initData)
+    function decodeSubPolicyConfig(bytes calldata initData)
         internal
         pure
-        returns (bytes32[] memory packedConfigs, uint256[] memory chainIds, bytes calldata data)
+        returns (SubPolicyConfig[] memory configs, bytes calldata data)
     {
         uint256 count = uint256(bytes32(initData[0:32]));
-        packedConfigs = new bytes32[](count);
-        chainIds = new uint256[](count);
+        configs = new SubPolicyConfig[](count);
+        uint256 offset = 32;
 
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 64;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            address token = address(bytes20(initData[offset + 32:offset + 52]));
-            bytes12 lockTag = bytes12(initData[offset + 52:offset + 64]);
+            // Decode fieldId (1 byte)
+            uint8 fieldId = uint8(initData[offset]);
+            offset += 1;
 
-            // Pack into bytes32
-            packedConfigs[i] = bytes32(uint256(uint160(token))) | (bytes32(lockTag) >> 160);
+            // Decode policy address (20 bytes)
+            address policyAddress = address(bytes20(initData[offset:offset + 20]));
+            offset += 20;
+
+            // Decode init data length
+            uint256 initDataLength = uint256(bytes32(initData[offset:offset + 32]));
+            offset += 32;
+
+            // Decode init data
+            bytes memory policyInitData = initData[offset:offset + initDataLength];
+            offset += initDataLength;
+
+            configs[i] = SubPolicyConfig({
+                fieldId: fieldId, policyAddress: policyAddress, initData: policyInitData
+            });
         }
 
-        data = initData[32 + count * 64:];
-    }
-
-    /// @notice Decodes the tokenOut configuration from the initialization data
-    /// @dev Each TokenOutConfig: 32 (targetChainId) + 20 (token) = 52 bytes
-    /// @param initData The initialization data containing tokenOut configs
-    /// @return tokens Array of token addresses (to be added to set)
-    /// @return chainIds Array of targetChainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeTokenOutConfig(bytes calldata initData)
-        internal
-        pure
-        returns (address[] memory tokens, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        tokens = new address[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 52;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            tokens[i] = address(bytes20(initData[offset + 32:offset + 52]));
-        }
-
-        data = initData[32 + count * 52:];
-    }
-
-    /// @notice Decodes the ops requirement configuration from the initialization data
-    /// @dev Each OpsRequirementConfig: 32 (chainId) + 1 (requireOriginOps) + 1 (requireDestOps) =
-    /// 34 bytes @param initData The initialization data containing ops requirement configs
-    /// @return packedConfigs Array of packed ops requirement configs
-    /// @return chainIds Array of chainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeOpsRequirementConfig(bytes calldata initData)
-        internal
-        pure
-        returns (uint8[] memory packedConfigs, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        packedConfigs = new uint8[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 34;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            bool requireOriginOps = uint8(initData[offset + 32]) != 0;
-            bool requireDestOps = uint8(initData[offset + 33]) != 0;
-            packedConfigs[i] = (requireOriginOps ? 1 : 0) | (requireDestOps ? 2 : 0);
-        }
-
-        data = initData[32 + count * 34:];
+        data = initData[offset:];
     }
 
     /* //////////////////////////////////////////////////////////////
@@ -465,33 +476,5 @@ library ConfigLib {
     function unpackTokenIn(bytes32 packed) internal pure returns (address token, bytes12 lockTag) {
         token = address(uint160(uint256(packed)));
         lockTag = bytes12(packed << 160);
-    }
-
-    /// @notice Packs ops requirement config into uint8
-    /// @param requireOriginOps Whether origin ops are required
-    /// @param requireDestOps Whether dest ops are required
-    /// @return packed Packed uint8 value
-    function packOpsRequirement(
-        bool requireOriginOps,
-        bool requireDestOps
-    )
-        internal
-        pure
-        returns (uint8 packed)
-    {
-        packed = (requireOriginOps ? 1 : 0) | (requireDestOps ? 2 : 0);
-    }
-
-    /// @notice Unpacks ops requirement config from uint8
-    /// @param packed Packed uint8 value
-    /// @return requireOriginOps Whether origin ops are required
-    /// @return requireDestOps Whether dest ops are required
-    function unpackOpsRequirement(uint8 packed)
-        internal
-        pure
-        returns (bool requireOriginOps, bool requireDestOps)
-    {
-        requireOriginOps = (packed & 1) != 0;
-        requireDestOps = (packed & 2) != 0;
     }
 }
