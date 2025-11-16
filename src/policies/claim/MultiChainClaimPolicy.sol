@@ -107,9 +107,8 @@ contract MultiChainClaimPolicy is I1271Policy {
             (qualificationConfig, configData, qualificationTypehash) =
                 configData.decodeQualificationConfig();
             // Store the qualification configuration
-            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash].fill(
-                qualificationConfig
-            );
+            $.qualificationConfig[configId][msg.sender][account][qualificationTypehash]
+            .fill(qualificationConfig);
         }
 
         // (2) recipient and targetChainId
@@ -131,7 +130,7 @@ contract MultiChainClaimPolicy is I1271Policy {
             for (uint256 i = 0; i < tokenInConfigs.length; i++) {
                 TokenInConfig memory tokenInConfig = tokenInConfigs[i];
                 $.tokenInConfig[configId][msg.sender][account][tokenInConfig.chainId] =
-                    tokenInConfig.config;
+                tokenInConfig.config;
             }
         }
 
@@ -144,7 +143,7 @@ contract MultiChainClaimPolicy is I1271Policy {
             for (uint256 i = 0; i < tokenOutConfigs.length; i++) {
                 TokenOutConfig memory tokenOutConfig = tokenOutConfigs[i];
                 $.tokenOutConfig[configId][msg.sender][account][tokenOutConfig.targetChainId] =
-                    tokenOutConfig.config;
+                tokenOutConfig.config;
             }
         }
 
@@ -187,6 +186,8 @@ contract MultiChainClaimPolicy is I1271Policy {
             return true;
         }
 
+        // Digest, signed -> domainSep || claimHash, claimHash || domainSep
+
         // Extract the hash and validate the parameters from the signature
         // using the raw data and the stored configuration for the account
         (bool isValid, bytes32 recomputedHash) = signature.extractAndValidate(config, id, account);
@@ -201,8 +202,7 @@ contract MultiChainClaimPolicy is I1271Policy {
 
     /// @notice Checks if the policy supports the given interface ID
     function supportsInterface(bytes4 interfaceID) external pure override returns (bool) {
-        return (
-            interfaceID == type(IERC165).interfaceId || interfaceID == type(I1271Policy).interfaceId
-        );
+        return (interfaceID == type(IERC165).interfaceId
+                || interfaceID == type(I1271Policy).interfaceId);
     }
 }
