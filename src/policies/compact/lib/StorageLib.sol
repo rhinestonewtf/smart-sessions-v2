@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Libraries
+import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
+
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
-import {
-    ParamRules,
-    TokenInConfig,
-    RecipientConfig,
-    FillExpiryConfig,
-    TokenOutConfig,
-    OpsRequirementConfig
-} from "@policies/compact/types/DataTypes.sol";
+import { ParamRules } from "@policies/claim/types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                              STRUCTS
@@ -25,7 +21,7 @@ struct PolicyStorage {
             address msgSender => mapping(address userOpSender => PolicyConfig conditionsBitmap)
         )
     ) policyConfig;
-    // Arbiter validation (single value, not per chain)
+    // Arbiter validation
     mapping(
         ConfigId id
             => mapping(address msgSender => mapping(address userOpSender => address arbiter))
@@ -36,24 +32,23 @@ struct PolicyStorage {
             => mapping(address msgSender => mapping(address userOpSender => uint256 packedExpires))
     ) claimExpiresConfig;
     // TokenIn: per chainId (chainId = 0 for catch-all)
-    // Only token + lockTag, no amounts
+    // EnumerableSet of packed configs: address (20 bytes) + lockTag (12 bytes) = bytes32
     mapping(
         ConfigId id
             => mapping(
             address msgSender
                 => mapping(
-                address userOpSender => mapping(uint256 chainId => TokenInConfig tokenInConfig)
+                address userOpSender => mapping(uint256 chainId => EnumerableSetLib.Bytes32Set)
             )
         )
-    ) tokenInConfig;
+    ) tokenInSet;
     // Recipient: per targetChainId (targetChainId = 0 for catch-all)
     mapping(
         ConfigId id
             => mapping(
             address msgSender
                 => mapping(
-                address userOpSender
-                    => mapping(uint256 targetChainId => RecipientConfig recipientConfig)
+                address userOpSender => mapping(uint256 targetChainId => address recipient)
             )
         )
     ) recipientConfig;
@@ -64,31 +59,30 @@ struct PolicyStorage {
             => mapping(
             address msgSender
                 => mapping(
-                address userOpSender
-                    => mapping(uint256 targetChainId => FillExpiryConfig fillExpiryConfig)
+                address userOpSender => mapping(uint256 targetChainId => uint256 packedFillExpiry)
             )
         )
     ) fillExpiryConfig;
     // TokenOut: per targetChainId (targetChainId = 0 for catch-all)
-    // Only token, no amounts
+    // EnumerableSet of addresses
     mapping(
         ConfigId id
             => mapping(
             address msgSender
                 => mapping(
                 address userOpSender
-                    => mapping(uint256 targetChainId => TokenOutConfig tokenOutConfig)
+                    => mapping(uint256 targetChainId => EnumerableSetLib.AddressSet)
             )
         )
-    ) tokenOutConfig;
+    ) tokenOutSet;
     // Ops requirements: per chainId (chainId = 0 for catch-all)
+    // Packed: bool requireOriginOps (bit 0) | bool requireDestOps (bit 1)
     mapping(
         ConfigId id
             => mapping(
             address msgSender
                 => mapping(
-                address userOpSender
-                    => mapping(uint256 chainId => OpsRequirementConfig opsRequirementConfig)
+                address userOpSender => mapping(uint256 chainId => uint8 packedOpsRequirement)
             )
         )
     ) opsRequirementConfig;
@@ -111,6 +105,13 @@ struct PolicyStorage {
 /// @title Storage Library
 /// @notice Library for managing storage of claim recipient data
 library StorageLib {
+    /*//////////////////////////////////////////////////////////////
+                               LIBRARIES
+    //////////////////////////////////////////////////////////////*/
+
+    using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
+    using EnumerableSetLib for EnumerableSetLib.AddressSet;
+
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/

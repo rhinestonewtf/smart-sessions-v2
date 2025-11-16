@@ -30,7 +30,8 @@ struct ParamRule {
     bytes32 ref;
 }
 
-/// @notice Configuration for tokenIn checking per chainId (chainId = 0 for catch-all)
+/// @notice Configuration for a single tokenIn entry (stored in enumerable set)
+/// @dev Packed into bytes32: address (20 bytes) + bytes12 lockTag (12 bytes) = 32 bytes
 struct TokenInConfig {
     address token; // address(0) for any token
     bytes12 lockTag; // bytes12(0) for any lockTag
@@ -47,7 +48,8 @@ struct FillExpiryConfig {
     uint256 packedFillExpiry; // uint128 min | uint128 max
 }
 
-/// @notice Configuration for tokenOut checking per targetChainId (targetChainId = 0 for catch-all)
+/// @notice Configuration for a single tokenOut entry (stored in enumerable set)
+/// @dev Just the token address
 struct TokenOutConfig {
     address token; // address(0) for any token
 }

@@ -217,33 +217,6 @@ library ConfigLib {
         data = initData[32:];
     }
 
-    /// @notice Decodes the tokenIn configuration from the initialization data
-    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) + 12 (lockTag) = 64 bytes
-    /// @param initData The initialization data containing tokenIn configs
-    /// @return configs Array of tokenIn configurations
-    /// @return chainIds Array of chainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeTokenInConfig(bytes calldata initData)
-        internal
-        pure
-        returns (TokenInConfig[] memory configs, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new TokenInConfig[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 64;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            configs[i] = TokenInConfig({
-                token: address(bytes20(initData[offset + 32:offset + 52])),
-                lockTag: bytes12(initData[offset + 52:offset + 64])
-            });
-        }
-
-        data = initData[32 + count * 64:];
-    }
-
     /// @notice Decodes the recipient configuration from the initialization data
     /// @dev Each RecipientConfig: 32 (targetChainId) + 20 (recipient) = 52 bytes
     /// @param initData The initialization data containing recipient configs
@@ -296,62 +269,6 @@ library ConfigLib {
         }
 
         data = initData[32 + count * 64:];
-    }
-
-    /// @notice Decodes the tokenOut configuration from the initialization data
-    /// @dev Each TokenOutConfig: 32 (targetChainId) + 20 (token) = 52 bytes
-    /// @param initData The initialization data containing tokenOut configs
-    /// @return configs Array of tokenOut configurations
-    /// @return chainIds Array of targetChainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeTokenOutConfig(bytes calldata initData)
-        internal
-        pure
-        returns (TokenOutConfig[] memory configs, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new TokenOutConfig[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 52;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            configs[i] =
-                TokenOutConfig({ token: address(bytes20(initData[offset + 32:offset + 52])) });
-        }
-
-        data = initData[32 + count * 52:];
-    }
-
-    /// @notice Decodes the ops requirement configuration from the initialization data
-    /// @dev Each OpsRequirementConfig: 32 (chainId) + 1 (requireOriginOps) + 1 (requireDestOps) =
-    /// 34 bytes @param initData The initialization data containing ops requirement configs
-    /// @return configs Array of ops requirement configurations
-    /// @return chainIds Array of chainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeOpsRequirementConfig(bytes calldata initData)
-        internal
-        pure
-        returns (
-            OpsRequirementConfig[] memory configs,
-            uint256[] memory chainIds,
-            bytes calldata data
-        )
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new OpsRequirementConfig[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 34;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            configs[i] = OpsRequirementConfig({
-                requireOriginOps: uint8(initData[offset + 32]) != 0,
-                requireDestOps: uint8(initData[offset + 33]) != 0
-            });
-        }
-
-        data = initData[32 + count * 34:];
     }
 
     /// @notice Decodes the qualification configuration from the initialization data
@@ -426,6 +343,84 @@ library ConfigLib {
         data = initData[offset:];
     }
 
+    /// @notice Decodes the tokenIn configuration from the initialization data
+    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) + 12 (lockTag) = 64 bytes
+    /// @param initData The initialization data containing tokenIn configs
+    /// @return packedConfigs Array of packed tokenIn configurations
+    /// @return chainIds Array of chainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeTokenInConfig(bytes calldata initData)
+        internal
+        pure
+        returns (bytes32[] memory packedConfigs, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        packedConfigs = new bytes32[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 64;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+            address token = address(bytes20(initData[offset + 32:offset + 52]));
+            bytes12 lockTag = bytes12(initData[offset + 52:offset + 64]);
+
+            // Pack into bytes32
+            packedConfigs[i] = bytes32(uint256(uint160(token))) | (bytes32(lockTag) >> 160);
+        }
+
+        data = initData[32 + count * 64:];
+    }
+
+    /// @notice Decodes the tokenOut configuration from the initialization data
+    /// @dev Each TokenOutConfig: 32 (targetChainId) + 20 (token) = 52 bytes
+    /// @param initData The initialization data containing tokenOut configs
+    /// @return tokens Array of token addresses (to be added to set)
+    /// @return chainIds Array of targetChainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeTokenOutConfig(bytes calldata initData)
+        internal
+        pure
+        returns (address[] memory tokens, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        tokens = new address[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 52;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+            tokens[i] = address(bytes20(initData[offset + 32:offset + 52]));
+        }
+
+        data = initData[32 + count * 52:];
+    }
+
+    /// @notice Decodes the ops requirement configuration from the initialization data
+    /// @dev Each OpsRequirementConfig: 32 (chainId) + 1 (requireOriginOps) + 1 (requireDestOps) =
+    /// 34 bytes @param initData The initialization data containing ops requirement configs
+    /// @return packedConfigs Array of packed ops requirement configs
+    /// @return chainIds Array of chainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeOpsRequirementConfig(bytes calldata initData)
+        internal
+        pure
+        returns (uint8[] memory packedConfigs, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        packedConfigs = new uint8[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 34;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+            bool requireOriginOps = uint8(initData[offset + 32]) != 0;
+            bool requireDestOps = uint8(initData[offset + 33]) != 0;
+            packedConfigs[i] = (requireOriginOps ? 1 : 0) | (requireDestOps ? 2 : 0);
+        }
+
+        data = initData[32 + count * 34:];
+    }
+
     /* //////////////////////////////////////////////////////////////
                           PACK/UNPACK HELPERS
     //////////////////////////////////////////////////////////////*/
@@ -445,5 +440,58 @@ library ConfigLib {
     function unpackUint128(uint256 packed) internal pure returns (uint128 lower, uint128 upper) {
         lower = uint128(packed);
         upper = uint128(packed >> 128);
+    }
+
+    /// @notice Packs tokenIn config into bytes32
+    /// @param token Token address
+    /// @param lockTag Lock tag
+    /// @return packed Packed bytes32 value
+    function packTokenIn(
+        address token,
+        bytes12 lockTag
+    )
+        internal
+        pure
+        returns (bytes32 packed)
+    {
+        // address (20 bytes) in lower bits, lockTag (12 bytes) in upper bits
+        packed = bytes32(uint256(uint160(token))) | (bytes32(lockTag) >> 160);
+    }
+
+    /// @notice Unpacks tokenIn config from bytes32
+    /// @param packed Packed bytes32 value
+    /// @return token Token address
+    /// @return lockTag Lock tag
+    function unpackTokenIn(bytes32 packed) internal pure returns (address token, bytes12 lockTag) {
+        token = address(uint160(uint256(packed)));
+        lockTag = bytes12(packed << 160);
+    }
+
+    /// @notice Packs ops requirement config into uint8
+    /// @param requireOriginOps Whether origin ops are required
+    /// @param requireDestOps Whether dest ops are required
+    /// @return packed Packed uint8 value
+    function packOpsRequirement(
+        bool requireOriginOps,
+        bool requireDestOps
+    )
+        internal
+        pure
+        returns (uint8 packed)
+    {
+        packed = (requireOriginOps ? 1 : 0) | (requireDestOps ? 2 : 0);
+    }
+
+    /// @notice Unpacks ops requirement config from uint8
+    /// @param packed Packed uint8 value
+    /// @return requireOriginOps Whether origin ops are required
+    /// @return requireDestOps Whether dest ops are required
+    function unpackOpsRequirement(uint8 packed)
+        internal
+        pure
+        returns (bool requireOriginOps, bool requireDestOps)
+    {
+        requireOriginOps = (packed & 1) != 0;
+        requireDestOps = (packed & 2) != 0;
     }
 }
