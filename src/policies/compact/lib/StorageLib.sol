@@ -7,7 +7,8 @@ import { PolicyConfig } from "@policies/claim/lib/ConfigLib.sol";
 import {
     ParamRules,
     TokenInConfig,
-    TargetConfig,
+    RecipientConfig,
+    FillExpiryConfig,
     TokenOutConfig,
     OpsRequirementConfig
 } from "@policies/compact/types/DataTypes.sol";
@@ -45,17 +46,29 @@ struct PolicyStorage {
             )
         )
     ) tokenInConfig;
-    // Target: per targetChainId (targetChainId = 0 for catch-all)
-    // Includes recipient + packed fillExpiry (uint128 min | uint128 max)
+    // Recipient: per targetChainId (targetChainId = 0 for catch-all)
     mapping(
         ConfigId id
             => mapping(
             address msgSender
                 => mapping(
-                address userOpSender => mapping(uint256 targetChainId => TargetConfig targetConfig)
+                address userOpSender
+                    => mapping(uint256 targetChainId => RecipientConfig recipientConfig)
             )
         )
-    ) targetConfig;
+    ) recipientConfig;
+    // FillExpiry: per targetChainId (targetChainId = 0 for catch-all)
+    // Packed: uint128 min | uint128 max
+    mapping(
+        ConfigId id
+            => mapping(
+            address msgSender
+                => mapping(
+                address userOpSender
+                    => mapping(uint256 targetChainId => FillExpiryConfig fillExpiryConfig)
+            )
+        )
+    ) fillExpiryConfig;
     // TokenOut: per targetChainId (targetChainId = 0 for catch-all)
     // Only token, no amounts
     mapping(
@@ -102,9 +115,8 @@ library StorageLib {
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev keccak256("smartsessions.policies.compact.storage.v1")
-    bytes32 internal constant POLICY_STORAGE_POSITION =
-        0xdcea712ce6c2213c29b40f80bf1e5d1b9d030a46b056c1cb82285d5245f55aed;
+    // TODO: Hardcode and truncate this
+    bytes32 internal constant POLICY_STORAGE_POSITION = keccak256("claim.recipient.policy.storage");
 
     /*//////////////////////////////////////////////////////////////
                                STORAGE ACCESS

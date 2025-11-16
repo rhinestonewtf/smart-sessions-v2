@@ -36,9 +36,14 @@ struct TokenInConfig {
     bytes12 lockTag; // bytes12(0) for any lockTag
 }
 
-/// @notice Configuration for target checking per targetChainId (targetChainId = 0 for catch-all)
-struct TargetConfig {
+/// @notice Configuration for recipient checking per targetChainId (targetChainId = 0 for catch-all)
+struct RecipientConfig {
     address recipient;
+}
+
+/// @notice Configuration for fillExpiry checking per targetChainId (targetChainId = 0 for
+/// catch-all)
+struct FillExpiryConfig {
     uint256 packedFillExpiry; // uint128 min | uint128 max
 }
 

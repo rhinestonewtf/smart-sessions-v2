@@ -5,8 +5,9 @@ pragma solidity ^0.8.28;
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
     TokenInConfig,
+    RecipientConfig,
+    FillExpiryConfig,
     TokenOutConfig,
-    TargetConfig,
     OpsRequirementConfig,
     QualificationConfig,
     ParamRules,
@@ -42,22 +43,24 @@ library ConfigLib {
     /// @notice Initialization data structure
     struct InitData {
         // Which conditions to enable
-        // Bits 0-7: Condition checks
+        // Bits 0-8: Condition checks
         // 0 - CHECK_ARBITER
         // 1 - CHECK_CLAIM_EXPIRES
         // 2 - CHECK_TOKEN_IN
-        // 3 - CHECK_TARGET
-        // 4 - CHECK_TOKEN_OUT
-        // 5 - CHECK_HAS_ORIGIN_OPS
-        // 6 - CHECK_HAS_DEST_OPS
-        // 7 - CHECK_QUALIFICATION
+        // 3 - CHECK_RECIPIENT
+        // 4 - CHECK_FILL_EXPIRY
+        // 5 - CHECK_TOKEN_OUT
+        // 6 - CHECK_HAS_ORIGIN_OPS
+        // 7 - CHECK_HAS_DEST_OPS
+        // 8 - CHECK_QUALIFICATION
         //
-        // Bits 8-12: Catch-all flags (set automatically during setConfig)
-        // 8 - HAS_TOKENIN_CATCHALL
-        // 9 - HAS_TARGET_CATCHALL
-        // 10 - HAS_TOKENOUT_CATCHALL
-        // 11 - HAS_OPS_REQUIREMENT_CATCHALL
-        // 12 - HAS_QUALIFICATION_CATCHALL
+        // Bits 9-14: Catch-all flags
+        // 9 - HAS_TOKEN_IN_CATCHALL
+        // 10 - HAS_RECIPIENT_CATCHALL
+        // 11 - HAS_FILL_EXPIRY_CATCHALL
+        // 12 - HAS_TOKEN_OUT_CATCHALL
+        // 13 - HAS_OPS_REQUIREMENT_CATCHALL
+        // 14 - HAS_QUALIFICATION_CATCHALL
         uint16 conditionsBitmap;
         // CHECK_ARBITER (condition 0)
         address arbiter;
@@ -67,16 +70,19 @@ library ConfigLib {
         // CHECK_TOKEN_IN (condition 2)
         // Can have multiple tokenIn configurations per chain (chainId = 0 for catch-all)
         TokenInConfig[] tokenInConfigs;
-        // CHECK_TARGET (condition 3)
-        // Can have multiple target configurations per targetChainId (0 for catch-all)
-        TargetConfig[] targetConfigs;
-        // CHECK_TOKEN_OUT (condition 4)
+        // CHECK_RECIPIENT (condition 3)
+        // Can have multiple recipient configurations per targetChainId (0 for catch-all)
+        RecipientConfig[] recipientConfigs;
+        // CHECK_FILL_EXPIRY (condition 4)
+        // Can have multiple fillExpiry configurations per targetChainId (0 for catch-all)
+        FillExpiryConfig[] fillExpiryConfigs;
+        // CHECK_TOKEN_OUT (condition 5)
         // Can have multiple tokenOut configurations per target chain
         TokenOutConfig[] tokenOutConfigs;
-        // CHECK_HAS_ORIGIN_OPS / CHECK_HAS_DEST_OPS (conditions 5 & 6)
+        // CHECK_HAS_ORIGIN_OPS / CHECK_HAS_DEST_OPS (conditions 6 & 7)
         // Can have multiple ops requirement configurations per chainId (0 for catch-all)
         OpsRequirementConfig[] opsRequirementConfigs;
-        // CHECK_QUALIFICATION (condition 7)
+        // CHECK_QUALIFICATION (condition 8)
         // Can have multiple qualification configurations per chainId (0 for catch-all)
         QualificationConfig[] qualificationConfigs;
     }
@@ -103,34 +109,40 @@ library ConfigLib {
         return PolicyConfig.unwrap(config) & 4 != 0;
     }
 
-    /// @notice Returns if the bitmap has the target condition set
-    /// @return true if the target condition is set, false otherwise
-    function hasCheckTarget(PolicyConfig config) internal pure returns (bool) {
+    /// @notice Returns if the bitmap has the recipient condition set
+    /// @return true if the recipient condition is set, false otherwise
+    function hasCheckRecipient(PolicyConfig config) internal pure returns (bool) {
         return PolicyConfig.unwrap(config) & 8 != 0;
+    }
+
+    /// @notice Returns if the bitmap has the fillExpiry condition set
+    /// @return true if the fillExpiry condition is set, false otherwise
+    function hasCheckFillExpiry(PolicyConfig config) internal pure returns (bool) {
+        return PolicyConfig.unwrap(config) & 16 != 0;
     }
 
     /// @notice Returns if the bitmap has the tokenOut condition set
     /// @return true if the tokenOut condition is set, false otherwise
     function hasCheckTokenOut(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 16 != 0;
+        return PolicyConfig.unwrap(config) & 32 != 0;
     }
 
     /// @notice Returns if the bitmap has the hasOriginOps condition set
     /// @return true if the hasOriginOps condition is set, false otherwise
     function hasCheckHasOriginOps(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 32 != 0;
+        return PolicyConfig.unwrap(config) & 64 != 0;
     }
 
     /// @notice Returns if the bitmap has the hasDestOps condition set
     /// @return true if the hasDestOps condition is set, false otherwise
     function hasCheckHasDestOps(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 64 != 0;
+        return PolicyConfig.unwrap(config) & 128 != 0;
     }
 
     /// @notice Returns if the bitmap has the qualifications condition set
     /// @return true if the qualifications condition is set, false otherwise
     function hasCheckQualification(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 128 != 0;
+        return PolicyConfig.unwrap(config) & 256 != 0;
     }
 
     /* //////////////////////////////////////////////////////////////
@@ -140,31 +152,37 @@ library ConfigLib {
     /// @notice Returns if tokenIn has a catch-all configuration (chainId = 0)
     /// @return true if catch-all exists, false otherwise
     function hasTokenInCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 256 != 0;
+        return PolicyConfig.unwrap(config) & 512 != 0;
     }
 
-    /// @notice Returns if target has a catch-all configuration (targetChainId = 0)
+    /// @notice Returns if recipient has a catch-all configuration (targetChainId = 0)
     /// @return true if catch-all exists, false otherwise
-    function hasTargetCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 512 != 0;
+    function hasRecipientCatchAll(PolicyConfig config) internal pure returns (bool) {
+        return PolicyConfig.unwrap(config) & 1024 != 0;
+    }
+
+    /// @notice Returns if fillExpiry has a catch-all configuration (targetChainId = 0)
+    /// @return true if catch-all exists, false otherwise
+    function hasFillExpiryCatchAll(PolicyConfig config) internal pure returns (bool) {
+        return PolicyConfig.unwrap(config) & 2048 != 0;
     }
 
     /// @notice Returns if tokenOut has a catch-all configuration (targetChainId = 0)
     /// @return true if catch-all exists, false otherwise
     function hasTokenOutCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 1024 != 0;
+        return PolicyConfig.unwrap(config) & 4096 != 0;
     }
 
     /// @notice Returns if ops requirement has a catch-all configuration (chainId = 0)
     /// @return true if catch-all exists, false otherwise
     function hasOpsRequirementCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 2048 != 0;
+        return PolicyConfig.unwrap(config) & 8192 != 0;
     }
 
     /// @notice Returns if qualification has a catch-all configuration (chainId = 0)
     /// @return true if catch-all exists, false otherwise
     function hasQualificationCatchAll(PolicyConfig config) internal pure returns (bool) {
-        return PolicyConfig.unwrap(config) & 4096 != 0;
+        return PolicyConfig.unwrap(config) & 16_384 != 0;
     }
 
     /* //////////////////////////////////////////////////////////////
@@ -226,35 +244,58 @@ library ConfigLib {
         data = initData[32 + count * 64:];
     }
 
-    /// @notice Decodes the target configuration from the initialization data
-    /// @dev Each TargetConfig: 32 (targetChainId) + 20 (recipient) + 16 (minFillExpiry) + 16
-    /// (maxFillExpiry) = 84 bytes @param initData The initialization data containing target configs
-    /// @return configs Array of target configurations
+    /// @notice Decodes the recipient configuration from the initialization data
+    /// @dev Each RecipientConfig: 32 (targetChainId) + 20 (recipient) = 52 bytes
+    /// @param initData The initialization data containing recipient configs
+    /// @return configs Array of recipient configurations
     /// @return chainIds Array of targetChainIds corresponding to configs
     /// @return data The remaining initialization data after decoding
-    function decodeTargetConfig(bytes calldata initData)
+    function decodeRecipientConfig(bytes calldata initData)
         internal
         pure
-        returns (TargetConfig[] memory configs, uint256[] memory chainIds, bytes calldata data)
+        returns (RecipientConfig[] memory configs, uint256[] memory chainIds, bytes calldata data)
     {
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new TargetConfig[](count);
+        configs = new RecipientConfig[](count);
         chainIds = new uint256[](count);
 
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 84;
+            uint256 offset = 32 + i * 52;
             chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-
-            uint128 minFillExpiry = uint128(bytes16(initData[offset + 52:offset + 68]));
-            uint128 maxFillExpiry = uint128(bytes16(initData[offset + 68:offset + 84]));
-
-            configs[i] = TargetConfig({
-                recipient: address(bytes20(initData[offset + 32:offset + 52])),
-                packedFillExpiry: packUint128(minFillExpiry, maxFillExpiry)
-            });
+            configs[i] =
+                RecipientConfig({ recipient: address(bytes20(initData[offset + 32:offset + 52])) });
         }
 
-        data = initData[32 + count * 84:];
+        data = initData[32 + count * 52:];
+    }
+
+    /// @notice Decodes the fillExpiry configuration from the initialization data
+    /// @dev Each FillExpiryConfig: 32 (targetChainId) + 16 (minFillExpiry) + 16 (maxFillExpiry) =
+    /// 64 bytes @param initData The initialization data containing fillExpiry configs
+    /// @return configs Array of fillExpiry configurations
+    /// @return chainIds Array of targetChainIds corresponding to configs
+    /// @return data The remaining initialization data after decoding
+    function decodeFillExpiryConfig(bytes calldata initData)
+        internal
+        pure
+        returns (FillExpiryConfig[] memory configs, uint256[] memory chainIds, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new FillExpiryConfig[](count);
+        chainIds = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 64;
+            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
+
+            uint128 minFillExpiry = uint128(bytes16(initData[offset + 32:offset + 48]));
+            uint128 maxFillExpiry = uint128(bytes16(initData[offset + 48:offset + 64]));
+
+            configs[i] =
+                FillExpiryConfig({ packedFillExpiry: packUint128(minFillExpiry, maxFillExpiry) });
+        }
+
+        data = initData[32 + count * 64:];
     }
 
     /// @notice Decodes the tokenOut configuration from the initialization data
