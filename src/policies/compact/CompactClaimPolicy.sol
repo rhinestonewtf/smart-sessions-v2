@@ -60,7 +60,7 @@ import {
 ///             - to
 ///             - data
 ///             - value
-///         >>> Qualification (external policy)
+///         >>> Qualification
 contract CompactClaimPolicy is I1271Policy {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -409,7 +409,9 @@ contract CompactClaimPolicy is I1271Policy {
             $.subPolicies[configId][msg.sender][account][subPolicy.fieldId] =
             subPolicy.policyAddress;
 
-            // TODO: Initialize the sub-policy if it has setup logic
+            // Initialize the sub-policy with the provided initData
+            I1271Policy(subPolicy.policyAddress)
+                .initializeWithMultiplexer(account, configId, subPolicy.initData);
         }
     }
 
@@ -452,7 +454,8 @@ contract CompactClaimPolicy is I1271Policy {
 
         // Extract the hash and validate the parameters from the signature
         // using the raw data and the stored configuration for the account
-        (bool isValid, bytes32 recomputedHash) = signature.extractAndValidate(config, id, account);
+        (bool isValid, bytes32 recomputedHash) =
+            signature.extractAndValidate(config, id, account, hash);
 
         // If the recomputed hash does not match the provided hash, return false
         return isValid && recomputedHash == hash;

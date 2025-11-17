@@ -30,13 +30,14 @@ struct PolicyStorage {
     ) modeConfig;
 
     // =========== SUB-POLICY CONFIGS ==========
+
     mapping(
         ConfigId id
             => mapping(
             address msgSender
                 => mapping(address userOpSender => mapping(uint8 fieldId => address policy))
         )
-    ) subPolicies;
+    ) subPolicies; // TODO: Do we need these to be per chain?
 
     // ========== STORAGE-BASED CONFIGS ==========
 

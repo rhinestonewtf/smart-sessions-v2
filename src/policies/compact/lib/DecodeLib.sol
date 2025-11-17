@@ -4,6 +4,9 @@ pragma solidity ^0.8.28;
 // Contracts
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
+// Interfaces
+import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
+
 // Libraries
 import { ConfigLib, PolicyConfig } from "@policies/compact/lib/ConfigLib.sol";
 import { StorageLib, PolicyStorage } from "@policies/compact/lib/StorageLib.sol";
@@ -61,17 +64,24 @@ library DecodeLib {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Extracts and validates the MultiChainCompact data from the signature
+    /// @param signature The signature containing the MultiChainCompact data used to reconstruct the
+    /// hash and validate against the policy config
+    /// @param config The policy configuration bitmap
+    /// @param configId The configuration ID for the policy
+    /// @param account The account for which the policy is being validated
+    /// @param hash The original hash to validate against
     function extractAndValidate(
         bytes calldata signature,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         internal
         view
         returns (bool valid, bytes32 compactHash)
     {
-        return _decodeAndValidate(signature, config, configId, account);
+        return _decodeAndValidate(signature, config, configId, account, hash);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -83,7 +93,8 @@ library DecodeLib {
         bytes calldata data,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
@@ -96,7 +107,7 @@ library DecodeLib {
         uint256 expires = uint256(bytes32(data[84:116]));
 
         // Validate claim expires
-        if (!_validateClaimExpires(expires, config, configId, account)) {
+        if (!_validateClaimExpires(expires, config, configId, account, hash)) {
             return (false, bytes32(0));
         }
 
@@ -106,8 +117,9 @@ library DecodeLib {
 
         // Decode and validate notarized element
         (bool elementValid, bytes32 elementHash) =
-            _validateNotarizedElement(data, notarizedElementOffset, config, configId, account);
+            _validateNotarizedElement(data, notarizedElementOffset, config, configId, account, hash);
 
+        // Early return if notarized element is invalid
         if (!elementValid) {
             return (false, bytes32(0));
         }
@@ -143,7 +155,8 @@ library DecodeLib {
         uint256 offset,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
@@ -155,7 +168,7 @@ library DecodeLib {
         offset += 64;
 
         // Validate arbiter
-        if (!_validateArbiter(arbiter, config, configId, account)) {
+        if (!_validateArbiter(arbiter, config, configId, account, hash)) {
             return (false, bytes32(0));
         }
 
@@ -166,7 +179,7 @@ library DecodeLib {
         if (config.hasCheckTokenIn()) {
             bool tokenInValid;
             (tokenInValid, commitmentsHash, offset) =
-                _validateTokenIn(data, offset, chainId, config, configId, account);
+                _validateTokenIn(data, offset, chainId, config, configId, account, hash);
             if (!tokenInValid) {
                 return (false, bytes32(0));
             }
@@ -177,7 +190,7 @@ library DecodeLib {
 
         // Validate mandate and get mandateHash
         (bool mandateValid, bytes32 mandateHash) =
-            _validateMandate(data, offset, chainId, config, configId, account);
+            _validateMandate(data, offset, chainId, config, configId, account, hash);
         if (!mandateValid) {
             return (false, bytes32(0));
         }
@@ -196,7 +209,8 @@ library DecodeLib {
         uint256 chainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
@@ -211,7 +225,7 @@ library DecodeLib {
         {
             bool targetValid;
             (targetValid, targetHash, targetChainId, offset) =
-                _validateTarget(data, offset, config, configId, account);
+                _validateTarget(data, offset, config, configId, account, hash);
             if (!targetValid) {
                 return (false, bytes32(0));
             }
@@ -233,7 +247,7 @@ library DecodeLib {
         if (config.hasCheckOriginOps()) {
             bool opsValid;
             (opsValid, originOpsHash, offset) =
-                _validateOriginOps(data, offset, chainId, config, configId, account);
+                _validateOriginOps(data, offset, chainId, config, configId, account, hash);
             if (!opsValid) {
                 return (false, bytes32(0));
             }
@@ -247,7 +261,7 @@ library DecodeLib {
         if (config.hasCheckDestOps()) {
             bool opsValid;
             (opsValid, destOpsHash, offset) =
-                _validateDestOps(data, offset, targetChainId, config, configId, account);
+                _validateDestOps(data, offset, targetChainId, config, configId, account, hash);
             if (!opsValid) {
                 return (false, bytes32(0));
             }
@@ -261,7 +275,7 @@ library DecodeLib {
         if (config.hasCheckQualification()) {
             bool qualValid;
             (qualValid, qualificationHash, offset) =
-                _validateQualification(data, offset, chainId, config, configId, account);
+                _validateQualification(data, offset, chainId, config, configId, account, hash);
             if (!qualValid) {
                 return (false, bytes32(0));
             }
@@ -284,7 +298,8 @@ library DecodeLib {
         uint256 offset,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
@@ -298,14 +313,14 @@ library DecodeLib {
 
         // Validate recipient if required
         if (config.hasCheckRecipient()) {
-            if (!_validateRecipient(recipient, targetChainId, config, configId, account)) {
+            if (!_validateRecipient(recipient, targetChainId, config, configId, account, hash)) {
                 return (false, bytes32(0), 0, 0);
             }
         }
 
         // Validate fillExpiry if required
         if (config.hasCheckFillExpiry()) {
-            if (!_validateFillExpiry(fillExpiry, targetChainId, config, configId, account)) {
+            if (!_validateFillExpiry(fillExpiry, targetChainId, config, configId, account, hash)) {
                 return (false, bytes32(0), 0, 0);
             }
         }
@@ -317,7 +332,7 @@ library DecodeLib {
         if (config.hasCheckTokenOut()) {
             bool tokenOutValid;
             (tokenOutValid, tokenOutHash, offset) =
-                _validateTokenOut(data, offset, targetChainId, config, configId, account);
+                _validateTokenOut(data, offset, targetChainId, config, configId, account, hash);
             if (!tokenOutValid) {
                 return (false, bytes32(0), 0, 0);
             }
@@ -333,8 +348,33 @@ library DecodeLib {
         return (true, targetHash, targetChainId, offset);
     }
 
+    /// @notice Decodes the other (non-notarized) elements from the MultiChainCompact data
+    function _decodeOtherElements(
+        bytes calldata data,
+        uint256 offset
+    )
+        private
+        pure
+        returns (bytes32[] memory, uint256 newOffset)
+    {
+        // Decode the length of the other elements
+        uint256 length = uint256(bytes32(data[offset:offset + 32]));
+        offset += 32;
+
+        // Initialize the array to hold the other elements
+        bytes32[] memory elements = new bytes32[](length);
+
+        // Parse each element
+        for (uint256 i = 0; i < length; i++) {
+            elements[i] = bytes32(data[offset:offset + 32]);
+            offset += 32;
+        }
+
+        return (elements, offset);
+    }
+
     /*//////////////////////////////////////////////////////////////
-                            VALIDATION HELPERS
+                                ARBITER
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates arbiter with mode-based routing
@@ -342,24 +382,30 @@ library DecodeLib {
         address arbiter,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
         returns (bool)
     {
+        //  Get mode for arbiter field
         uint8 mode = config.getFieldMode(FIELD_ARBITER);
 
+        // If mode is skip, always valid
         if (mode == MODE_SKIP) return true;
 
+        // If mode is storage, validate from storage
         if (mode == MODE_CHECK_STORAGE) {
             return _validateArbiterStorage(arbiter, configId, account);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateArbiterSubPolicy(arbiter, configId, account);
+            return _validateArbiterSubPolicy(arbiter, configId, account, hash);
         }
 
+        // Return false if no mode matched
         return false;
     }
 
@@ -380,40 +426,60 @@ library DecodeLib {
 
     /// @notice Validates arbiter using sub-policy
     function _validateArbiterSubPolicy(
-        address, /* arbiter */
-        ConfigId, /* configId */
-        address /* account */
+        address arbiter,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool)
     {
-        revert SubPolicyNotImplemented();
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_ARBITER];
+
+        // Encode the arbiter as the signature data
+        bytes memory arbiterData = abi.encode(arbiter);
+
+        // Call the sub-policy with the full hash and arbiter data
+        return
+            I1271Policy(policy)
+                .check1271SignedAction(configId, msg.sender, account, hash, arbiterData);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                             CLAIM EXPIRES
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates claim expires with mode-based routing
     function _validateClaimExpires(
         uint256 expires,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
         returns (bool)
     {
+        // Get mode for claimExpires field
         uint8 mode = config.getFieldMode(FIELD_CLAIM_EXPIRES);
 
+        // If mode is skip, always valid
         if (mode == MODE_SKIP) return true;
 
+        // If mode is storage, validate from storage
         if (mode == MODE_CHECK_STORAGE) {
             return _validateClaimExpiresStorage(expires, configId, account);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateClaimExpiresSubPolicy(expires, configId, account);
+            return _validateClaimExpiresSubPolicy(expires, configId, account, hash);
         }
 
+        // Return false if no mode matched
         return false;
     }
 
@@ -435,16 +501,30 @@ library DecodeLib {
 
     /// @notice Validates claim expires using sub-policy
     function _validateClaimExpiresSubPolicy(
-        uint256, /* expires */
-        ConfigId, /* configId */
-        address /* account */
+        uint256 expires,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool)
     {
-        revert SubPolicyNotImplemented();
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_CLAIM_EXPIRES];
+
+        // Encode the expires as the signature data
+        bytes memory expiresData = abi.encode(expires);
+
+        // Call the sub-policy
+        return
+            I1271Policy(policy)
+                .check1271SignedAction(configId, msg.sender, account, hash, expiresData);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                TOKEN IN
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates tokenIn with mode-based routing
     function _validateTokenIn(
@@ -453,7 +533,8 @@ library DecodeLib {
         uint256 chainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
@@ -466,7 +547,7 @@ library DecodeLib {
         }
 
         if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateTokenInSubPolicy(data, offset, chainId, configId, account);
+            return _validateTokenInSubPolicy(data, offset, chainId, configId, account, hash);
         }
 
         return (false, bytes32(0), 0);
@@ -532,18 +613,48 @@ library DecodeLib {
 
     /// @notice Validates tokenIn using sub-policy
     function _validateTokenInSubPolicy(
-        bytes calldata, /* data */
-        uint256, /* offset */
-        uint256, /* chainId */
-        ConfigId, /* configId */
-        address /* account */
+        bytes calldata data,
+        uint256 offset,
+        uint256 chainId,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool, bytes32, uint256)
     {
-        revert SubPolicyNotImplemented();
+        // Decode tokenIn length
+        uint256 length = uint256(bytes32(data[offset:offset + 32]));
+        offset += 32;
+
+        // Create calldata pointer to the tokenIn array data
+        uint256[2][] calldata tokenIn;
+        assembly {
+            tokenIn.offset := add(data.offset, offset)
+            tokenIn.length := length
+        }
+
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_TOKEN_IN];
+
+        // Encode tokenIn and chainId as the signature data
+        bytes memory tokenInData = abi.encode(chainId, tokenIn);
+
+        // Call the sub-policy
+        bool valid = I1271Policy(policy)
+            .check1271SignedAction(configId, msg.sender, account, hash, tokenInData);
+
+        if (!valid) return (false, bytes32(0), 0);
+
+        // Calculate hash for return
+        bytes32 commitmentsHash = EIP712TypeHashLib.hashTokenIn(tokenIn);
+        return (true, commitmentsHash, offset + (length * 64));
     }
+
+    /*//////////////////////////////////////////////////////////////
+                               RECIPIENT
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates recipient with mode-based routing
     function _validateRecipient(
@@ -551,24 +662,30 @@ library DecodeLib {
         uint256 targetChainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
         returns (bool)
     {
+        // Get mode for recipient field
         uint8 mode = config.getFieldMode(FIELD_RECIPIENT);
 
+        // If mode is skip, always valid
         if (mode == MODE_SKIP) return true;
 
+        // If mode is storage or catch-all, validate from storage
         if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
             return _validateRecipientStorage(recipient, targetChainId, mode, configId, account);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateRecipientSubPolicy(recipient, targetChainId, configId, account);
+            return _validateRecipientSubPolicy(recipient, targetChainId, configId, account, hash);
         }
 
+        // Return false if no mode matched
         return false;
     }
 
@@ -598,17 +715,30 @@ library DecodeLib {
 
     /// @notice Validates recipient using sub-policy
     function _validateRecipientSubPolicy(
-        address, /* recipient */
-        uint256, /* targetChainId */
-        ConfigId, /* configId */
-        address /* account */
+        address recipient,
+        uint256 targetChainId,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool)
     {
-        revert SubPolicyNotImplemented();
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_RECIPIENT];
+
+        // Encode recipient and targetChainId as the signature data
+        bytes memory recipientData = abi.encode(targetChainId, recipient);
+
+        // Call the sub-policy
+        return I1271Policy(policy)
+            .check1271SignedAction(configId, msg.sender, account, hash, recipientData);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                              FILL EXPIRY
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates fillExpiry with mode-based routing
     function _validateFillExpiry(
@@ -616,24 +746,30 @@ library DecodeLib {
         uint256 targetChainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
         returns (bool)
     {
+        // Get mode for fillExpiry field
         uint8 mode = config.getFieldMode(FIELD_FILL_EXPIRY);
 
+        // If mode is skip, always valid
         if (mode == MODE_SKIP) return true;
 
+        // If mode is storage or catch-all, validate from storage
         if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
             return _validateFillExpiryStorage(fillExpiry, targetChainId, mode, configId, account);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateFillExpirySubPolicy(fillExpiry, targetChainId, configId, account);
+            return _validateFillExpirySubPolicy(fillExpiry, targetChainId, configId, account, hash);
         }
 
+        // Return false if no mode matched
         return false;
     }
 
@@ -664,17 +800,30 @@ library DecodeLib {
 
     /// @notice Validates fillExpiry using sub-policy
     function _validateFillExpirySubPolicy(
-        uint256, /* fillExpiry */
-        uint256, /* targetChainId */
-        ConfigId, /* configId */
-        address /* account */
+        uint256 fillExpiry,
+        uint256 targetChainId,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool)
     {
-        revert SubPolicyNotImplemented();
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_FILL_EXPIRY];
+
+        // Encode fillExpiry and targetChainId as the signature data
+        bytes memory fillExpiryData = abi.encode(targetChainId, fillExpiry);
+
+        // Call the sub-policy
+        return I1271Policy(policy)
+            .check1271SignedAction(configId, msg.sender, account, hash, fillExpiryData);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                               TOKEN OUT
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates tokenOut with mode-based routing
     function _validateTokenOut(
@@ -683,22 +832,27 @@ library DecodeLib {
         uint256 targetChainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
         returns (bool valid, bytes32 tokenOutHash, uint256 newOffset)
     {
+        // Get mode for tokenOut field
         uint8 mode = config.getFieldMode(FIELD_TOKEN_OUT);
 
+        // If mode is check storage or catch-all, validate from storage
         if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
             return _validateTokenOutStorage(data, offset, targetChainId, mode, configId, account);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateTokenOutSubPolicy(data, offset, targetChainId, configId, account);
+            return _validateTokenOutSubPolicy(data, offset, targetChainId, configId, account, hash);
         }
 
+        // Return false if no mode matched
         return (false, bytes32(0), 0);
     }
 
@@ -760,18 +914,48 @@ library DecodeLib {
 
     /// @notice Validates tokenOut using sub-policy
     function _validateTokenOutSubPolicy(
-        bytes calldata, /* data */
-        uint256, /* offset */
-        uint256, /* targetChainId */
-        ConfigId, /* configId */
-        address /* account */
+        bytes calldata data,
+        uint256 offset,
+        uint256 targetChainId,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool, bytes32, uint256)
     {
-        revert SubPolicyNotImplemented();
+        // Decode tokenOut length
+        uint256 length = uint256(bytes32(data[offset:offset + 32]));
+        offset += 32;
+
+        // Create calldata pointer to the tokenOut array data
+        uint256[2][] calldata tokenOut;
+        assembly {
+            tokenOut.offset := add(data.offset, offset)
+            tokenOut.length := length
+        }
+
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_TOKEN_OUT];
+
+        // Encode tokenOut and targetChainId as the signature data
+        bytes memory tokenOutData = abi.encode(targetChainId, tokenOut);
+
+        // Call the sub-policy
+        bool valid = I1271Policy(policy)
+            .check1271SignedAction(configId, msg.sender, account, hash, tokenOutData);
+
+        if (!valid) return (false, bytes32(0), 0);
+
+        // Calculate hash for return
+        bytes32 tokenOutHash = EIP712TypeHashLib.hashTokenOut(tokenOut);
+        return (true, tokenOutHash, offset + (length * 64));
     }
+
+    /*//////////////////////////////////////////////////////////////
+                               ORIGIN OPS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates originOps with mode-based routing
     function _validateOriginOps(
@@ -780,7 +964,8 @@ library DecodeLib {
         uint256 chainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
@@ -790,24 +975,30 @@ library DecodeLib {
         opsHash = bytes32(data[offset:offset + 32]);
         offset += 32;
 
+        // Get mode for originOps field
         uint8 mode = config.getFieldMode(FIELD_ORIGIN_OPS);
 
+        // If mode is skip, always valid
         if (mode == MODE_SKIP) {
             return (true, opsHash, offset);
         }
 
+        // Check if ops are present
         bool hasOps = opsHash != Constants.NO_OPS;
 
+        // If mode is storage or catch-all, validate from storage
         if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
             bool required = _getOriginOpsRequirement(chainId, mode, configId, account);
             return (hasOps == required, opsHash, offset);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
-            bool result = _validateOriginOpsSubPolicy(opsHash, chainId, configId, account);
+            bool result = _validateOriginOpsSubPolicy(opsHash, chainId, configId, account, hash);
             return (result, opsHash, offset);
         }
 
+        // Return false if no mode matched
         return (false, opsHash, offset);
     }
 
@@ -836,17 +1027,30 @@ library DecodeLib {
 
     /// @notice Validates originOps using sub-policy
     function _validateOriginOpsSubPolicy(
-        bytes32, /* opsHash */
-        uint256, /* chainId */
-        ConfigId, /* configId */
-        address /* account */
+        bytes32 opsHash,
+        uint256 chainId,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool)
     {
-        revert SubPolicyNotImplemented();
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_ORIGIN_OPS];
+
+        // Encode the opsHash as the signature data
+        bytes memory opsData = abi.encode(chainId, opsHash);
+
+        // Call the sub-policy with the full hash and opsData
+        return
+            I1271Policy(policy).check1271SignedAction(configId, msg.sender, account, hash, opsData);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                DEST OPS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates destOps with mode-based routing
     function _validateDestOps(
@@ -855,7 +1059,8 @@ library DecodeLib {
         uint256 targetChainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
@@ -879,7 +1084,7 @@ library DecodeLib {
         }
 
         if (mode == MODE_CHECK_SUBPOLICY) {
-            bool result = _validateDestOpsSubPolicy(opsHash, targetChainId, configId, account);
+            bool result = _validateDestOpsSubPolicy(opsHash, targetChainId, configId, account, hash);
             return (result, opsHash, offset);
         }
 
@@ -911,17 +1116,30 @@ library DecodeLib {
 
     /// @notice Validates destOps using sub-policy
     function _validateDestOpsSubPolicy(
-        bytes32, /* opsHash */
-        uint256, /* targetChainId */
-        ConfigId, /* configId */
-        address /* account */
+        bytes32 opsHash,
+        uint256 targetChainId,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool)
     {
-        revert SubPolicyNotImplemented();
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_DEST_OPS];
+
+        // Encode the opsHash as the signature data
+        bytes memory opsData = abi.encode(targetChainId, opsHash);
+
+        // Call the sub-policy with the full hash and opsData
+        return
+            I1271Policy(policy).check1271SignedAction(configId, msg.sender, account, hash, opsData);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                             QUALIFICATION
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates qualification with mode-based routing
     function _validateQualification(
@@ -930,22 +1148,27 @@ library DecodeLib {
         uint256 chainId,
         PolicyConfig config,
         ConfigId configId,
-        address account
+        address account,
+        bytes32 hash
     )
         private
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
+        // Get mode for qualification field
         uint8 mode = config.getFieldMode(FIELD_QUALIFICATION);
 
+        // If mode is storage or catch-all, validate from storage
         if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
             return _validateQualificationStorage(data, offset, chainId, mode, configId, account);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateQualificationSubPolicy(data, offset, chainId, configId, account);
+            return _validateQualificationSubPolicy(data, offset, chainId, configId, account, hash);
         }
 
+        // Return false if no mode matched
         return (false, bytes32(0), 0);
     }
 
@@ -990,47 +1213,46 @@ library DecodeLib {
         }
 
         // Calculate qualification hash
-        qualificationHash = keccak256(data[offset:offset + dataLength]);
+        qualificationHash = keccak256(data[offset:offset + dataLength]); // TODO: Call arbiter for
+            // hash
         return (true, qualificationHash, offset + dataLength);
     }
 
     /// @notice Validates qualification using sub-policy
     function _validateQualificationSubPolicy(
-        bytes calldata, /* data */
-        uint256, /* offset */
-        uint256, /* chainId */
-        ConfigId, /* configId */
-        address /* account */
+        bytes calldata data,
+        uint256 offset,
+        uint256 chainId,
+        ConfigId configId,
+        address account,
+        bytes32 hash
     )
         private
-        pure
+        view
         returns (bool, bytes32, uint256)
     {
-        revert SubPolicyNotImplemented();
-    }
+        // Decode qualification header
+        uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
+        bytes32 qualificationTypehash = bytes32(data[offset + 32:offset + 64]);
+        offset += 64;
 
-    /// @notice Decodes the other (non-notarized) elements from the MultiChainCompact data
-    function _decodeOtherElements(
-        bytes calldata data,
-        uint256 offset
-    )
-        private
-        pure
-        returns (bytes32[] memory, uint256 newOffset)
-    {
-        // Decode the length of the other elements
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Create calldata pointer to the qualification data
+        bytes calldata qualificationData = data[offset:offset + dataLength];
 
-        // Initialize the array to hold the other elements
-        bytes32[] memory elements = new bytes32[](length);
+        PolicyStorage storage $ = StorageLib.getPolicyStorage();
+        address policy = $.subPolicies[configId][msg.sender][account][FIELD_QUALIFICATION];
 
-        // Parse each element
-        for (uint256 i = 0; i < length; i++) {
-            elements[i] = bytes32(data[offset:offset + 32]);
-            offset += 32;
-        }
+        // Encode qualification data, chainId, and typehash as the signature data
+        bytes memory qualData = abi.encode(chainId, qualificationTypehash, qualificationData);
 
-        return (elements, offset);
+        // Call the sub-policy
+        bool valid = I1271Policy(policy)
+            .check1271SignedAction(configId, msg.sender, account, hash, qualData);
+
+        if (!valid) return (false, bytes32(0), 0);
+
+        // Calculate hash for return
+        bytes32 qualificationHash = keccak256(qualificationData); // TODO: Call arbiter for hash
+        return (true, qualificationHash, offset + dataLength);
     }
 }
