@@ -168,41 +168,4 @@ library StorageLib {
             ps.slot := position
         }
     }
-
-    /*//////////////////////////////////////////////////////////////
-                            MODE EXTRACTION
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Extracts the mode for a specific field from the packed mode config
-    /// @param modeConfig The packed mode configuration (uint32)
-    /// @param fieldId The field ID (0-8)
-    /// @return mode The 2-bit mode value (0-3)
-    function getFieldMode(
-        uint32 modeConfig,
-        uint8 fieldId
-    )
-        internal
-        pure
-        returns (uint8 mode)
-    {
-        mode = uint8((modeConfig >> (fieldId * 2)) & 0x3);
-    }
-
-    /// @notice Sets the mode for a specific field in the packed mode config
-    /// @param modeConfig The current packed mode configuration
-    /// @param fieldId The field ID (0-8)
-    /// @param mode The 2-bit mode value (0-3)
-    /// @return newConfig The updated mode configuration
-    function setFieldMode(
-        uint32 modeConfig,
-        uint8 fieldId,
-        uint8 mode
-    )
-        internal
-        pure
-        returns (uint32 newConfig)
-    {
-        uint32 mask = ~(uint32(0x3) << (fieldId * 2));
-        newConfig = (modeConfig & mask) | (uint32(mode) << (fieldId * 2));
-    }
 }

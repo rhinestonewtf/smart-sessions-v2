@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Libraries
+import { StorageLib } from "@policies/compact/lib/StorageLib.sol";
+
 // Types
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
@@ -51,6 +54,13 @@ function eqConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
 /// @title Config Library
 /// @notice Library for managing condition configurations in the MultiChainClaimPolicy
 library ConfigLib {
+    /*//////////////////////////////////////////////////////////////
+                               LIBRARIES
+    //////////////////////////////////////////////////////////////*/
+
+    using StorageLib for *;
+    using ConfigLib for *;
+
     /* //////////////////////////////////////////////////////////////
                                  TYPES
     //////////////////////////////////////////////////////////////*/
@@ -142,6 +152,75 @@ library ConfigLib {
                                  DECODE
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Decodes initialization data based on mode configuration
+    /// @param modeConfig The mode configuration (2 bits per field)
+    /// @param initData The initialization data to decode
+    /// @return init The decoded InitData struct
+    function decodeInitData(
+        uint32 modeConfig,
+        bytes calldata initData
+    )
+        internal
+        pure
+        returns (InitData memory init)
+    {
+        init.modeConfig = modeConfig;
+        bytes calldata data = initData;
+
+        // Decode fields based on mode
+        uint8 arbiterMode = modeConfig.getFieldMode(FIELD_ARBITER);
+        if (arbiterMode == MODE_CHECK_STORAGE) {
+            (init.arbiter, data) = decodeArbiterConfig(data);
+        }
+
+        uint8 expiresMode = modeConfig.getFieldMode(FIELD_CLAIM_EXPIRES);
+        if (expiresMode == MODE_CHECK_STORAGE) {
+            uint256 packed;
+            (packed, data) = decodeClaimExpiresConfig(data);
+            (init.minClaimExpires, init.maxClaimExpires) = unpackUint128(packed);
+        }
+
+        uint8 tokenInMode = modeConfig.getFieldMode(FIELD_TOKEN_IN);
+        if (tokenInMode == MODE_CHECK_STORAGE || tokenInMode == MODE_CHECK_CATCHALL) {
+            (init.tokenInConfigs, data) = decodeTokenInConfig(data);
+        }
+
+        uint8 recipientMode = modeConfig.getFieldMode(FIELD_RECIPIENT);
+        if (recipientMode == MODE_CHECK_STORAGE || recipientMode == MODE_CHECK_CATCHALL) {
+            (init.recipientConfigs, data) = decodeRecipientConfig(data);
+        }
+
+        uint8 fillExpiryMode = modeConfig.getFieldMode(FIELD_FILL_EXPIRY);
+        if (fillExpiryMode == MODE_CHECK_STORAGE || fillExpiryMode == MODE_CHECK_CATCHALL) {
+            (init.fillExpiryConfigs, data) = decodeFillExpiryConfig(data);
+        }
+
+        uint8 tokenOutMode = modeConfig.getFieldMode(FIELD_TOKEN_OUT);
+        if (tokenOutMode == MODE_CHECK_STORAGE || tokenOutMode == MODE_CHECK_CATCHALL) {
+            (init.tokenOutConfigs, data) = decodeTokenOutConfig(data);
+        }
+
+        uint8 originOpsMode = modeConfig.getFieldMode(FIELD_ORIGIN_OPS);
+        if (originOpsMode == MODE_CHECK_STORAGE || originOpsMode == MODE_CHECK_CATCHALL) {
+            (init.originOpsConfigs, data) = decodeOriginOpsConfig(data);
+        }
+
+        uint8 destOpsMode = modeConfig.getFieldMode(FIELD_DEST_OPS);
+        if (destOpsMode == MODE_CHECK_STORAGE || destOpsMode == MODE_CHECK_CATCHALL) {
+            (init.destOpsConfigs, data) = decodeDestOpsConfig(data);
+        }
+
+        uint8 qualificationMode = modeConfig.getFieldMode(FIELD_QUALIFICATION);
+        if (qualificationMode == MODE_CHECK_STORAGE || qualificationMode == MODE_CHECK_CATCHALL) {
+            (init.qualificationConfigs, data) = decodeQualificationConfig(data);
+        }
+
+        // Decode sub-policies if any remaining data
+        if (data.length > 0) {
+            (init.subPolicies, data) = decodeSubPolicyConfig(data);
+        }
+    }
+
     /// @notice Decodes the arbiter address from the initialization data
     /// @param initData The initialization data containing the arbiter address
     /// @return arbiter The arbiter address
@@ -168,229 +247,6 @@ library ConfigLib {
         uint128 maxExpires = uint128(bytes16(initData[16:32]));
         packedExpires = packUint128(minExpires, maxExpires);
         data = initData[32:];
-    }
-
-    /// @notice Decodes the tokenIn configuration from the initialization data
-    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) + 12 (lockTag) = 64 bytes
-    /// @param initData The initialization data containing tokenIn configs
-    /// @return packedConfigs Array of packed tokenIn configurations
-    /// @return chainIds Array of chainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeTokenInConfig(bytes calldata initData)
-        internal
-        pure
-        returns (bytes32[] memory packedConfigs, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        packedConfigs = new bytes32[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 64;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            address token = address(bytes20(initData[offset + 32:offset + 52]));
-            bytes12 lockTag = bytes12(initData[offset + 52:offset + 64]);
-
-            // Pack into bytes32: address (20 bytes) in lower bits, lockTag (12 bytes) in upper bits
-            packedConfigs[i] = bytes32(uint256(uint160(token))) | (bytes32(lockTag) >> 160);
-        }
-
-        data = initData[32 + count * 64:];
-    }
-
-    /// @notice Decodes the recipient configuration from the initialization data
-    /// @dev Each RecipientConfig: 32 (targetChainId) + 20 (recipient) = 52 bytes
-    /// @param initData The initialization data containing recipient configs
-    /// @return recipients Array of recipient addresses
-    /// @return chainIds Array of targetChainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeRecipientConfig(bytes calldata initData)
-        internal
-        pure
-        returns (address[] memory recipients, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        recipients = new address[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 52;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            recipients[i] = address(bytes20(initData[offset + 32:offset + 52]));
-        }
-
-        data = initData[32 + count * 52:];
-    }
-
-    /// @notice Decodes the fillExpiry configuration from the initialization data
-    /// @dev Each FillExpiryConfig: 32 (targetChainId) + 16 (minFillExpiry) + 16 (maxFillExpiry) =
-    /// 64 bytes @param initData The initialization data containing fillExpiry configs
-    /// @return packedExpiries Array of packed fill expiry values
-    /// @return chainIds Array of targetChainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeFillExpiryConfig(bytes calldata initData)
-        internal
-        pure
-        returns (uint256[] memory packedExpiries, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        packedExpiries = new uint256[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 64;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-
-            uint128 minFillExpiry = uint128(bytes16(initData[offset + 32:offset + 48]));
-            uint128 maxFillExpiry = uint128(bytes16(initData[offset + 48:offset + 64]));
-
-            packedExpiries[i] = packUint128(minFillExpiry, maxFillExpiry);
-        }
-
-        data = initData[32 + count * 64:];
-    }
-
-    /// @notice Decodes the tokenOut configuration from the initialization data
-    /// @dev Each TokenOutConfig: 32 (targetChainId) + 20 (token) = 52 bytes
-    /// @param initData The initialization data containing tokenOut configs
-    /// @return tokens Array of token addresses
-    /// @return chainIds Array of targetChainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeTokenOutConfig(bytes calldata initData)
-        internal
-        pure
-        returns (address[] memory tokens, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        tokens = new address[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 52;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            tokens[i] = address(bytes20(initData[offset + 32:offset + 52]));
-        }
-
-        data = initData[32 + count * 52:];
-    }
-
-    /// @notice Decodes the origin ops requirement configuration from the initialization data
-    /// @dev Each OriginOpsConfig: 32 (chainId) + 1 (requireOriginOps) = 33 bytes
-    /// @param initData The initialization data containing origin ops requirement configs
-    /// @return requireFlags Array of bool flags
-    /// @return chainIds Array of chainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeOriginOpsConfig(bytes calldata initData)
-        internal
-        pure
-        returns (bool[] memory requireFlags, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        requireFlags = new bool[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 33;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            requireFlags[i] = uint8(initData[offset + 32]) != 0;
-        }
-
-        data = initData[32 + count * 33:];
-    }
-
-    /// @notice Decodes the dest ops requirement configuration from the initialization data
-    /// @dev Each DestOpsConfig: 32 (targetChainId) + 1 (requireDestOps) = 33 bytes
-    /// @param initData The initialization data containing dest ops requirement configs
-    /// @return requireFlags Array of bool flags
-    /// @return chainIds Array of targetChainIds corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeDestOpsConfig(bytes calldata initData)
-        internal
-        pure
-        returns (bool[] memory requireFlags, uint256[] memory chainIds, bytes calldata data)
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        requireFlags = new bool[](count);
-        chainIds = new uint256[](count);
-
-        for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 33;
-            chainIds[i] = uint256(bytes32(initData[offset:offset + 32]));
-            requireFlags[i] = uint8(initData[offset + 32]) != 0;
-        }
-
-        data = initData[32 + count * 33:];
-    }
-
-    /// @notice Decodes the qualification configuration from the initialization data
-    /// @dev Format: count (32) + [chainId (32) + typehash (32) + rootNodeIndex (1) + ruleCount (32)
-    /// + rules + packedNodesLength (32) + packedNodes] * count @param initData The initialization
-    /// data containing qualification configs
-    /// @return configs Array of qualification configurations
-    /// @return chainIds Array of chainIds corresponding to configs
-    /// @return typehashes Array of typehashes corresponding to configs
-    /// @return data The remaining initialization data after decoding
-    function decodeQualificationConfig(bytes calldata initData)
-        internal
-        pure
-        returns (
-            ParamRules[] memory configs,
-            uint256[] memory chainIds,
-            bytes32[] memory typehashes,
-            bytes calldata data
-        )
-    {
-        uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new ParamRules[](count);
-        chainIds = new uint256[](count);
-        typehashes = new bytes32[](count);
-        uint256 offset = 32;
-
-        for (uint256 j = 0; j < count; j++) {
-            // Decode chainId
-            chainIds[j] = uint256(bytes32(initData[offset:offset + 32]));
-            offset += 32;
-
-            // Decode qualification typehash
-            typehashes[j] = bytes32(initData[offset:offset + 32]);
-            offset += 32;
-
-            // Decode the root node index
-            uint8 rootNodeIndex = uint8(initData[offset]);
-            offset += 1;
-
-            // Decode the number of rules
-            uint256 ruleCount = uint256(bytes32(initData[offset:offset + 32]));
-            offset += 32;
-
-            ParamRule[] memory paramRules = new ParamRule[](ruleCount);
-
-            for (uint256 i = 0; i < ruleCount; i++) {
-                paramRules[i] = ParamRule({
-                    condition: ParamCondition(uint8(initData[offset])),
-                    offset: uint64(bytes8(initData[offset + 1:offset + 9])),
-                    length: uint8(initData[offset + 9]),
-                    ref: bytes32(initData[offset + 10:offset + 42])
-                });
-                offset += 42; // Move to the next rule
-            }
-
-            // Decode packed nodes length
-            uint256 packedNodesLength = uint256(bytes32(initData[offset:offset + 32]));
-            offset += 32;
-
-            uint256[] memory packedNodes = new uint256[](packedNodesLength);
-            for (uint256 i = 0; i < packedNodesLength; i++) {
-                packedNodes[i] = uint256(bytes32(initData[offset:offset + 32]));
-                offset += 32;
-            }
-
-            configs[j] = ParamRules({
-                rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
-            });
-        }
-
-        data = initData[offset:];
     }
 
     /// @notice Decodes sub-policy configurations from the initialization data
@@ -427,6 +283,216 @@ library ConfigLib {
             configs[i] = SubPolicyConfig({
                 fieldId: fieldId, policyAddress: policyAddress, initData: policyInitData
             });
+        }
+
+        data = initData[offset:];
+    }
+
+    /// @notice Decodes the tokenIn configuration from the initialization data
+    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) + 12 (lockTag) = 64 bytes
+    /// @param initData The initialization data containing tokenIn configs
+    /// @return configs Array of TokenInStorageConfig structs
+    /// @return data The remaining initialization data after decoding
+    function decodeTokenInConfig(bytes calldata initData)
+        internal
+        pure
+        returns (TokenInStorageConfig[] memory configs, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new TokenInStorageConfig[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 64;
+            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
+            address token = address(bytes20(initData[offset + 32:offset + 52]));
+            bytes12 lockTag = bytes12(initData[offset + 52:offset + 64]);
+
+            configs[i] = TokenInStorageConfig(chainId, token, lockTag);
+        }
+
+        data = initData[32 + count * 64:];
+    }
+
+    /// @notice Decodes the recipient configuration from the initialization data
+    /// @dev Each RecipientConfig: 32 (targetChainId) + 20 (recipient) = 52 bytes
+    /// @param initData The initialization data containing recipient configs
+    /// @return configs Array of RecipientStorageConfig structs
+    /// @return data The remaining initialization data after decoding
+    function decodeRecipientConfig(bytes calldata initData)
+        internal
+        pure
+        returns (RecipientStorageConfig[] memory configs, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new RecipientStorageConfig[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 52;
+            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
+            address recipient = address(bytes20(initData[offset + 32:offset + 52]));
+
+            configs[i] = RecipientStorageConfig(chainId, recipient);
+        }
+
+        data = initData[32 + count * 52:];
+    }
+
+    /// @notice Decodes the fillExpiry configuration from the initialization data
+    /// @dev Each FillExpiryConfig: 32 (targetChainId) + 16 (minFillExpiry) + 16 (maxFillExpiry) =
+    /// 64 bytes @param initData The initialization data containing fillExpiry configs
+    /// @return configs Array of FillExpiryStorageConfig structs
+    /// @return data The remaining initialization data after decoding
+    function decodeFillExpiryConfig(bytes calldata initData)
+        internal
+        pure
+        returns (FillExpiryStorageConfig[] memory configs, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new FillExpiryStorageConfig[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 64;
+            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
+            uint128 minFillExpiry = uint128(bytes16(initData[offset + 32:offset + 48]));
+            uint128 maxFillExpiry = uint128(bytes16(initData[offset + 48:offset + 64]));
+
+            configs[i] = FillExpiryStorageConfig(chainId, minFillExpiry, maxFillExpiry);
+        }
+
+        data = initData[32 + count * 64:];
+    }
+
+    /// @notice Decodes the tokenOut configuration from the initialization data
+    /// @dev Each TokenOutConfig: 32 (targetChainId) + 20 (token) = 52 bytes
+    /// @param initData The initialization data containing tokenOut configs
+    /// @return configs Array of TokenOutStorageConfig structs
+    /// @return data The remaining initialization data after decoding
+    function decodeTokenOutConfig(bytes calldata initData)
+        internal
+        pure
+        returns (TokenOutStorageConfig[] memory configs, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new TokenOutStorageConfig[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 52;
+            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
+            address token = address(bytes20(initData[offset + 32:offset + 52]));
+
+            configs[i] = TokenOutStorageConfig(chainId, token);
+        }
+
+        data = initData[32 + count * 52:];
+    }
+
+    /// @notice Decodes the origin ops requirement configuration from the initialization data
+    /// @dev Each OriginOpsConfig: 32 (chainId) + 1 (requireOriginOps) = 33 bytes
+    /// @param initData The initialization data containing origin ops requirement configs
+    /// @return configs Array of OriginOpsStorageConfig structs
+    /// @return data The remaining initialization data after decoding
+    function decodeOriginOpsConfig(bytes calldata initData)
+        internal
+        pure
+        returns (OriginOpsStorageConfig[] memory configs, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new OriginOpsStorageConfig[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 33;
+            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
+            bool requireOriginOps = uint8(initData[offset + 32]) != 0;
+
+            configs[i] = OriginOpsStorageConfig(chainId, requireOriginOps);
+        }
+
+        data = initData[32 + count * 33:];
+    }
+
+    /// @notice Decodes the dest ops requirement configuration from the initialization data
+    /// @dev Each DestOpsConfig: 32 (targetChainId) + 1 (requireDestOps) = 33 bytes
+    /// @param initData The initialization data containing dest ops requirement configs
+    /// @return configs Array of DestOpsStorageConfig structs
+    /// @return data The remaining initialization data after decoding
+    function decodeDestOpsConfig(bytes calldata initData)
+        internal
+        pure
+        returns (DestOpsStorageConfig[] memory configs, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new DestOpsStorageConfig[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 offset = 32 + i * 33;
+            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
+            bool requireDestOps = uint8(initData[offset + 32]) != 0;
+
+            configs[i] = DestOpsStorageConfig(chainId, requireDestOps);
+        }
+
+        data = initData[32 + count * 33:];
+    }
+
+    /// @notice Decodes the qualification configuration from the initialization data
+    /// @dev Format: count (32) + [chainId (32) + typehash (32) + rootNodeIndex (1) + ruleCount (32)
+    /// + rules + packedNodesLength (32) + packedNodes] * count @param initData The initialization
+    /// data containing qualification configs
+    /// @return configs Array of QualificationStorageConfig structs
+    /// @return data The remaining initialization data after decoding
+    function decodeQualificationConfig(bytes calldata initData)
+        internal
+        pure
+        returns (QualificationStorageConfig[] memory configs, bytes calldata data)
+    {
+        uint256 count = uint256(bytes32(initData[0:32]));
+        configs = new QualificationStorageConfig[](count);
+        uint256 offset = 32;
+
+        for (uint256 j = 0; j < count; j++) {
+            // Decode chainId
+            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
+            offset += 32;
+
+            // Decode qualification typehash
+            bytes32 typehash = bytes32(initData[offset:offset + 32]);
+            offset += 32;
+
+            // Decode the root node index
+            uint8 rootNodeIndex = uint8(initData[offset]);
+            offset += 1;
+
+            // Decode the number of rules
+            uint256 ruleCount = uint256(bytes32(initData[offset:offset + 32]));
+            offset += 32;
+
+            ParamRule[] memory paramRules = new ParamRule[](ruleCount);
+
+            for (uint256 i = 0; i < ruleCount; i++) {
+                paramRules[i] = ParamRule({
+                    condition: ParamCondition(uint8(initData[offset])),
+                    offset: uint64(bytes8(initData[offset + 1:offset + 9])),
+                    length: uint8(initData[offset + 9]),
+                    ref: bytes32(initData[offset + 10:offset + 42])
+                });
+                offset += 42;
+            }
+
+            // Decode packed nodes length
+            uint256 packedNodesLength = uint256(bytes32(initData[offset:offset + 32]));
+            offset += 32;
+
+            uint256[] memory packedNodes = new uint256[](packedNodesLength);
+            for (uint256 i = 0; i < packedNodesLength; i++) {
+                packedNodes[i] = uint256(bytes32(initData[offset:offset + 32]));
+                offset += 32;
+            }
+
+            ParamRules memory rules = ParamRules({
+                rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
+            });
+
+            configs[j] = QualificationStorageConfig(chainId, typehash, rules);
         }
 
         data = initData[offset:];
@@ -476,5 +542,42 @@ library ConfigLib {
     function unpackTokenIn(bytes32 packed) internal pure returns (address token, bytes12 lockTag) {
         token = address(uint160(uint256(packed)));
         lockTag = bytes12(packed << 160);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            MODE EXTRACTION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Extracts the mode for a specific field from the packed mode config
+    /// @param modeConfig The packed mode configuration (uint32)
+    /// @param fieldId The field ID (0-8)
+    /// @return mode The 2-bit mode value (0-3)
+    function getFieldMode(
+        uint32 modeConfig,
+        uint8 fieldId
+    )
+        internal
+        pure
+        returns (uint8 mode)
+    {
+        mode = uint8((modeConfig >> (fieldId * 2)) & 0x3);
+    }
+
+    /// @notice Sets the mode for a specific field in the packed mode config
+    /// @param modeConfig The current packed mode configuration
+    /// @param fieldId The field ID (0-8)
+    /// @param mode The 2-bit mode value (0-3)
+    /// @return newConfig The updated mode configuration
+    function setFieldMode(
+        uint32 modeConfig,
+        uint8 fieldId,
+        uint8 mode
+    )
+        internal
+        pure
+        returns (uint32 newConfig)
+    {
+        uint32 mask = ~(uint32(0x3) << (fieldId * 2));
+        newConfig = (modeConfig & mask) | (uint32(mode) << (fieldId * 2));
     }
 }
