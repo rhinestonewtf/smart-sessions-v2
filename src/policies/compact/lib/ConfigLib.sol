@@ -168,50 +168,51 @@ library ConfigLib {
         bytes calldata data = initData;
 
         // Decode fields based on mode
-        uint8 arbiterMode = modeConfig.getFieldMode(FIELD_ARBITER);
-        if (arbiterMode == MODE_CHECK_STORAGE) {
+
+        // Arbiter
+        if (modeConfig.getFieldMode(FIELD_ARBITER).isStorageMode()) {
             (init.arbiter, data) = decodeArbiterConfig(data);
         }
 
-        uint8 expiresMode = modeConfig.getFieldMode(FIELD_CLAIM_EXPIRES);
-        if (expiresMode == MODE_CHECK_STORAGE) {
+        // Claim Expires
+        if (modeConfig.getFieldMode(FIELD_CLAIM_EXPIRES).isStorageMode()) {
             uint256 packed;
             (packed, data) = decodeClaimExpiresConfig(data);
             (init.minClaimExpires, init.maxClaimExpires) = unpackUint128(packed);
         }
 
-        uint8 tokenInMode = modeConfig.getFieldMode(FIELD_TOKEN_IN);
-        if (tokenInMode == MODE_CHECK_STORAGE || tokenInMode == MODE_CHECK_CATCHALL) {
+        // Token In
+        if (modeConfig.getFieldMode(FIELD_TOKEN_IN).isStorageMode()) {
             (init.tokenInConfigs, data) = decodeTokenInConfig(data);
         }
 
-        uint8 recipientMode = modeConfig.getFieldMode(FIELD_RECIPIENT);
-        if (recipientMode == MODE_CHECK_STORAGE || recipientMode == MODE_CHECK_CATCHALL) {
+        // Recipient
+        if (modeConfig.getFieldMode(FIELD_RECIPIENT).isStorageMode()) {
             (init.recipientConfigs, data) = decodeRecipientConfig(data);
         }
 
-        uint8 fillExpiryMode = modeConfig.getFieldMode(FIELD_FILL_EXPIRY);
-        if (fillExpiryMode == MODE_CHECK_STORAGE || fillExpiryMode == MODE_CHECK_CATCHALL) {
+        // Fill Expiry
+        if (modeConfig.getFieldMode(FIELD_FILL_EXPIRY).isStorageMode()) {
             (init.fillExpiryConfigs, data) = decodeFillExpiryConfig(data);
         }
 
-        uint8 tokenOutMode = modeConfig.getFieldMode(FIELD_TOKEN_OUT);
-        if (tokenOutMode == MODE_CHECK_STORAGE || tokenOutMode == MODE_CHECK_CATCHALL) {
+        // Token Out
+        if (modeConfig.getFieldMode(FIELD_TOKEN_OUT).isStorageMode()) {
             (init.tokenOutConfigs, data) = decodeTokenOutConfig(data);
         }
 
-        uint8 originOpsMode = modeConfig.getFieldMode(FIELD_ORIGIN_OPS);
-        if (originOpsMode == MODE_CHECK_STORAGE || originOpsMode == MODE_CHECK_CATCHALL) {
+        // Origin Ops
+        if (modeConfig.getFieldMode(FIELD_ORIGIN_OPS).isStorageMode()) {
             (init.originOpsConfigs, data) = decodeOriginOpsConfig(data);
         }
 
-        uint8 destOpsMode = modeConfig.getFieldMode(FIELD_DEST_OPS);
-        if (destOpsMode == MODE_CHECK_STORAGE || destOpsMode == MODE_CHECK_CATCHALL) {
+        // Dest Ops
+        if (modeConfig.getFieldMode(FIELD_DEST_OPS).isStorageMode()) {
             (init.destOpsConfigs, data) = decodeDestOpsConfig(data);
         }
 
-        uint8 qualificationMode = modeConfig.getFieldMode(FIELD_QUALIFICATION);
-        if (qualificationMode == MODE_CHECK_STORAGE || qualificationMode == MODE_CHECK_CATCHALL) {
+        // Qualification
+        if (modeConfig.getFieldMode(FIELD_QUALIFICATION).isStorageMode()) {
             (init.qualificationConfigs, data) = decodeQualificationConfig(data);
         }
 
