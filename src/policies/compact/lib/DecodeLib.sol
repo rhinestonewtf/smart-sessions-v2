@@ -102,18 +102,17 @@ library DecodeLib {
     {
         // Decode fixed header
         bytes32 domainSeparator = bytes32(data[0:32]);
-        address sponsor = address(bytes20(data[32:52]));
-        uint256 nonce = uint256(bytes32(data[52:84]));
-        uint256 expires = uint256(bytes32(data[84:116]));
+        uint256 nonce = uint256(bytes32(data[32:64]));
+        uint256 expires = uint256(bytes32(data[64:96]));
 
         // Validate claim expires
         if (!_validateClaimExpires(expires, config, configId, account, hash)) {
             return (false, bytes32(0));
         }
 
-        // Decode otherElements first (always at offset 116)
+        // Decode otherElements first (always at offset 96)
         (bytes32[] memory otherElements, uint256 notarizedElementOffset) =
-            _decodeOtherElements(data, 116);
+            _decodeOtherElements(data, 96);
 
         // Decode and validate notarized element
         (bool elementValid, bytes32 elementHash) =
@@ -141,7 +140,7 @@ library DecodeLib {
 
         // Hash the MultichainCompact struct
         bytes32 compactHash =
-            EIP712TypeHashLib.hashCompact(sponsor, nonce, expires, allElementsHash);
+            EIP712TypeHashLib.hashCompact(account, nonce, expires, allElementsHash);
 
         // Calculate the digest
         digest = compactHash.withDomain(domainSeparator);
