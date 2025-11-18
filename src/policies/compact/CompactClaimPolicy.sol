@@ -48,19 +48,14 @@ import {
 ///         - lockTag: bytes12
 ///     >>> Mandate
 ///         >>> Target
-///             - recipient
-///             - targetChain
-///             - fillExpiry
+///             - recipient: address
+///             - targetChain: uint256
+///             - fillExpiry: uint256
 ///             >>> Token[] TokenOut
-///         >>> Op originOps
-///             - to
-///             - data
-///             - value
-///         >>> Op destOps
-///             - to
-///             - data
-///             - value
-///         >>> Qualification
+///                 - token: address
+///         >>> Op originOps: bool
+///         >>> Op destOps: bool
+///         >>> Qualification: bytes
 contract CompactClaimPolicy is I1271Policy {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
