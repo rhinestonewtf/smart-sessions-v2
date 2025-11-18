@@ -66,9 +66,10 @@ contract CompactClaimPolicy is I1271Policy {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    using ConfigLib for PolicyConfig;
-    using ConfigLib for bytes;
+    using ConfigLib for uint8;
     using ConfigLib for uint32;
+    using ConfigLib for bytes;
+    using ConfigLib for PolicyConfig;
     using DecodeLib for bytes;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using EnumerableSetLib for EnumerableSetLib.AddressSet;
@@ -141,6 +142,7 @@ contract CompactClaimPolicy is I1271Policy {
         // Get policy storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
+        // TODO: Remove unnecessary memory copy here and work with calldata directly
         // Decode the initialization data
         ConfigLib.InitData memory init = ConfigLib.decodeInitData(modeConfig, configData);
 
@@ -172,8 +174,10 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for arbiter field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_ARBITER);
 
+        // Only store arbiter if mode is MODE_CHECK_STORAGE
         if (mode == MODE_CHECK_STORAGE) {
             $.arbiterConfig[configId][msg.sender][account] = init.arbiter;
         }
@@ -188,8 +192,10 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for claim expires field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_CLAIM_EXPIRES);
 
+        // Only store claim expires if mode is MODE_CHECK_STORAGE
         if (mode == MODE_CHECK_STORAGE) {
             uint256 packed = ConfigLib.packUint128(init.minClaimExpires, init.maxClaimExpires);
             $.claimExpiresConfig[configId][msg.sender][account] = packed;
@@ -205,9 +211,11 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for tokenIn field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_TOKEN_IN);
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // Only if mode is storage-based
+        if (mode.isStorageMode()) {
             for (uint256 i = 0; i < init.tokenInConfigs.length; i++) {
                 TokenInStorageConfig memory config = init.tokenInConfigs[i];
 
@@ -229,9 +237,11 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for recipient field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_RECIPIENT);
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // Only if mode is storage-based
+        if (mode.isStorageMode()) {
             for (uint256 i = 0; i < init.recipientConfigs.length; i++) {
                 RecipientStorageConfig memory config = init.recipientConfigs[i];
 
@@ -253,9 +263,11 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for fillExpiry field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_FILL_EXPIRY);
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // Only if mode is storage-based
+        if (mode.isStorageMode()) {
             for (uint256 i = 0; i < init.fillExpiryConfigs.length; i++) {
                 FillExpiryStorageConfig memory config = init.fillExpiryConfigs[i];
 
@@ -277,9 +289,11 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for tokenOut field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_TOKEN_OUT);
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // Only if mode is storage-based
+        if (mode.isStorageMode()) {
             for (uint256 i = 0; i < init.tokenOutConfigs.length; i++) {
                 TokenOutStorageConfig memory config = init.tokenOutConfigs[i];
 
@@ -300,9 +314,11 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for originOps field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_ORIGIN_OPS);
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // Only if mode is storage-based
+        if (mode.isStorageMode()) {
             for (uint256 i = 0; i < init.originOpsConfigs.length; i++) {
                 OriginOpsStorageConfig memory config = init.originOpsConfigs[i];
 
@@ -324,9 +340,11 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for destOps field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_DEST_OPS);
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // Only if mode is storage-based
+        if (mode.isStorageMode()) {
             for (uint256 i = 0; i < init.destOpsConfigs.length; i++) {
                 DestOpsStorageConfig memory config = init.destOpsConfigs[i];
 
@@ -348,9 +366,11 @@ contract CompactClaimPolicy is I1271Policy {
     )
         private
     {
+        // Extract mode for qualification field
         uint8 mode = init.modeConfig.getFieldMode(FIELD_QUALIFICATION);
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // Only if mode is storage-based
+        if (mode.isStorageMode()) {
             for (uint256 i = 0; i < init.qualificationConfigs.length; i++) {
                 QualificationStorageConfig memory config = init.qualificationConfigs[i];
 

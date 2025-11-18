@@ -580,4 +580,20 @@ library ConfigLib {
         uint32 mask = ~(uint32(0x3) << (fieldId * 2));
         newConfig = (modeConfig & mask) | (uint32(mode) << (fieldId * 2));
     }
+
+    /// @notice Checks if the mode requires storage initialization
+    /// @param mode The mode to check
+    /// @return True if mode is MODE_CHECK_STORAGE or MODE_CHECK_CATCHALL
+    function isStorageMode(uint8 mode) internal pure returns (bool) {
+        return mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL;
+    }
+
+    /// @notice Checks if a field should be initialized with storage
+    /// @param modeConfig The mode configuration
+    /// @param fieldId The field ID to check
+    /// @return True if the field mode requires storage initialization
+    function isStorageBased(uint32 modeConfig, uint8 fieldId) internal pure returns (bool) {
+        uint8 mode = getFieldMode(PolicyConfig.wrap(modeConfig), fieldId);
+        return mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL;
+    }
 }
