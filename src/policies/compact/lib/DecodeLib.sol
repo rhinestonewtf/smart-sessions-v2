@@ -539,16 +539,20 @@ library DecodeLib {
         view
         returns (bool valid, bytes32 commitmentsHash, uint256 newOffset)
     {
+        // Get mode for tokenIn field
         uint8 mode = config.getFieldMode(FIELD_TOKEN_IN);
 
+        // If mode is storage or catch-all, validate from storage
         if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
             return _validateTokenInStorage(data, offset, chainId, mode, configId, account);
         }
 
+        // If mode is sub-policy, validate from sub-policy
         if (mode == MODE_CHECK_SUBPOLICY) {
             return _validateTokenInSubPolicy(data, offset, chainId, configId, account, hash);
         }
 
+        // Return false if no mode matched
         return (false, bytes32(0), 0);
     }
 
@@ -644,6 +648,7 @@ library DecodeLib {
         bool valid = I1271Policy(policy)
             .check1271SignedAction(configId, msg.sender, account, hash, tokenInData);
 
+        // Early return if invalid
         if (!valid) return (false, bytes32(0), 0);
 
         // Calculate hash for return
