@@ -507,6 +507,103 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         assertFalse(result, "Action with required but missing destOps should be rejected");
     }
 
+    //-------------------------------------
+    // 9) QUALIFICATION
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with qualification check - should pass when valid
+    function test_check1271SignedAction_qualification_valid_shouldPass() public {
+        bytes32 testTypehash = keccak256("TestQualification");
+        uint256 chainId = 1;
+
+        // Create simple rule: bytes[0:32] EQUAL to 0x123...
+        bytes32 expectedValue = bytes32(uint256(0x123));
+        ParamRule[] memory rules = new ParamRule[](1);
+        rules[0] = ParamRule({
+            condition: ParamCondition.EQUAL, offset: 0, length: 32, ref: expectedValue
+        });
+
+        // Create simple expression tree: just check rule 0
+        uint256[] memory packedNodes = new uint256[](1);
+        packedNodes[0] = uint256(0) | (uint256(0) << 8); // NODE_TYPE_RULE, ruleIndex=0
+
+        ParamRules memory paramRules =
+            ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
+
+        // Initialize policy with qualification check
+        _initializePolicyWithQualification(testTypehash, paramRules, chainId);
+
+        // Create qualification data that matches the rule
+        bytes memory qualData = abi.encodePacked(expectedValue);
+        bytes memory compactData = _createCompactDataWithQualification(
+            testTypehash,
+            qualData,
+            0x00, // Use keccak256 flag
+            chainId
+        );
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithQualification(compactData);
+
+        // Check the action
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Action with valid qualification should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with qualification check - should fail when invalid
+    function test_check1271SignedAction_qualification_invalid_shouldFail() public {
+        bytes32 testTypehash = keccak256("TestQualification");
+        uint256 chainId = 1;
+
+        // Create simple rule: bytes[0:32] EQUAL to 0x123...
+        bytes32 expectedValue = bytes32(uint256(0x123));
+        ParamRule[] memory rules = new ParamRule[](1);
+        rules[0] = ParamRule({
+            condition: ParamCondition.EQUAL, offset: 0, length: 32, ref: expectedValue
+        });
+
+        // Create simple expression tree: just check rule 0
+        uint256[] memory packedNodes = new uint256[](1);
+        packedNodes[0] = uint256(0) | (uint256(0) << 8); // NODE_TYPE_RULE, ruleIndex=0
+
+        ParamRules memory paramRules =
+            ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
+
+        // Initialize policy with qualification check
+        _initializePolicyWithQualification(testTypehash, paramRules, chainId);
+
+        // Create qualification data that DOESN'T match the rule
+        bytes32 wrongValue = bytes32(uint256(0x456));
+        bytes memory qualData = abi.encodePacked(wrongValue);
+        bytes memory compactData = _createCompactDataWithQualification(
+            testTypehash,
+            qualData,
+            0x00, // Use keccak256 flag
+            chainId
+        );
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithQualification(compactData);
+
+        // Check the action
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Action with invalid qualification should be rejected");
+    }
+
     /*//////////////////////////////////////////////////////////////
                                  HELPERS
     //////////////////////////////////////////////////////////////*/
@@ -1089,6 +1186,154 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
         bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
+
+        // Hash mandate
+        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
+            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
+        );
+
+        // Hash element
+        bytes32 elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+
+        // Hash compact
+        bytes32[] memory allElements = new bytes32[](1);
+        allElements[0] = elementHash;
+        bytes32 allElementsHash = EfficientHashLib.hash(allElements);
+
+        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
+    }
+
+    /// @notice Initialize policy with qualification check
+    function _initializePolicyWithQualification(
+        bytes32 typehash,
+        ParamRules memory paramRules,
+        uint256 chainId
+    )
+        internal
+    {
+        uint32 modeConfig = _createModeConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
+
+        // Encode qualification config
+        bytes memory qualConfig = abi.encodePacked(
+            uint256(1), // count
+            chainId,
+            typehash,
+            paramRules.rootNodeIndex
+        );
+
+        // Encode rules
+        qualConfig = abi.encodePacked(qualConfig, uint256(paramRules.rules.length));
+
+        for (uint256 i = 0; i < paramRules.rules.length; i++) {
+            qualConfig = abi.encodePacked(
+                qualConfig,
+                uint8(paramRules.rules[i].condition),
+                paramRules.rules[i].offset,
+                paramRules.rules[i].length,
+                paramRules.rules[i].ref
+            );
+        }
+
+        // Encode packed nodes
+        qualConfig = abi.encodePacked(qualConfig, uint256(paramRules.packedNodes.length));
+
+        for (uint256 i = 0; i < paramRules.packedNodes.length; i++) {
+            qualConfig = abi.encodePacked(qualConfig, paramRules.packedNodes[i]);
+        }
+
+        bytes memory initData = abi.encodePacked(modeConfig, qualConfig);
+
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Create Compact data with qualification
+    function _createCompactDataWithQualification(
+        bytes32 typehash,
+        bytes memory qualificationData,
+        uint8 flags,
+        uint256 chainId
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), chainId);
+
+        // Create qualification section
+        bytes memory qualificationSection = abi.encodePacked(
+            uint256(qualificationData.length), // dataLength
+            flags, // flags (0x00 = keccak256, 0x01 = arbiter hash)
+            typehash, // qualification typehash
+            qualificationData // actual qualification data
+        );
+
+        bytes memory mandateData = abi.encodePacked(
+            keccak256("target"), // targetHash (32 bytes)
+            uint256(1), // targetChainId (32 bytes)
+            uint128(0), // minGas (16 bytes)
+            Constants.NO_OPS, // originOpsHash (32 bytes)
+            Constants.NO_OPS, // destOpsHash (32 bytes)
+            qualificationSection // qualification with header
+        );
+
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Compute expected hash when qualification is expanded
+    function computeExpectedHashWithQualification(bytes calldata compactData)
+        external
+        view
+        returns (bytes32)
+    {
+        // Parse compact data
+        uint256 nonce = uint256(bytes32(compactData[0:32]));
+        uint256 expires = uint256(bytes32(compactData[32:64]));
+
+        // Skip otherElements (length = 0)
+        uint256 offset = 96;
+
+        // Parse element
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 32; // arbiter + reserved
+        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        // Parse mandate (non-expanded fields)
+        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        offset += 32; // Skip targetChainId
+        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
+        offset += 16;
+        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        // Parse qualification (expanded!)
+        uint256 dataLength = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+
+        uint8 flags = uint8(compactData[offset]);
+        offset += 1;
+
+        // Skip typehash
+        offset += 32;
+
+        // Get qualification data
+        bytes calldata qualData = compactData[offset:offset + dataLength];
+
+        // Hash based on flags
+        bytes32 qualificationHash;
+        if ((flags & 0x01) != 0) {
+            // Would call arbiter.qualificationHash(qualData)
+            // For tests without arbiter, just use keccak256
+            qualificationHash = keccak256(qualData);
+        } else {
+            qualificationHash = keccak256(qualData);
+        }
 
         // Hash mandate
         bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(

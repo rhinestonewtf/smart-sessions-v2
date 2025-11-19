@@ -37,7 +37,7 @@ struct PolicyStorage {
             address msgSender
                 => mapping(address userOpSender => mapping(uint8 fieldId => address policy))
         )
-    ) subPolicies; // TODO: Do we need these to be per chain?
+    ) subPolicies;
 
     // ========== STORAGE-BASED CONFIGS ==========
 
@@ -138,7 +138,7 @@ struct PolicyStorage {
                 )
             )
         )
-    ) qualificationConfig;
+    ) qualificationConfig; // TODO: Do we need this per qualificationTypehash?
 }
 
 /// @title Storage Library

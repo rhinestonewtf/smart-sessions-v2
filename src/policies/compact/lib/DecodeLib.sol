@@ -6,6 +6,7 @@ import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
+import { IArbiter } from "@policies/compact/interfaces/IArbiter.sol";
 
 // Libraries
 import { ConfigLib, PolicyConfig } from "@policies/compact/lib/ConfigLib.sol";
@@ -15,6 +16,7 @@ import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
+import { ConfigLib as CompactPolicyConfigLib } from "@policies/compact/lib/ConfigLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -45,6 +47,7 @@ library DecodeLib {
 
     using ConfigLib for PolicyConfig;
     using ConfigLib for bytes;
+    using CompactPolicyConfigLib for uint8;
     using ArgPolicyTreeLibV2 for ParamRules;
     using DomainLib for bytes32;
     using EfficientHashLib for bytes32;
@@ -189,7 +192,7 @@ library DecodeLib {
 
         // Validate mandate and get mandateHash
         (bool mandateValid, bytes32 mandateHash) =
-            _validateMandate(data, offset, chainId, config, configId, account, hash);
+            _validateMandate(data, offset, chainId, config, configId, account, hash, arbiter);
         if (!mandateValid) {
             return (false, bytes32(0));
         }
@@ -209,7 +212,8 @@ library DecodeLib {
         PolicyConfig config,
         ConfigId configId,
         address account,
-        bytes32 hash
+        bytes32 hash,
+        address arbiter
     )
         private
         view
@@ -273,8 +277,9 @@ library DecodeLib {
         bytes32 qualificationHash;
         if (config.hasCheckQualification()) {
             bool qualValid;
-            (qualValid, qualificationHash, offset) =
-                _validateQualification(data, offset, chainId, config, configId, account, hash);
+            (qualValid, qualificationHash, offset) = _validateQualification(
+                data, offset, chainId, arbiter, config, configId, account, hash
+            );
             if (!qualValid) {
                 return (false, bytes32(0));
             }
@@ -395,12 +400,12 @@ library DecodeLib {
         if (mode == MODE_SKIP) return true;
 
         // If mode is storage, validate from storage
-        if (mode == MODE_CHECK_STORAGE) {
+        if (mode.isStorageMode()) {
             return _validateArbiterStorage(arbiter, configId, account);
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        if (mode.isSubPolicyMode()) {
             return _validateArbiterSubPolicy(arbiter, configId, account, hash);
         }
 
@@ -469,12 +474,12 @@ library DecodeLib {
         if (mode == MODE_SKIP) return true;
 
         // If mode is storage, validate from storage
-        if (mode == MODE_CHECK_STORAGE) {
+        if (mode.isStorageMode()) {
             return _validateClaimExpiresStorage(expires, configId, account);
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        if (mode.isSubPolicyMode()) {
             return _validateClaimExpiresSubPolicy(expires, configId, account, hash);
         }
 
@@ -543,12 +548,12 @@ library DecodeLib {
         uint8 mode = config.getFieldMode(FIELD_TOKEN_IN);
 
         // If mode is storage or catch-all, validate from storage
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        if (mode.isStorageMode()) {
             return _validateTokenInStorage(data, offset, chainId, mode, configId, account);
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        if (mode.isSubPolicyMode()) {
             return _validateTokenInSubPolicy(data, offset, chainId, configId, account, hash);
         }
 
@@ -578,14 +583,9 @@ library DecodeLib {
 
         // Get the tokenIn set (with catch-all if mode == MODE_CHECK_CATCHALL)
         EnumerableSetLib.Bytes32Set storage tokenSet =
-            $.tokenInSet[configId][msg.sender][account][chainId];
+            $.tokenInSet[configId][msg.sender][account][mode.getEffectiveChainId(chainId)];
 
-        // If empty and catch-all mode, try catch-all (chainId = 0)
-        if (mode == MODE_CHECK_CATCHALL && tokenSet.length() == 0) {
-            tokenSet = $.tokenInSet[configId][msg.sender][account][0];
-        }
-
-        // If still empty, no config exists
+        // If empty, no config exists
         if (tokenSet.length() == 0) {
             return (false, bytes32(0), 0);
         }
@@ -680,12 +680,12 @@ library DecodeLib {
         if (mode == MODE_SKIP) return true;
 
         // If mode is storage or catch-all, validate from storage
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        if (mode.isStorageMode()) {
             return _validateRecipientStorage(recipient, targetChainId, mode, configId, account);
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        if (mode.isSubPolicyMode()) {
             return _validateRecipientSubPolicy(recipient, targetChainId, configId, account, hash);
         }
 
@@ -707,12 +707,10 @@ library DecodeLib {
     {
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
-        address expected = $.recipientConfig[configId][msg.sender][account][targetChainId];
-
-        // If empty and catch-all mode, try catch-all (targetChainId = 0)
-        if (mode == MODE_CHECK_CATCHALL && expected == address(0)) {
-            expected = $.recipientConfig[configId][msg.sender][account][0];
-        }
+        // Get expected recipient from storage (with catch-all if mode == MODE_CHECK_CATCHALL)
+        address expected = $.recipientConfig[
+            configId
+        ][msg.sender][account][mode.getEffectiveChainId(targetChainId)];
 
         return recipient == expected;
     }
@@ -764,12 +762,12 @@ library DecodeLib {
         if (mode == MODE_SKIP) return true;
 
         // If mode is storage or catch-all, validate from storage
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        if (mode.isStorageMode()) {
             return _validateFillExpiryStorage(fillExpiry, targetChainId, mode, configId, account);
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        if (mode.isSubPolicyMode()) {
             return _validateFillExpirySubPolicy(fillExpiry, targetChainId, configId, account, hash);
         }
 
@@ -791,12 +789,10 @@ library DecodeLib {
     {
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
-        uint256 packed = $.fillExpiryConfig[configId][msg.sender][account][targetChainId];
-
-        // If empty and catch-all mode, try catch-all (targetChainId = 0)
-        if (mode == MODE_CHECK_CATCHALL && packed == 0) {
-            packed = $.fillExpiryConfig[configId][msg.sender][account][0];
-        }
+        // Get expected min/max from storage (with catch-all if mode == MODE_CHECK_CATCHALL)
+        uint256 packed = $.fillExpiryConfig[
+            configId
+        ][msg.sender][account][mode.getEffectiveChainId(targetChainId)];
 
         (uint128 min, uint128 max) = ConfigLib.unpackUint128(packed);
         return fillExpiry >= min && fillExpiry <= max;
@@ -847,12 +843,12 @@ library DecodeLib {
         uint8 mode = config.getFieldMode(FIELD_TOKEN_OUT);
 
         // If mode is check storage or catch-all, validate from storage
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        if (mode.isStorageMode()) {
             return _validateTokenOutStorage(data, offset, targetChainId, mode, configId, account);
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        if (mode.isSubPolicyMode()) {
             return _validateTokenOutSubPolicy(data, offset, targetChainId, configId, account, hash);
         }
 
@@ -882,12 +878,7 @@ library DecodeLib {
 
         // Get the tokenOut set (with catch-all if mode == MODE_CHECK_CATCHALL)
         EnumerableSetLib.AddressSet storage tokenSet =
-            $.tokenOutSet[configId][msg.sender][account][targetChainId];
-
-        // If empty and catch-all mode, try catch-all (targetChainId = 0)
-        if (mode == MODE_CHECK_CATCHALL && tokenSet.length() == 0) {
-            tokenSet = $.tokenOutSet[configId][msg.sender][account][0];
-        }
+            $.tokenOutSet[configId][msg.sender][account][mode.getEffectiveChainId(targetChainId)];
 
         // If still empty, no config exists
         if (tokenSet.length() == 0) {
@@ -991,13 +982,13 @@ library DecodeLib {
         bool hasOps = opsHash != Constants.NO_OPS;
 
         // If mode is storage or catch-all, validate from storage
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        if (mode.isStorageMode()) {
             bool required = _getOriginOpsRequirement(chainId, mode, configId, account);
             return (hasOps == required, opsHash, offset);
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        if (mode.isSubPolicyMode()) {
             bool result = _validateOriginOpsSubPolicy(opsHash, chainId, configId, account, hash);
             return (result, opsHash, offset);
         }
@@ -1019,12 +1010,9 @@ library DecodeLib {
     {
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
-        bool required = $.originOpsConfig[configId][msg.sender][account][chainId];
-
-        // If false and catch-all mode, try catch-all (chainId = 0)
-        if (mode == MODE_CHECK_CATCHALL && !required) {
-            required = $.originOpsConfig[configId][msg.sender][account][0];
-        }
+        // Get required flag from storage (with catch-all if mode == MODE_CHECK_CATCHALL)
+        bool required =
+            $.originOpsConfig[configId][msg.sender][account][mode.getEffectiveChainId(chainId)];
 
         return required;
     }
@@ -1074,24 +1062,30 @@ library DecodeLib {
         opsHash = bytes32(data[offset:offset + 32]);
         offset += 32;
 
+        // Get mode for destOps field
         uint8 mode = config.getFieldMode(FIELD_DEST_OPS);
 
+        // If mode is skip, always valid
         if (mode == MODE_SKIP) {
             return (true, opsHash, offset);
         }
 
+        // Check if ops are present
         bool hasOps = opsHash != Constants.NO_OPS;
 
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
+        // If mode is storage or catch-all, validate from storage
+        if (mode.isStorageMode()) {
             bool required = _getDestOpsRequirement(targetChainId, mode, configId, account);
             return (hasOps == required, opsHash, offset);
         }
 
-        if (mode == MODE_CHECK_SUBPOLICY) {
+        // If mode is sub-policy, validate from sub-policy
+        if (mode.isSubPolicyMode()) {
             bool result = _validateDestOpsSubPolicy(opsHash, targetChainId, configId, account, hash);
             return (result, opsHash, offset);
         }
 
+        // Return false if no mode matched
         return (false, opsHash, offset);
     }
 
@@ -1108,12 +1102,10 @@ library DecodeLib {
     {
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
-        bool required = $.destOpsConfig[configId][msg.sender][account][targetChainId];
-
-        // If false and catch-all mode, try catch-all (targetChainId = 0)
-        if (mode == MODE_CHECK_CATCHALL && !required) {
-            required = $.destOpsConfig[configId][msg.sender][account][0];
-        }
+        // Get required flag from storage (with catch-all if mode == MODE_CHECK_CATCHALL)
+        bool required = $.destOpsConfig[
+            configId
+        ][msg.sender][account][mode.getEffectiveChainId(targetChainId)];
 
         return required;
     }
@@ -1150,6 +1142,7 @@ library DecodeLib {
         bytes calldata data,
         uint256 offset,
         uint256 chainId,
+        address arbiter,
         PolicyConfig config,
         ConfigId configId,
         address account,
@@ -1163,13 +1156,17 @@ library DecodeLib {
         uint8 mode = config.getFieldMode(FIELD_QUALIFICATION);
 
         // If mode is storage or catch-all, validate from storage
-        if (mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL) {
-            return _validateQualificationStorage(data, offset, chainId, mode, configId, account);
+        if (mode.isStorageMode()) {
+            return _validateQualificationStorage(
+                data, offset, chainId, mode, configId, account, arbiter
+            );
         }
 
         // If mode is sub-policy, validate from sub-policy
-        if (mode == MODE_CHECK_SUBPOLICY) {
-            return _validateQualificationSubPolicy(data, offset, chainId, configId, account, hash);
+        if (mode.isSubPolicyMode()) {
+            return _validateQualificationSubPolicy(
+                data, offset, chainId, configId, account, hash, arbiter
+            );
         }
 
         // Return false if no mode matched
@@ -1177,13 +1174,15 @@ library DecodeLib {
     }
 
     /// @notice Validates qualification using storage (with optional catch-all)
+    /// @notice Validates qualification using storage (with optional catch-all)
     function _validateQualificationStorage(
         bytes calldata data,
         uint256 offset,
         uint256 chainId,
         uint8 mode,
         ConfigId configId,
-        address account
+        address account,
+        address arbiter
     )
         private
         view
@@ -1191,34 +1190,46 @@ library DecodeLib {
     {
         // Decode qualification header
         uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
-        bytes32 qualificationTypehash = bytes32(data[offset + 32:offset + 64]);
-        offset += 64;
+        offset += 32;
+
+        // Decode flags
+        // Two possible flags:
+        // - 0x00: Use keccak256
+        // - 0x01: Use arbiter hash
+        uint8 flags = uint8(data[offset]);
+        offset += 1;
+
+        bytes32 qualificationTypehash = bytes32(data[offset:offset + 32]);
+        offset += 32;
 
         // Get storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
         // Load the qualification configuration (with catch-all)
-        ParamRules storage qualificationConfig =
-            $.qualificationConfig[configId][msg.sender][account][chainId][qualificationTypehash];
+        ParamRules storage qualificationConfig = $.qualificationConfig[
+            configId
+        ][msg.sender][account][mode.getEffectiveChainId(chainId)][qualificationTypehash];
 
-        // Check if config exists (rootNodeIndex > 0 or has rules)
-        bool hasConfig =
-            qualificationConfig.rootNodeIndex > 0 || qualificationConfig.rules.length > 0;
-
-        // If no config and catch-all mode, try catch-all (chainId = 0)
-        if (mode == MODE_CHECK_CATCHALL && !hasConfig) {
-            qualificationConfig =
-                $.qualificationConfig[configId][msg.sender][account][0][qualificationTypehash];
-        }
+        // Extract qualification data
+        bytes calldata qualificationData = data[offset:offset + dataLength];
 
         // Validate qualification data against the qualificationConfig
-        if (!qualificationConfig.evaluateExpressionTree(data[offset:offset + dataLength])) {
+        if (!qualificationConfig.evaluateExpressionTree(qualificationData)) {
             return (false, bytes32(0), 0);
         }
 
-        // Calculate qualification hash
-        qualificationHash = keccak256(data[offset:offset + dataLength]); // TODO: Call arbiter for
-            // hash
+        // Calculate qualification hash based on flags
+        bool useArbiterHash = (flags & 0x01) != 0;
+
+        // If the useArbiterHash flag is set, call the arbiter to compute the hash
+        if (useArbiterHash) {
+            // Call arbiter to compute hash
+            qualificationHash = IArbiter(arbiter).qualificationHash(qualificationData);
+        } else {
+            // Use default keccak256
+            qualificationHash = keccak256(qualificationData);
+        }
+
         return (true, qualificationHash, offset + dataLength);
     }
 
@@ -1229,16 +1240,26 @@ library DecodeLib {
         uint256 chainId,
         ConfigId configId,
         address account,
-        bytes32 hash
+        bytes32 hash,
+        address arbiter
     )
         private
         view
-        returns (bool, bytes32, uint256)
+        returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
         // Decode qualification header
         uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
-        bytes32 qualificationTypehash = bytes32(data[offset + 32:offset + 64]);
-        offset += 64;
+        offset += 32;
+
+        // Decode flags
+        // Two possible flags:
+        // - 0x00: Use keccak256
+        // - 0x01: Use arbiter hash
+        uint8 flags = uint8(data[offset]);
+        offset += 1;
+
+        bytes32 qualificationTypehash = bytes32(data[offset:offset + 32]);
+        offset += 32;
 
         // Create calldata pointer to the qualification data
         bytes calldata qualificationData = data[offset:offset + dataLength];
@@ -1250,13 +1271,23 @@ library DecodeLib {
         bytes memory qualData = abi.encode(chainId, qualificationTypehash, qualificationData);
 
         // Call the sub-policy
-        bool valid = I1271Policy(policy)
+        valid = I1271Policy(policy)
             .check1271SignedAction(configId, msg.sender, account, hash, qualData);
 
         if (!valid) return (false, bytes32(0), 0);
 
-        // Calculate hash for return
-        bytes32 qualificationHash = keccak256(qualificationData); // TODO: Call arbiter for hash
+        // Calculate hash for return based on flags
+        bool useArbiterHash = (flags & 0x01) != 0;
+
+        // If the useArbiterHash flag is set, call the arbiter to compute the hash
+        if (useArbiterHash) {
+            // Call arbiter to compute hash
+            qualificationHash = IArbiter(arbiter).qualificationHash(qualificationData);
+        } else {
+            // Use default keccak256
+            qualificationHash = keccak256(qualificationData);
+        }
+
         return (true, qualificationHash, offset + dataLength);
     }
 }

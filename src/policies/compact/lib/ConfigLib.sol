@@ -589,6 +589,11 @@ library ConfigLib {
         return mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL;
     }
 
+    /// @notice Checks if the mode is sub-policy delegation
+    function isSubPolicyMode(uint8 mode) internal pure returns (bool) {
+        return mode == MODE_CHECK_SUBPOLICY;
+    }
+
     /// @notice Checks if a field should be initialized with storage
     /// @param modeConfig The mode configuration
     /// @param fieldId The field ID to check
@@ -596,5 +601,17 @@ library ConfigLib {
     function isStorageBased(uint32 modeConfig, uint8 fieldId) internal pure returns (bool) {
         uint8 mode = getFieldMode(PolicyConfig.wrap(modeConfig), fieldId);
         return mode == MODE_CHECK_STORAGE || mode == MODE_CHECK_CATCHALL;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                CATCHALL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice If mode is catch all returns chainId 0, else returns given chainId
+    function getEffectiveChainId(uint8 mode, uint256 chainId) internal pure returns (uint256) {
+        if (mode == MODE_CHECK_CATCHALL) {
+            return 0;
+        }
+        return chainId;
     }
 }
