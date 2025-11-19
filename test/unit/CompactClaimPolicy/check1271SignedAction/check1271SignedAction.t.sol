@@ -513,8 +513,8 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
     /// @notice Test check1271SignedAction with qualification check - should pass when valid
     function test_check1271SignedAction_qualification_valid_shouldPass() public {
-        bytes32 testTypehash = keccak256("TestQualification");
         uint256 chainId = 1;
+        address arbiter = makeAddr("qualificationArbiter");
 
         // Create simple rule: bytes[0:32] EQUAL to 0x123...
         bytes32 expectedValue = bytes32(uint256(0x123));
@@ -531,12 +531,12 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
 
         // Initialize policy with qualification check
-        _initializePolicyWithQualification(testTypehash, paramRules, chainId);
+        _initializePolicyWithQualification(arbiter, paramRules, chainId);
 
         // Create qualification data that matches the rule
         bytes memory qualData = abi.encodePacked(expectedValue);
         bytes memory compactData = _createCompactDataWithQualification(
-            testTypehash,
+            arbiter,
             qualData,
             0x00, // Use keccak256 flag
             chainId
@@ -559,8 +559,8 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
     /// @notice Test check1271SignedAction with qualification check - should fail when invalid
     function test_check1271SignedAction_qualification_invalid_shouldFail() public {
-        bytes32 testTypehash = keccak256("TestQualification");
         uint256 chainId = 1;
+        address arbiter = makeAddr("qualificationArbiter");
 
         // Create simple rule: bytes[0:32] EQUAL to 0x123...
         bytes32 expectedValue = bytes32(uint256(0x123));
@@ -577,13 +577,13 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
 
         // Initialize policy with qualification check
-        _initializePolicyWithQualification(testTypehash, paramRules, chainId);
+        _initializePolicyWithQualification(arbiter, paramRules, chainId);
 
         // Create qualification data that DOESN'T match the rule
         bytes32 wrongValue = bytes32(uint256(0x456));
         bytes memory qualData = abi.encodePacked(wrongValue);
         bytes memory compactData = _createCompactDataWithQualification(
-            testTypehash,
+            arbiter,
             qualData,
             0x00, // Use keccak256 flag
             chainId
@@ -1206,7 +1206,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
     /// @notice Initialize policy with qualification check
     function _initializePolicyWithQualification(
-        bytes32 typehash,
+        address arbiter,
         ParamRules memory paramRules,
         uint256 chainId
     )
@@ -1218,7 +1218,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         bytes memory qualConfig = abi.encodePacked(
             uint256(1), // count
             chainId,
-            typehash,
+            arbiter,
             paramRules.rootNodeIndex
         );
 
@@ -1249,22 +1249,22 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
     /// @notice Create Compact data with qualification
     function _createCompactDataWithQualification(
-        bytes32 typehash,
+        address arbiter,
         bytes memory qualificationData,
         uint8 flags,
         uint256 chainId
     )
         internal
+        view
         returns (bytes memory)
     {
         bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), chainId);
+        bytes memory elementHeader = _createElementHeader(arbiter, chainId);
 
         // Create qualification section
         bytes memory qualificationSection = abi.encodePacked(
             uint256(qualificationData.length), // dataLength
             flags, // flags (0x00 = keccak256, 0x01 = arbiter hash)
-            typehash, // qualification typehash
             qualificationData // actual qualification data
         );
 
@@ -1319,8 +1319,8 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         uint8 flags = uint8(compactData[offset]);
         offset += 1;
 
-        // Skip typehash
-        offset += 32;
+        // NO SKIP HERE - arbiter is not in the qualification section!
+        // It's already been read from the Element header above!
 
         // Get qualification data
         bytes calldata qualData = compactData[offset:offset + dataLength];

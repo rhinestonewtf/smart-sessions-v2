@@ -374,7 +374,7 @@ contract CompactClaimPolicy is I1271Policy {
 
                 ParamRules storage rules = $.qualificationConfig[
                     configId
-                ][msg.sender][account][config.chainId][config.qualificationTypehash];
+                ][msg.sender][account][config.chainId][config.arbiter];
 
                 // Store the rules
                 rules.rootNodeIndex = config.rules.rootNodeIndex;

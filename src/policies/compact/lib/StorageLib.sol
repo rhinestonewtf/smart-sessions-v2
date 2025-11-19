@@ -133,12 +133,11 @@ struct PolicyStorage {
                 => mapping(
                 address userOpSender
                     => mapping(
-                    uint256 chainId
-                        => mapping(bytes32 qualificationTypehash => ParamRules qualificationConfig)
+                    uint256 chainId => mapping(address arbiter => ParamRules qualificationConfig)
                 )
             )
         )
-    ) qualificationConfig; // TODO: Do we need this per qualificationTypehash?
+    ) qualificationConfig;
 }
 
 /// @title Storage Library

@@ -115,9 +115,10 @@ struct DestOpsStorageConfig {
 
 /// @notice Storage config for qualification params
 /// @param chainId The chain ID
-/// @param qualificationTypehash The qualification typehash
+/// @param arbiter The arbiter address
+/// @param rules The parameter rules for qualification
 struct QualificationStorageConfig {
     uint256 chainId;
-    bytes32 qualificationTypehash;
+    address arbiter;
     ParamRules rules;
 }

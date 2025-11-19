@@ -455,9 +455,9 @@ library ConfigLib {
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
             offset += 32;
 
-            // Decode qualification typehash
-            bytes32 typehash = bytes32(initData[offset:offset + 32]);
-            offset += 32;
+            // Decode qualification arbiter
+            address arbiter = address(bytes20(initData[offset:offset + 20]));
+            offset += 20;
 
             // Decode the root node index
             uint8 rootNodeIndex = uint8(initData[offset]);
@@ -493,7 +493,7 @@ library ConfigLib {
                 rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
             });
 
-            configs[j] = QualificationStorageConfig(chainId, typehash, rules);
+            configs[j] = QualificationStorageConfig(chainId, arbiter, rules);
         }
 
         data = initData[offset:];

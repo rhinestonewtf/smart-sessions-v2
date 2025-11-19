@@ -1199,22 +1199,22 @@ library DecodeLib {
         uint8 flags = uint8(data[offset]);
         offset += 1;
 
-        bytes32 qualificationTypehash = bytes32(data[offset:offset + 32]);
-        offset += 32;
-
         // Get storage pointer
         PolicyStorage storage $ = StorageLib.getPolicyStorage();
 
         // Load the qualification configuration (with catch-all)
         ParamRules storage qualificationConfig = $.qualificationConfig[
             configId
-        ][msg.sender][account][mode.getEffectiveChainId(chainId)][qualificationTypehash];
+        ][msg.sender][account][mode.getEffectiveChainId(chainId)][arbiter];
 
         // Extract qualification data
         bytes calldata qualificationData = data[offset:offset + dataLength];
 
         // Validate qualification data against the qualificationConfig
-        if (!qualificationConfig.evaluateExpressionTree(qualificationData)) {
+        if (
+            qualificationConfig.rules.length != 0
+                && !qualificationConfig.evaluateExpressionTree(qualificationData)
+        ) {
             return (false, bytes32(0), 0);
         }
 
@@ -1258,9 +1258,6 @@ library DecodeLib {
         uint8 flags = uint8(data[offset]);
         offset += 1;
 
-        bytes32 qualificationTypehash = bytes32(data[offset:offset + 32]);
-        offset += 32;
-
         // Create calldata pointer to the qualification data
         bytes calldata qualificationData = data[offset:offset + dataLength];
 
@@ -1268,12 +1265,13 @@ library DecodeLib {
         address policy = $.subPolicies[configId][msg.sender][account][FIELD_QUALIFICATION];
 
         // Encode qualification data, chainId, and typehash as the signature data
-        bytes memory qualData = abi.encode(chainId, qualificationTypehash, qualificationData);
+        bytes memory qualData = abi.encode(chainId, qualificationData);
 
         // Call the sub-policy
         valid = I1271Policy(policy)
             .check1271SignedAction(configId, msg.sender, account, hash, qualData);
 
+        // Early return if invalid
         if (!valid) return (false, bytes32(0), 0);
 
         // Calculate hash for return based on flags
