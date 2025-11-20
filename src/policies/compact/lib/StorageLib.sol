@@ -155,7 +155,8 @@ library StorageLib {
     //////////////////////////////////////////////////////////////*/
 
     // TODO: Hardcode and truncate this
-    bytes32 internal constant POLICY_STORAGE_POSITION = keccak256("compact.claim.policy.storage");
+    bytes32 internal constant POLICY_STORAGE_POSITION =
+        0x6f24f260d2e7d006454f5e677cbb5b14a04cebb2955bae51776d3e2470991e16;
 
     /*//////////////////////////////////////////////////////////////
                                STORAGE ACCESS
