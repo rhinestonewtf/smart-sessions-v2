@@ -218,10 +218,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
         // Check cache was populated
         bool isCached = smartSessionEmissary.isDigestCachedSmartSession(
-            instance.account,
-            smartSessionEmissary.calculateEIP712Digest(TEST_HASH),
-            testPermissionId,
-            testLockTag
+            instance.account, TEST_HASH, testPermissionId, testLockTag
         );
         assertTrue(isCached, "Digest should be cached after first verification");
 

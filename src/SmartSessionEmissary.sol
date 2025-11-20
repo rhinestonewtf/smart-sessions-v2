@@ -90,6 +90,9 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         }
         // disallow that session can be authorized by other sessions
         if (sender == address(this)) return INVALID_SIGNATURE;
+
+        // TODO: Add direct mode based on first byte of signature to skip ERC-7739 unwrap
+
         bool success = _erc1271IsValidSignatureViaNestedEIP712(
             sender, hash, _erc1271UnwrapSignature(signature)
         );
@@ -209,15 +212,5 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes32)
     {
         return _hashTypedDataSansChainId(hash);
-    }
-
-    /// @notice Returns the EIP-712 typed data hash for a given hash with chain ID
-    function _hashTypedDataV4(bytes32 hash)
-        internal
-        view
-        override(SmartSessionMixin)
-        returns (bytes32)
-    {
-        return _hashTypedData(hash);
     }
 }

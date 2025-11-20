@@ -240,18 +240,15 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
                                 CHECK SESSION KEY
         //////////////////////////////////////////////////////////////*/
 
-        // Calculate digest using 712
-        bytes32 digest = _hashTypedDataV4(hash);
-
-        // Check if this digest was already validated
-        if (digest.isAlreadyVerified(account, permissionId, lockTag)) {
+        // Check if this hash was already validated
+        if (hash.isAlreadyVerified(account, permissionId, lockTag)) {
             return true;
         }
 
         // perform signature check with ISessionValidator
         // this function will revert if no ISessionValidator is set for this permissionId
         validSig = $sessionValidators.isValidISessionValidator({
-            hash: digest,
+            hash: hash,
             account: account,
             permissionId: permissionId,
             signature: decompressedSignature
@@ -259,7 +256,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         // Cache the result if valid
         if (validSig) {
-            digest.markAsVerified(account, permissionId, lockTag);
+            hash.markAsVerified(account, permissionId, lockTag);
         }
     }
 
@@ -317,17 +314,14 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // if the claim policy check failed, return false
         if (!valid) return valid;
 
-        // Calculate digest using 712
-        bytes32 digest = _hashTypedDataV4(hash);
-
-        // Check if this digest was already validated
-        if (digest.isAlreadyVerified(sponsor, permissionId, lockTag)) {
+        // Check if this hash was already validated
+        if (hash.isAlreadyVerified(sponsor, permissionId, lockTag)) {
             return true;
         }
 
         // this call reverts if the ISessionValidator is not set
         return $sessionValidators.isValidISessionValidator({
-            hash: digest,
+            hash: hash,
             account: sponsor,
             permissionId: permissionId,
             signature: signature[64:policyDataOffset] // extract the validator signature
@@ -409,7 +403,4 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Returns the typed data hash for a given hash
     function _getTypedDataHashSansChainId(bytes32 hash) internal view virtual returns (bytes32);
-
-    /// @notice Returns the typed data hash for a given hash
-    function _hashTypedDataV4(bytes32 hash) internal view virtual returns (bytes32);
 }
