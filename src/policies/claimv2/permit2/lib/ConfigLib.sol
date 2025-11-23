@@ -2,14 +2,13 @@
 pragma solidity ^0.8.28;
 
 // Libraries
-import { StorageLib } from "@policies/compact/lib/StorageLib.sol";
+import { Permit2StorageLib } from "@policies/claimv2/permit2/lib/StorageLib.sol";
 
 // Types
+import { ParamRules, ParamRule } from "@policies/claimv2/compact/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
     SubPolicyConfig,
-    ParamRules,
-    ParamRule,
     TokenInStorageConfig,
     RecipientStorageConfig,
     FillExpiryStorageConfig,
@@ -22,7 +21,7 @@ import {
     MODE_CHECK_CATCHALL,
     MODE_CHECK_SUBPOLICY,
     FIELD_ARBITER,
-    FIELD_CLAIM_EXPIRES,
+    FIELD_DEADLINE,
     FIELD_TOKEN_IN,
     FIELD_RECIPIENT,
     FIELD_FILL_EXPIRY,
@@ -30,7 +29,7 @@ import {
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
     FIELD_QUALIFICATION
-} from "@policies/compact/types/DataTypes.sol";
+} from "@policies/claimv2/permit2/types/DataTypes.sol";
 
 /* //////////////////////////////////////////////////////////////
                             TYPES
@@ -52,14 +51,14 @@ function eqConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
 }
 
 /// @title Config Library
-/// @notice Library for managing condition configurations in the MultiChainClaimPolicy
-library ConfigLib {
+/// @notice Library for managing condition configurations in the Permit2ClaimPolicy
+library Permit2ConfigLib {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    using StorageLib for *;
-    using ConfigLib for *;
+    using Permit2StorageLib for *;
+    using Permit2ConfigLib for *;
 
     /* //////////////////////////////////////////////////////////////
                                  TYPES
@@ -70,8 +69,8 @@ library ConfigLib {
         uint32 modeConfig;
         // Storage-based configs
         address arbiter;
-        uint128 minClaimExpires;
-        uint128 maxClaimExpires;
+        uint128 minDeadline;
+        uint128 maxDeadline;
         TokenInStorageConfig[] tokenInConfigs;
         RecipientStorageConfig[] recipientConfigs;
         FillExpiryStorageConfig[] fillExpiryConfigs;
@@ -108,9 +107,9 @@ library ConfigLib {
         return getFieldMode(config, FIELD_ARBITER) != MODE_SKIP;
     }
 
-    /// @notice Checks if claim expires validation is enabled (mode != SKIP)
-    function hasCheckClaimExpires(PolicyConfig config) internal pure returns (bool) {
-        return getFieldMode(config, FIELD_CLAIM_EXPIRES) != MODE_SKIP;
+    /// @notice Checks if deadline validation is enabled (mode != SKIP)
+    function hasCheckDeadline(PolicyConfig config) internal pure returns (bool) {
+        return getFieldMode(config, FIELD_DEADLINE) != MODE_SKIP;
     }
 
     /// @notice Checks if tokenIn validation is enabled (mode != SKIP)
@@ -174,11 +173,11 @@ library ConfigLib {
             (init.arbiter, data) = decodeArbiterConfig(data);
         }
 
-        // Claim Expires
-        if (modeConfig.getFieldMode(FIELD_CLAIM_EXPIRES).isStorageMode()) {
+        // Deadline
+        if (modeConfig.getFieldMode(FIELD_DEADLINE).isStorageMode()) {
             uint256 packed;
-            (packed, data) = decodeClaimExpiresConfig(data);
-            (init.minClaimExpires, init.maxClaimExpires) = unpackUint128(packed);
+            (packed, data) = decodeDeadlineConfig(data);
+            (init.minDeadline, init.maxDeadline) = unpackUint128(packed);
         }
 
         // Token In
@@ -235,24 +234,25 @@ library ConfigLib {
         data = initData[20:];
     }
 
-    /// @notice Decodes the claim expires bounds from the initialization data
-    /// @param initData The initialization data containing min/max claim expires
-    /// @return packedExpires Packed expiration (uint128 min | uint128 max)
+    /// @notice Decodes the deadline bounds from the initialization data
+    /// @param initData The initialization data containing min/max deadline
+    /// @return packedDeadline Packed deadline (uint128 min | uint128 max)
     /// @return data The remaining initialization data after decoding
-    function decodeClaimExpiresConfig(bytes calldata initData)
+    function decodeDeadlineConfig(bytes calldata initData)
         internal
         pure
-        returns (uint256 packedExpires, bytes calldata data)
+        returns (uint256 packedDeadline, bytes calldata data)
     {
-        uint128 minExpires = uint128(bytes16(initData[0:16]));
-        uint128 maxExpires = uint128(bytes16(initData[16:32]));
-        packedExpires = packUint128(minExpires, maxExpires);
+        uint128 minDeadline = uint128(bytes16(initData[0:16]));
+        uint128 maxDeadline = uint128(bytes16(initData[16:32]));
+        packedDeadline = packUint128(minDeadline, maxDeadline);
         data = initData[32:];
     }
 
     /// @notice Decodes sub-policy configurations from the initialization data
     /// @dev Format: count (32) + [fieldId (1) + policyAddress (20) + initDataLength (32) +
-    /// initData] * count @param initData The initialization data containing sub-policy configs
+    /// initData] * count
+    /// @param initData The initialization data containing sub-policy configs
     /// @return configs Array of sub-policy configurations
     /// @return data The remaining initialization data after decoding
     function decodeSubPolicyConfig(bytes calldata initData)
@@ -290,7 +290,7 @@ library ConfigLib {
     }
 
     /// @notice Decodes the tokenIn configuration from the initialization data
-    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) + 12 (lockTag) = 64 bytes
+    /// @dev Each TokenInConfig: 32 (chainId) + 20 (token) = 52 bytes
     /// @param initData The initialization data containing tokenIn configs
     /// @return configs Array of TokenInStorageConfig structs
     /// @return data The remaining initialization data after decoding
@@ -303,15 +303,14 @@ library ConfigLib {
         configs = new TokenInStorageConfig[](count);
 
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 64;
+            uint256 offset = 32 + i * 52;
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
             address token = address(bytes20(initData[offset + 32:offset + 52]));
-            bytes12 lockTag = bytes12(initData[offset + 52:offset + 64]);
 
-            configs[i] = TokenInStorageConfig(chainId, token, lockTag);
+            configs[i] = TokenInStorageConfig(chainId, token);
         }
 
-        data = initData[32 + count * 64:];
+        data = initData[32 + count * 52:];
     }
 
     /// @notice Decodes the recipient configuration from the initialization data
@@ -340,7 +339,8 @@ library ConfigLib {
 
     /// @notice Decodes the fillExpiry configuration from the initialization data
     /// @dev Each FillExpiryConfig: 32 (targetChainId) + 16 (minFillExpiry) + 16 (maxFillExpiry) =
-    /// 64 bytes @param initData The initialization data containing fillExpiry configs
+    /// 64 bytes
+    /// @param initData The initialization data containing fillExpiry configs
     /// @return configs Array of FillExpiryStorageConfig structs
     /// @return data The remaining initialization data after decoding
     function decodeFillExpiryConfig(bytes calldata initData)
@@ -436,9 +436,9 @@ library ConfigLib {
     }
 
     /// @notice Decodes the qualification configuration from the initialization data
-    /// @dev Format: count (32) + [chainId (32) + typehash (32) + rootNodeIndex (1) + ruleCount (32)
-    /// + rules + packedNodesLength (32) + packedNodes] * count @param initData The initialization
-    /// data containing qualification configs
+    /// @dev Format: count (32) + [chainId (32) + arbiter (20) + rootNodeIndex (1) + ruleCount (32)
+    /// + rules + packedNodesLength (32) + packedNodes] * count
+    /// @param initData The initialization data containing qualification configs
     /// @return configs Array of QualificationStorageConfig structs
     /// @return data The remaining initialization data after decoding
     function decodeQualificationConfig(bytes calldata initData)
@@ -518,31 +518,6 @@ library ConfigLib {
     function unpackUint128(uint256 packed) internal pure returns (uint128 lower, uint128 upper) {
         lower = uint128(packed);
         upper = uint128(packed >> 128);
-    }
-
-    /// @notice Packs tokenIn config into bytes32
-    /// @param token Token address
-    /// @param lockTag Lock tag
-    /// @return packed Packed bytes32 value
-    function packTokenIn(
-        address token,
-        bytes12 lockTag
-    )
-        internal
-        pure
-        returns (bytes32 packed)
-    {
-        // address (20 bytes) in lower bits, lockTag (12 bytes) in upper bits
-        packed = bytes32(uint256(uint160(token))) | (bytes32(lockTag) >> 160);
-    }
-
-    /// @notice Unpacks tokenIn config from bytes32
-    /// @param packed Packed bytes32 value
-    /// @return token Token address
-    /// @return lockTag Lock tag
-    function unpackTokenIn(bytes32 packed) internal pure returns (address token, bytes12 lockTag) {
-        token = address(uint160(uint256(packed)));
-        lockTag = bytes12(packed << 160);
     }
 
     /*//////////////////////////////////////////////////////////////

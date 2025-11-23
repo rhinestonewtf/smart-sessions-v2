@@ -17,7 +17,8 @@ import {
     SignatureMode,
     EMISSARY_VANILLA,
     EMISSARY_SMART_SESSION,
-    MODE_DIRECT
+    IS_VALID_SIG_1271,
+    IS_VALID_SIG_1271_7739
 } from "@lib/ModeLib.sol";
 
 // Types
@@ -116,7 +117,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
                 hash,
                 actualSignature,
                 bytes32(0), // No domain separator
-                bytes("") // No contents
+                signature[0:0] // No extra data
             );
         } else if (mode == IS_VALID_SIG_1271_7739) {
             // IS_VALID_SIG_1271_7739 mode uses nested EIP-712 validation with ERC-7739 wrapping

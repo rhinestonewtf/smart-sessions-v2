@@ -6,21 +6,21 @@ import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
-import { IArbiter } from "@policies/compact/interfaces/IArbiter.sol";
+import { IArbiter } from "@policies/claimv2/compact/interfaces/IArbiter.sol";
 
 // Libraries
-import { ConfigLib, PolicyConfig } from "@policies/compact/lib/ConfigLib.sol";
-import { StorageLib, PolicyStorage } from "@policies/compact/lib/StorageLib.sol";
-import { ArgPolicyTreeLibV2 } from "@policies/compact/lib/ArgPolicyTreeLibV2.sol";
+import { ConfigLib, PolicyConfig } from "@policies/claimv2/compact/lib/ConfigLib.sol";
+import { StorageLib, PolicyStorage } from "@policies/claimv2/compact/lib/StorageLib.sol";
+import { ArgPolicyTreeLibV2 } from "@policies/claimv2/compact/lib/ArgPolicyTreeLibV2.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 import { IdLib } from "@the-compact/lib/IdLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
-import { ConfigLib as CompactPolicyConfigLib } from "@policies/compact/lib/ConfigLib.sol";
+import { ConfigLib as CompactPolicyConfigLib } from "@policies/claimv2/compact/lib/ConfigLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { ParamRules } from "@policies/compact/types/DataTypes.sol";
+import { ParamRules } from "@policies/claimv2/compact/types/DataTypes.sol";
 import {
     MODE_SKIP,
     MODE_CHECK_STORAGE,
@@ -35,7 +35,7 @@ import {
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
     FIELD_QUALIFICATION
-} from "@policies/compact/types/DataTypes.sol";
+} from "@policies/claimv2/compact/types/DataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
 
 /// @title Decode Library

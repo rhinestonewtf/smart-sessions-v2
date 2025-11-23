@@ -6,7 +6,7 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { ParamRules } from "@policies/compact/types/DataTypes.sol";
+import { ParamRules } from "@policies/claimv2/compact/types/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                              STRUCTS
@@ -154,9 +154,9 @@ library StorageLib {
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
-    // TODO: Hardcode and truncate this
+    /// @dev keccak256("rhinestone.storage.CompactClaimPolicy") - 1
     bytes32 internal constant POLICY_STORAGE_POSITION =
-        0x6f24f260d2e7d006454f5e677cbb5b14a04cebb2955bae51776d3e2470991e16;
+        0xDBFEEAA4EC1777D12B0E5A408D466F51028F51FE45B246C68105B4C2FED663CF;
 
     /*//////////////////////////////////////////////////////////////
                                STORAGE ACCESS
