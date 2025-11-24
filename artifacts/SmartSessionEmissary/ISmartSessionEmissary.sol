@@ -21,6 +21,12 @@ library IEmissary {
     }
 }
 
+library Types {
+    struct Operation {
+        bytes data;
+    }
+}
+
 interface Interface {
     type PolicyType is uint8;
     type ResetPeriod is uint8;
@@ -44,16 +50,20 @@ interface Interface {
         ChainDigest[] hashesAndChainIds;
     }
 
+    struct ERC7739Context {
+        bytes32 appDomainSeparator;
+        string[] contentNames;
+    }
+
+    struct ERC7739Data {
+        ERC7739Context[] allowedERC7739Content;
+        PolicyData[] erc1271Policies;
+    }
+
     struct EnableSession {
         uint8 chainDigestIndex;
         ChainDigest[] hashesAndChainIds;
         Session sessionToEnable;
-    }
-
-    struct Execution {
-        address target;
-        uint256 value;
-        bytes callData;
     }
 
     struct PolicyData {
@@ -65,12 +75,12 @@ interface Interface {
         address sessionValidator;
         bytes sessionValidatorInitData;
         bytes32 salt;
-        PolicyData[] erc1271Policies;
         ActionData[] actions;
+        PolicyData[] claimPolicies;
+        ERC7739Data erc7739Policies;
     }
 
     struct SmartSessionEmissaryConfig {
-        address sender;
         Scope scope;
         ResetPeriod resetPeriod;
         address allocator;
@@ -94,6 +104,7 @@ interface Interface {
     error ChainIdMismatch(uint64 providedChainId);
     error ForbiddenValidationData();
     error HashMismatch(bytes32 providedHash, bytes32 computedHash);
+    error IncorrectType();
     error InvalidActionId();
     error InvalidAllocatorSignature();
     error InvalidAllocatorSignature();
@@ -109,13 +120,16 @@ interface Interface {
     error InvalidPermissionId(PermissionId permissionId);
     error InvalidSelfCall();
     error InvalidSession(PermissionId permissionId);
+    error InvalidSignature();
     error InvalidTarget();
     error InvalidUserSignature();
     error InvalidUserSignature();
     error NoExecutionsInBatch();
     error NoPoliciesSet(PermissionId permissionId);
+    error NotSet();
     error PolicyViolation(PermissionId permissionId, address policy);
     error SignerNotFound(PermissionId permissionId, address account);
+    error SmartSessionModuleAlreadyInstalled();
     error UnauthorizedSource();
     error UnsafeFallbackNotAllowed();
     error UnsupportedExecutionType();
@@ -134,15 +148,8 @@ interface Interface {
     );
     event WhitelistStatusUpdated(address source, bool status);
 
-    function $ecdsaPasskeyConfig(address sponsor, uint8 configId, bytes12 lockTag)
-        external
-        view
-        returns (bytes memory data);
-    function $statelessValidatorConfig(address sponsor, uint8 configId, bytes12 lockTag, address validator)
-        external
-        view
-        returns (bytes memory data);
     function DOMAIN_SEPARATOR() external view returns (bytes32);
+    function INTENT_EXECUTOR() external view returns (address);
     function eip712Domain()
         external
         view
@@ -155,19 +162,22 @@ interface Interface {
             bytes32 salt,
             uint256[] memory extensions
         );
-    function getActionPolicies(address account, PermissionId permissionId, ActionId actionId)
+    function getActionPolicies(address account, PermissionId permissionId, ActionId actionId, bytes12 lockTag)
         external
         view
         returns (address[] memory);
-    function getERC1271Policies(address account, PermissionId permissionId) external view returns (address[] memory);
-    function getEnabledActions(address account, PermissionId permissionId) external view returns (bytes32[] memory);
-    function getNonce(address sponsor, bytes12 lockTag) external view returns (uint256);
-    function getPermissionIDs(address account, bytes12 lockTag, address sender)
+    function getConfig(address account, uint8 configId, address validator, bytes12 lockTag)
         external
         view
-        returns (PermissionId[] memory permissionIds);
+        returns (bytes memory config);
+    function getERC1271Policies(address account, PermissionId permissionId) external view returns (address[] memory);
+    function getEnabledActions(address account, PermissionId permissionId, bytes12 lockTag)
+        external
+        view
+        returns (bytes32[] memory);
+    function getNonce(address sponsor, bytes12 lockTag) external view returns (uint256);
     function getPermissionId(Session memory session) external pure returns (PermissionId permissionId);
-    function getSessionDigest(address account, Session memory data, bytes12 lockTag, uint256 expires, address sender)
+    function getSessionDigest(address account, Session memory data, bytes12 lockTag, uint256 expires)
         external
         view
         returns (bytes32);
@@ -175,10 +185,14 @@ interface Interface {
         external
         view
         returns (address sessionValidator, bytes memory sessionValidatorData);
-    function isPermissionEnabled(PermissionId permissionId, bytes12 lockTag, address account, address sender)
+    function isInitialized(address smartAccount) external view returns (bool);
+    function isModuleType(uint256 typeID) external pure returns (bool);
+    function isValidSignatureWithSender(address sender, bytes32 hash, bytes memory signature)
         external
         view
-        returns (bool);
+        returns (bytes4 result);
+    function onInstall(bytes memory data) external;
+    function onUninstall(bytes memory) external;
     function removeConfig(
         address account,
         SmartSessionEmissaryConfig memory config,
@@ -195,7 +209,7 @@ interface Interface {
         SmartSessionEmissaryConfig memory config,
         SmartSessionEmissaryEnable memory enableData
     ) external;
-    function verifyClaim(address sponsor, bytes32 digest, bytes32, bytes memory emissaryData, bytes12 lockTag)
+    function verifyClaim(address sponsor, bytes32 digest, bytes32 claimHash, bytes memory emissaryData, bytes12 lockTag)
         external
         view
         returns (bytes4);
@@ -203,7 +217,7 @@ interface Interface {
         address sponsor,
         bytes32 digest,
         bytes memory emissaryData,
-        Execution[] memory executions,
+        Types.Operation memory executions,
         bytes12 lockTag
     ) external returns (bytes4);
 }
