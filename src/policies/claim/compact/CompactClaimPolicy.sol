@@ -208,7 +208,6 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         }
 
         // Decode otherElements
-        // TODO: Can we optimize this to just pass the already hashed otherElements?
         (bytes32[] memory otherElements, uint256 offset) =
             _decodeOtherElements(
                 data,
@@ -269,8 +268,6 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         /*//////////////////////////////////////////////////////////////
                          COMPUTE EIP-712 DIGEST
         //////////////////////////////////////////////////////////////*/
-
-        // TODO: We can optimize this by just passing the already hashed otherElements
 
         // 1. Hash notarized element
         bytes32 elementHash =

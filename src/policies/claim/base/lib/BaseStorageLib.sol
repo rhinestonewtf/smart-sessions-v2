@@ -81,7 +81,7 @@ struct BasePolicyStorage {
     /// @notice Required arbiter address (single value, not per-chain)
     /// @dev The arbiter is the entity that settles claims
     ///
-    /// Access: arbiterConfig[configId][msgSender][account] => AddressSet
+    /// Access: arbiterConfig[configId][account] => AddressSet
     EnumerableSetLib.AddressSet arbiterConfig;
 
     /*//////////////////////////////////////////////////////////////

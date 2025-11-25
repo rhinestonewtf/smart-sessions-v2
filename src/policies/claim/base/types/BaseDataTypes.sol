@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 /*//////////////////////////////////////////////////////////////
-                         ARCHITECTURE OVERVIEW
+                    ARCHITECTURE OVERVIEW
 //////////////////////////////////////////////////////////////
 
 This module defines shared types for the ClaimPolicy family.
