@@ -7,7 +7,7 @@ import {
 } from "@smartsessions/external/policies/ArgPolicy/lib/ArgPolicyTreeLib.sol";
 
 // Types
-import { ParamRules, ParamRule } from "@policies/claimv2/compact/types/DataTypes.sol";
+import { ParamRules, ParamRule } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 /// @title ArgPolicyTree Library V2
