@@ -99,14 +99,103 @@ abstract contract BaseClaimPolicy is I1271Policy {
                             INITIALIZATION
     //////////////////////////////////////////////////////////////*/
 
+    // forgefmt: disable-start
     /// @notice Initializes the policy with configuration data
     /// @dev Called by SmartSessions when installing the policy.
     ///      Decodes and stores all field configurations based on modes.
-    /// @param account The account being configured
-    /// @param configId The configuration ID for this installation
-    /// @param initData Encoded initialization data containing:
-    ///        - modeConfig (uint32): 2-bit modes for each of 9 fields
-    ///        - Field-specific configs based on which modes are enabled
+    ///
+    /// Initialization calldata layout:
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:4]      modeConfig (uint32)                            │
+    /// │  [4:...]    field configs (only if field mode != SKIP)     │
+    /// │             ├── arbiter config                             │
+    /// │             ├── expiry config                              │
+    /// │             ├── tokenIn config (PROTOCOL-SPECIFIC)         │
+    /// │             ├── recipient config                           │
+    /// │             ├── fillExpiry config                          │
+    /// │             ├── tokenOut config                            │
+    /// │             ├── originOps config                           │
+    /// │             ├── destOps config                             │
+    /// │             ├── qualification config                       │
+    /// │             └── subPolicy configs (if any MODE_SUBPOLICY)  │
+    /// └────────────────────────────────────────────────────────────┘
+    ///
+    /// modeConfig (uint32) - 2 bits per field:
+    /// ┌─────────────────────────────────────────────────────────────┐
+    /// │  Bits [31:18] = Reserved (unused)                           │
+    /// │  Bits [17:0]  = 9 fields × 2 bits each                      │
+    /// │                                                             │
+    /// │  ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐    │
+    /// │  │  Q  │ DO  │ OO  │ TO  │ FE  │ RC  │ TI  │ EX  │ AR  │    │
+    /// │  │17:16│15:14│13:12│11:10│ 9:8 │ 7:6 │ 5:4 │ 3:2 │ 1:0 │    │
+    /// │  └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘    │
+    /// │                                                             │
+    /// │  Mode values:                                               │
+    /// │  0b00 = MODE_SKIP         (no validation)                   │
+    /// │  0b01 = MODE_CHECK_STORAGE (validate against storage)       │
+    /// │  0b10 = MODE_CHECK_CATCHALL (storage with chainId=0)        │
+    /// │  0b11 = MODE_CHECK_SUBPOLICY (delegate to sub-policy)       │
+    /// └─────────────────────────────────────────────────────────────┘
+    ///
+    /// Field config encodings (only present if mode != SKIP):
+    /// ┌─────────────────┬────────────────────────────────────────────┐
+    /// │  Field          │  Encoding                                  │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  arbiter        │  [count (32)] + [addr (20)] × count        │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  expiry         │  [minExpiry (16)] + [maxExpiry (16)]       │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  tokenIn        │  COMPACT:                                  │
+    /// │                 │    [count (32)] + entries:                 │
+    /// │                 │      [chainId (32)] + [token (20)] +       │
+    /// │                 │      [lockTag (12)]                        │
+    /// │                 │  PERMIT2:                                  │
+    /// │                 │    [count (32)] + entries:                 │
+    /// │                 │      [chainId (32)] + [token (20)]         │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  recipient      │  [count (32)] + entries:                   │
+    /// │                 │    [targetChainId (32)] + [recipient (20)] │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  fillExpiry     │  [count (32)] + entries:                   │
+    /// │                 │    [targetChainId (32)] +                  │
+    /// │                 │    [minFillExpiry (16)] +                  │
+    /// │                 │    [maxFillExpiry (16)]                    │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  tokenOut       │  [count (32)] + entries:                   │
+    /// │                 │    [targetChainId (32)] + [token (20)]     │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  originOps      │  [count (32)] + entries:                   │
+    /// │                 │    [chainId (32)] + [required (1)]         │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  destOps        │  [count (32)] + entries:                   │
+    /// │                 │    [targetChainId (32)] + [required (1)]   │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  qualification  │  [count (32)] + entries:                   │
+    /// │                 │    [chainId (32)] + [arbiter (20)] +       │
+    /// │                 │    [rulesLen (32)] + [rules (variable)]    │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  subPolicies    │  [count (32)] + entries:                   │
+    /// │  (if any        │    [fieldId (1)] + [policyAddr (20)] +     │
+    /// │   SUBPOLICY)    │    [initDataLen (32)] + [initData (...)]   │
+    /// └─────────────────┴────────────────────────────────────────────┘
+    ///
+    /// Example - Compact with arbiter + tokenIn + recipient:
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:4]      0x00000015 (AR=01, TI=01, RC=01, rest=00)       │
+    /// │  [4:36]     arbiter count = 1                               │
+    /// │  [36:56]    arbiter address                                 │
+    /// │  [56:88]    tokenIn count = 2                               │
+    /// │  [88:120]   tokenIn[0].chainId                              │
+    /// │  [120:140]  tokenIn[0].token                                │
+    /// │  [140:152]  tokenIn[0].lockTag                              │
+    /// │  [152:184]  tokenIn[1].chainId                              │
+    /// │  [184:204]  tokenIn[1].token                                │
+    /// │  [204:216]  tokenIn[1].lockTag                              │
+    /// │  [216:248]  recipient count = 1                             │
+    /// │  [248:280]  recipient[0].targetChainId                      │
+    /// │  [280:300]  recipient[0].recipient                          │
+    /// └────────────────────────────────────────────────────────────┘
+    // forgefmt: disable-end
     function initializeWithMultiplexer(
         address account,
         ConfigId configId,
