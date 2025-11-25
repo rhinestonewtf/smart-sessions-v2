@@ -9,10 +9,6 @@ import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { BaseValidationLib } from "@policies/claim/base/lib/BaseValidationLib.sol";
-import {
-    CompactStorageLib,
-    CompactPolicyStorage
-} from "@policies/claim/compact/lib/CompactStorageLib.sol";
 import { CompactConfigLib } from "@policies/claim/compact/lib/CompactConfigLib.sol";
 import { CompactValidationLib } from "@policies/claim/compact/lib/CompactValidationLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
@@ -78,18 +74,21 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint32;
     using BaseConfigLib for uint8;
-    using CompactStorageLib for *;
+    using BaseStorageLib for ConfigId;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using EfficientHashLib for bytes32[];
     using DomainLib for bytes32;
 
     /*//////////////////////////////////////////////////////////////
-                      TOKEN IN INITIALIZATION
+                         TOKEN IN INITIALIZATION
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc BaseClaimPolicy
     /// @notice Initializes Compact-specific tokenIn storage (token+lockTag)
     /// @dev Decodes CompactTokenInStorageConfig[] and stores packed bytes32 values
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TODO: optimize gas by reducing memory writes, we can write to storage directly after reading each field //
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     function _initializeTokenIn(
         ConfigId configId,
         address account,
@@ -106,12 +105,11 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         }
 
         // Get storage reference
-        CompactPolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ = configId.getStorage(account);
 
         // Decode and store tokenIn whitelist
         CompactTokenInStorageConfig[] memory configs;
-        uint256 bytesConsumed;
-        (configs, remaining, bytesConsumed) = CompactConfigLib.decodeTokenInConfig(initData);
+        (configs, remaining) = CompactConfigLib.decodeTokenInConfig(initData);
 
         // Initialize tokenIn whitelist
         for (uint256 i = 0; i < configs.length; i++) {
@@ -191,10 +189,6 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         override
         returns (bool)
     {
-        // Get protocol specific storage pointer
-        CompactPolicyStorage storage compactStorage =
-            CompactStorageLib.getStorage(configId, account);
-
         // Decode claim header
         (bytes32 domainSeparator, uint256 nonce, uint256 expires) = _decodeClaimHeader(data);
 
@@ -241,7 +235,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         bool valid;
         // This validates the tokenIn field
         (valid, commitmentsHash, offset) = CompactValidationLib.validateTokenIn(
-            configId, data, account, offset, chainId, config, $, compactStorage, hash
+            configId, data, account, offset, chainId, config, $, hash
         );
         if (!valid) return false;
 
@@ -371,7 +365,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         returns (bytes32[] memory tokens)
     {
         // Get storage reference
-        CompactPolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ = configId.getStorage(account);
         EnumerableSetLib.Bytes32Set storage tokenSet = $.tokenInSet[chainId];
 
         // Retrieve all tokens
@@ -401,7 +395,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         returns (bool)
     {
         // Get storage reference
-        CompactPolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ = configId.getStorage(account);
         // Pack token + lockTag
         bytes32 packed = CompactConfigLib.packTokenIn(token, lockTag);
         // Check if whitelisted

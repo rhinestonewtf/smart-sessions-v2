@@ -7,7 +7,6 @@ import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 // Libraries
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
-import { Permit2PolicyStorage } from "@policies/claim/permit2/lib/Permit2StorageLib.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
@@ -62,7 +61,7 @@ library Permit2ValidationLib {
 
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint8;
-    using EnumerableSetLib for EnumerableSetLib.AddressSet;
+    using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
                              TOKEN IN
@@ -77,7 +76,6 @@ library Permit2ValidationLib {
     /// @param offset Current offset in calldata
     /// @param config The policy configuration
     /// @param baseStorage Base storage for sub-policy lookup
-    /// @param permit2Storage Permit2 storage for tokenIn whitelist
     /// @param hash The original hash for sub-policy validation
     /// @return valid True if validation passes
     /// @return tokenInHash The computed EIP-712 hash
@@ -89,7 +87,6 @@ library Permit2ValidationLib {
         uint256 offset,
         PolicyConfig config,
         BasePolicyStorage storage baseStorage,
-        Permit2PolicyStorage storage permit2Storage,
         bytes32 hash
     )
         internal
@@ -106,7 +103,7 @@ library Permit2ValidationLib {
 
         // STORAGE / CATCHALL: Validate against whitelist
         if (mode.isStorageMode()) {
-            return _validateTokenInStorage(data, offset, mode, permit2Storage);
+            return _validateTokenInStorage(baseStorage, data, offset, mode);
         }
 
         // SUBPOLICY: Delegate to external policy
@@ -122,18 +119,18 @@ library Permit2ValidationLib {
                            STORAGE VALIDATION
     //////////////////////////////////////////////////////////////*/
 
+    // forgefmt: disable-start
     /// @notice Validates tokenIn against storage whitelist
     /// @dev Checks token address membership in AddressSet.
     ///      Uses chainId=0 for lookup (origin chain context).
+    /// @param baseStorage Base storage pointer
     /// @param data The calldata containing tokenIn
     /// @param offset Current offset in calldata
     /// @param mode The field mode (for catchall handling)
-    /// @param $ Permit2 storage pointer
     /// @return valid True if all entries are whitelisted
     /// @return tokenInHash The computed EIP-712 hash
     /// @return newOffset Updated offset
     ///
-    // forgefmt: disable-start
     /// TokenPermissions layout (per entry):
     /// ┌────────────────────────────────────────────────────────────┐
     /// │  [0:32]   token (address, left-padded to 32 bytes)         │
@@ -142,10 +139,10 @@ library Permit2ValidationLib {
     /// Total: 64 bytes per entry
     // forgefmt: disable-end
     function _validateTokenInStorage(
+        BasePolicyStorage storage baseStorage,
         bytes calldata data,
         uint256 offset,
-        uint8 mode,
-        Permit2PolicyStorage storage $
+        uint8 mode
     )
         private
         view
@@ -157,7 +154,7 @@ library Permit2ValidationLib {
 
         // Get whitelist using block.chainid
         uint256 effectiveChainId = mode.getEffectiveChainId(block.chainid);
-        EnumerableSetLib.AddressSet storage tokenSet = $.tokenInSet[effectiveChainId];
+        EnumerableSetLib.Bytes32Set storage tokenSet = baseStorage.tokenInSet[effectiveChainId];
 
         // Empty whitelist = not configured
         if (tokenSet.length() == 0) {
@@ -175,7 +172,7 @@ library Permit2ValidationLib {
         for (uint256 i = 0; i < length; i++) {
             address token = address(uint160(tokenPermissions[i][0]));
 
-            if (!tokenSet.contains(token)) {
+            if (!tokenSet.contains(bytes32(bytes20(token)))) {
                 return (false, bytes32(0), 0);
             }
         }

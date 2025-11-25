@@ -9,10 +9,6 @@ import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { BaseValidationLib } from "@policies/claim/base/lib/BaseValidationLib.sol";
-import {
-    Permit2StorageLib,
-    Permit2PolicyStorage
-} from "@policies/claim/permit2/lib/Permit2StorageLib.sol";
 import { Permit2ConfigLib } from "@policies/claim/permit2/lib/Permit2ConfigLib.sol";
 import { Permit2ValidationLib } from "@policies/claim/permit2/lib/Permit2ValidationLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
@@ -31,7 +27,7 @@ import { FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTypes.sol";
 ///      - arbiter is the Permit2 spender (not inside witness)
 ///      - No domainSeparator in calldata
 ///      - No separate chainId field - comes from target.targetChainId
-///      - tokenIn uses chainId=0 (origin chain)
+///      - tokenIn uses block.chainid (origin chain)
 ///
 /// ┌─────────────────────────────────────────────────────────────────────────┐
 /// │                    Permit2 + Mandate Structure                          │
@@ -71,8 +67,8 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint32;
     using BaseConfigLib for uint8;
-    using Permit2StorageLib for ConfigId;
-    using EnumerableSetLib for EnumerableSetLib.AddressSet;
+    using BaseStorageLib for ConfigId;
+    using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
                       TOKEN IN INITIALIZATION
@@ -82,6 +78,9 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
     /// @notice Initializes Permit2-specific tokenIn storage (token only, no lockTag)
     /// @dev Decodes Permit2TokenInStorageConfig[] and stores token addresses.
     ///      Note: Permit2 tokenIn uses chainId from config (typically 0 for origin chain).
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TODO: optimize gas by reducing memory writes, we can write to storage directly after reading each field //
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     function _initializeTokenIn(
         ConfigId configId,
         address account,
@@ -98,16 +97,15 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
         }
 
         // Get storage reference
-        Permit2PolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ = configId.getStorage(account);
 
         // Decode and store tokenIn whitelist
         Permit2TokenInStorageConfig[] memory configs;
-        uint256 bytesConsumed;
-        (configs, remaining, bytesConsumed) = Permit2ConfigLib.decodeTokenInConfig(initData);
+        (configs, remaining) = Permit2ConfigLib.decodeTokenInConfig(initData);
 
         // Initialize tokenIn whitelist (token addresses only, no lockTag)
         for (uint256 i = 0; i < configs.length; i++) {
-            $.tokenInSet[configs[i].chainId].add(configs[i].token);
+            $.tokenInSet[configs[i].chainId].add(bytes32(bytes20(configs[i].token)));
         }
     }
 
@@ -178,10 +176,6 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
         override
         returns (bool)
     {
-        // Get protocol specific storage pointer
-        Permit2PolicyStorage storage permit2Storage =
-            Permit2StorageLib.getStorage(configId, account);
-
         /*//////////////////////////////////////////////////////////////
                                  DECODE HEADER
         //////////////////////////////////////////////////////////////*/
@@ -225,7 +219,6 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
             84, //
             config,
             $,
-            permit2Storage,
             hash
         );
         if (!tokenInValid) return false;
@@ -281,13 +274,13 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
         view
         returns (address[] memory tokens)
     {
-        Permit2PolicyStorage storage $ = configId.getStorage(account);
-        EnumerableSetLib.AddressSet storage tokenSet = $.tokenInSet[chainId];
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        EnumerableSetLib.Bytes32Set storage tokenSet = $.tokenInSet[chainId];
 
         uint256 length = tokenSet.length();
         tokens = new address[](length);
         for (uint256 i = 0; i < length; i++) {
-            tokens[i] = tokenSet.at(i);
+            tokens[i] = address(bytes20(bytes32(tokenSet.at(i))));
         }
     }
 
@@ -307,7 +300,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
         view
         returns (bool)
     {
-        Permit2PolicyStorage storage $ = configId.getStorage(account);
-        return $.tokenInSet[chainId].contains(token);
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        return $.tokenInSet[chainId].contains(bytes32(bytes20(token)));
     }
 }

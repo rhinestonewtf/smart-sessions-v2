@@ -32,15 +32,10 @@ library Permit2ConfigLib {
     /// @param initData The initialization calldata
     /// @return configs Array of decoded token configs
     /// @return remaining Remaining calldata after decoding
-    /// @return bytesConsumed Number of bytes consumed
     function decodeTokenInConfig(bytes calldata initData)
         internal
         pure
-        returns (
-            Permit2TokenInStorageConfig[] memory configs,
-            bytes calldata remaining,
-            uint256 bytesConsumed
-        )
+        returns (Permit2TokenInStorageConfig[] memory configs, bytes calldata remaining)
     {
         // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
@@ -56,8 +51,6 @@ library Permit2ConfigLib {
             configs[i].token = address(bytes20(initData[offset:offset + 20]));
             offset += 20;
         }
-
-        bytesConsumed = offset;
         remaining = initData[offset:];
     }
 }

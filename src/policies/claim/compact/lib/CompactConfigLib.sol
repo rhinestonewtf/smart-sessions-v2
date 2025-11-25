@@ -44,15 +44,10 @@ library CompactConfigLib {
     /// @param initData Calldata starting with tokenIn config
     /// @return configs Array of CompactTokenInStorageConfig structs
     /// @return remaining Remaining calldata after all tokenIn configs
-    /// @return bytesConsumed Total bytes consumed (for BaseConfigLib to skip)
     function decodeTokenInConfig(bytes calldata initData)
         internal
         pure
-        returns (
-            CompactTokenInStorageConfig[] memory configs,
-            bytes calldata remaining,
-            uint256 bytesConsumed
-        )
+        returns (CompactTokenInStorageConfig[] memory configs, bytes calldata remaining)
     {
         // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
@@ -73,9 +68,7 @@ library CompactConfigLib {
 
             configs[i] = CompactTokenInStorageConfig(chainId, token, lockTag);
         }
-
-        bytesConsumed = 32 + count * 64;
-        remaining = initData[bytesConsumed:];
+        remaining = initData[32 + count * 64:];
     }
 
     /// @notice Calculates the byte size of tokenIn config in initData

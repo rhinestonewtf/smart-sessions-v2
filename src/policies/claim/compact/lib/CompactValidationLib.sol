@@ -7,7 +7,6 @@ import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 // Libraries
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
-import { CompactPolicyStorage } from "@policies/claim/compact/lib/CompactStorageLib.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
@@ -72,7 +71,6 @@ library CompactValidationLib {
     /// @param chainId The chain ID for storage lookup
     /// @param config The policy configuration
     /// @param baseStorage Base storage for sub-policy lookup
-    /// @param compactStorage Compact storage for tokenIn whitelist
     /// @param hash The original hash for sub-policy validation
     /// @return valid True if validation passes
     /// @return tokenInHash The computed EIP-712 hash
@@ -85,7 +83,6 @@ library CompactValidationLib {
         uint256 chainId,
         PolicyConfig config,
         BasePolicyStorage storage baseStorage,
-        CompactPolicyStorage storage compactStorage,
         bytes32 hash
     )
         internal
@@ -102,7 +99,7 @@ library CompactValidationLib {
 
         // STORAGE / CATCHALL: Validate against whitelist
         if (mode.isStorageMode()) {
-            return _validateTokenInStorage(data, offset, chainId, mode, compactStorage);
+            return _validateTokenInStorage(baseStorage, data, offset, chainId, mode);
         }
 
         // SUBPOLICY: Delegate to external policy
@@ -121,20 +118,20 @@ library CompactValidationLib {
 
     /// @notice Validates tokenIn against storage whitelist
     /// @dev Packs token+lockTag and checks membership in Bytes32Set
+    /// @param baseStorage Base storage pointer
     /// @param data The calldata containing tokenIn
     /// @param offset Current offset in calldata
     /// @param chainId The chain ID (or 0 for catchall)
     /// @param mode The field mode (for catchall handling)
-    /// @param $ Compact storage pointer
     /// @return valid True if all entries are whitelisted
     /// @return tokenInHash The computed EIP-712 hash
     /// @return newOffset Updated offset
     function _validateTokenInStorage(
+        BasePolicyStorage storage baseStorage,
         bytes calldata data,
         uint256 offset,
         uint256 chainId,
-        uint8 mode,
-        CompactPolicyStorage storage $
+        uint8 mode
     )
         private
         view
@@ -146,7 +143,7 @@ library CompactValidationLib {
 
         // Get whitelist (chainId=0 for catchall)
         uint256 effectiveChainId = mode.getEffectiveChainId(chainId);
-        EnumerableSetLib.Bytes32Set storage tokenSet = $.tokenInSet[effectiveChainId];
+        EnumerableSetLib.Bytes32Set storage tokenSet = baseStorage.tokenInSet[effectiveChainId];
 
         // Empty whitelist = not configured
         if (tokenSet.length() == 0) {

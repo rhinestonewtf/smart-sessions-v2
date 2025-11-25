@@ -35,6 +35,8 @@ This allows:
 │                                                             │
 │  fillExpiryConfig ───► mapping(chainId => uint256)          │
 │                                                             │
+│  tokenInSet ────────► mapping(chainId => Bytes32Set)        │
+│                                                             │
 │  tokenOutSet ────────► mapping(chainId => AddressSet)       │
 │                                                             │
 │  originOpsConfig ────► mapping(chainId => bool)             │
@@ -46,9 +48,6 @@ This allows:
 │  subPolicies ────────► mapping(fieldId => address)          │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
-
-NOTE: tokenIn storage is protocol-specific (Compact vs Permit2)
-      and is NOT included here. See CompactStorageLib/Permit2StorageLib.
 
 //////////////////////////////////////////////////////////////*/
 
@@ -119,6 +118,18 @@ struct BasePolicyStorage {
     ///
     /// Access: fillExpiryConfig[configId][account][chainId] => packed
     mapping(uint256 chainId => uint256 packedFillExpiry) fillExpiryConfig;
+
+    /*//////////////////////////////////////////////////////////////
+                        TOKEN IN CONFIGURATION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice TokenIn whitelist per chain
+    /// @dev Compact: Uses Bytes32Set where we store packed token+lockTag
+    /// @dev Permit2: Uses BYtes32 where we store bytes32(address) for token addresses
+    ///      chainId = 0 is reserved for catch-all (MODE_CHECK_CATCHALL)
+    ///
+    /// Access: tokenInSet[configId][account][chainId] => Bytes32Set
+    mapping(uint256 chainId => EnumerableSetLib.Bytes32Set tokenSet) tokenInSet;
 
     /*//////////////////////////////////////////////////////////////
                         TOKEN OUT CONFIGURATION
