@@ -211,7 +211,9 @@ abstract contract BaseClaimPolicy is I1271Policy {
     /// @param configId The configuration ID
     /// @param account The account being configured
     /// @param initData The initialization data to decode
-    // TODO: optimize gas by reducing memory writes, we can write to storage directly after reading each field
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TODO: optimize gas by reducing memory writes, we can write to storage directly after reading each field //
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     function _initializeBase(
         ConfigId configId,
         address account,

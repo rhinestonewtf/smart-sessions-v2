@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 // Contracts
 import { BaseClaimPolicy } from "@policies/claim/base/BaseClaimPolicy.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
+import { Permit2EIP712 } from "@compact-utils/common/Permit2EIP712.sol";
 
 // Libraries
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
@@ -59,7 +60,7 @@ import { FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTypes.sol";
 /// │  4. Return permitHash directly (no domain separator in calldata)        │
 /// └─────────────────────────────────────────────────────────────────────────┘
 // forgefmt: disable-end
-contract Permit2ClaimPolicy is BaseClaimPolicy {
+contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -69,6 +70,14 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
     using BaseConfigLib for uint8;
     using BaseStorageLib for ConfigId;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
+
+    /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Initializes the Permit2ClaimPolicy
+    /// @param permit2 The address of the Permit2 contract
+    constructor(address permit2) Permit2EIP712(permit2) { }
 
     /*//////////////////////////////////////////////////////////////
                       TOKEN IN INITIALIZATION
@@ -174,7 +183,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
         internal
         view
         override
-        returns (bool)
+        returns (bool valid)
     {
         /*//////////////////////////////////////////////////////////////
                                  DECODE HEADER
@@ -210,25 +219,17 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
         // Init tokenPermissions fields
         uint256 offset = 84; // 84 bytes = address(20) + nonce(32) + deadline(32)
         bytes32 tokenPermissionsHash;
-        bool tokenInValid;
         // This validates the tokenIn field
-        (tokenInValid, tokenPermissionsHash, offset) = Permit2ValidationLib.validateTokenIn(
-            configId,
-            data,
-            account,
-            84, //
-            config,
-            $,
-            hash
+        (valid, tokenPermissionsHash, offset) = Permit2ValidationLib.validateTokenIn(
+            configId, data, account, offset, config, $, hash
         );
-        if (!tokenInValid) return false;
+        if (!valid) return false;
 
         /*//////////////////////////////////////////////////////////////
                                 VALIDATE MANDATE
         //////////////////////////////////////////////////////////////*/
 
         // Init mandate variables
-        bool mandateValid;
         bytes32 mandateHash;
         // This validates nested mandate fields:
         //      1) fillExpiry
@@ -237,23 +238,25 @@ contract Permit2ClaimPolicy is BaseClaimPolicy {
         //      4) originOps
         //      5) destOps
         //      6) qualification
-        (mandateValid, mandateHash) = BaseValidationLib.validateMandate(
+        (valid, mandateHash) = BaseValidationLib.validateMandate(
             $, data, offset, block.chainid, arbiter, config, configId, account, hash
         );
         // Early return if mandate invalid
-        if (!mandateValid) return false;
+        if (!valid) return false;
 
         /*//////////////////////////////////////////////////////////////
                             COMPUTE EIP-712 HASH
         //////////////////////////////////////////////////////////////*/
 
         // Compute Permit2 digest
-        bytes32 permitHash = EIP712TypeHashLib.hashPermit2(
-            tokenPermissionsHash, arbiter, nonce, deadline, mandateHash
+        bytes32 digest = _permit2HashTypedData(
+            EIP712TypeHashLib.hashPermit2(
+                tokenPermissionsHash, arbiter, nonce, deadline, mandateHash
+            )
         );
 
-        // Compare against expected hash
-        return permitHash == hash;
+        // Compare digest against expected hash
+        return digest == hash;
     }
 
     /*//////////////////////////////////////////////////////////////
