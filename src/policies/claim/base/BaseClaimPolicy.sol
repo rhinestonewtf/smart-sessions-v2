@@ -77,8 +77,8 @@ abstract contract BaseClaimPolicy is I1271Policy {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Thrown when policy initialization fails
-    error InitializationFailed();
+    /// @notice Thrown when policy initialization fails due to invalid configuration data
+    error InvalidConfigurationData();
 
     /// @notice Thrown when an invalid mode is provided
     error InvalidMode();
@@ -138,6 +138,9 @@ abstract contract BaseClaimPolicy is I1271Policy {
 
         // Decode modeConfig (first 4 bytes)
         PolicyConfig modeConfig = PolicyConfig.wrap(uint32(bytes4(initData[0:4])));
+
+        // Make sure config is valid
+        require(modeConfig != PolicyConfig.wrap(0), InvalidConfigurationData());
         $.modeConfig = modeConfig;
 
         // Move data pointer
