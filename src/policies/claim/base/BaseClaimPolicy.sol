@@ -181,19 +181,19 @@ abstract contract BaseClaimPolicy is I1271Policy {
     ///
     /// Example - Compact with arbiter + tokenIn + recipient:
     /// ┌────────────────────────────────────────────────────────────┐
-    /// │  [0:4]      0x00000015 (AR=01, TI=01, RC=01, rest=00)       │
-    /// │  [4:36]     arbiter count = 1                               │
-    /// │  [36:56]    arbiter address                                 │
-    /// │  [56:88]    tokenIn count = 2                               │
-    /// │  [88:120]   tokenIn[0].chainId                              │
-    /// │  [120:140]  tokenIn[0].token                                │
-    /// │  [140:152]  tokenIn[0].lockTag                              │
-    /// │  [152:184]  tokenIn[1].chainId                              │
-    /// │  [184:204]  tokenIn[1].token                                │
-    /// │  [204:216]  tokenIn[1].lockTag                              │
-    /// │  [216:248]  recipient count = 1                             │
-    /// │  [248:280]  recipient[0].targetChainId                      │
-    /// │  [280:300]  recipient[0].recipient                          │
+    /// │  [0:4]      0x00000015 (AR=01, TI=01, RC=01, rest=00)      │
+    /// │  [4:36]     arbiter count = 1                              │
+    /// │  [36:56]    arbiter address                                │
+    /// │  [56:88]    tokenIn count = 2                              │
+    /// │  [88:120]   tokenIn[0].chainId                             │
+    /// │  [120:140]  tokenIn[0].token                               │
+    /// │  [140:152]  tokenIn[0].lockTag                             │
+    /// │  [152:184]  tokenIn[1].chainId                             │
+    /// │  [184:204]  tokenIn[1].token                               │
+    /// │  [204:216]  tokenIn[1].lockTag                             │
+    /// │  [216:248]  recipient count = 1                            │
+    /// │  [248:280]  recipient[0].targetChainId                     │
+    /// │  [280:300]  recipient[0].recipient                         │
     /// └────────────────────────────────────────────────────────────┘
     // forgefmt: disable-end
     function initializeWithMultiplexer(
