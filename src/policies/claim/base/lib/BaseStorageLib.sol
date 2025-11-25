@@ -12,8 +12,8 @@ import { ParamRules, PolicyConfig } from "@policies/claim/base/types/BaseDataTyp
                          STORAGE LAYOUT
 //////////////////////////////////////////////////////////////
 
-The BaseClaimPolicy uses a diamond-storage pattern with a unique
-slot to avoid collisions. Storage is organized as nested mappings:
+The BaseClaimPolicy uses a storage pattern with a unique slot to avoid collisions.
+Storage is organized as nested mappings:
 
     ConfigId → account → field-specific data
 
@@ -124,8 +124,8 @@ struct BasePolicyStorage {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice TokenIn whitelist per chain
-    /// @dev Compact: Uses Bytes32Set where we store packed token+lockTag
-    /// @dev Permit2: Uses BYtes32 where we store bytes32(address) for token addresses
+    /// @dev Compact: Bytes32Set where we store packed bytes32(token+lockTag)
+    /// @dev Permit2: Bytes32Set where we store bytes32(bytes20(token))
     ///      chainId = 0 is reserved for catch-all (MODE_CHECK_CATCHALL)
     ///
     /// Access: tokenInSet[configId][account][chainId] => Bytes32Set
