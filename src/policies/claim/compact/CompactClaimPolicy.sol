@@ -42,7 +42,7 @@ import {
 /// │  │  ├── nonce (uint256)                                              │  │
 /// │  │  ├── expires (uint256) ← validated as "claimExpires"              │  │
 /// │  │  └── elements (Element[])                                         │  │
-/// │  │      ├── Element[0] (notarized - fully validated)                 │  │
+/// │  │      ├── Element[0] (origin - fully validated)                    │  │
 /// │  │      │   ├── arbiter (address)                                    │  │
 /// │  │      │   ├── chainId (uint256)                                    │  │
 /// │  │      │   ├── tokenIn (Lock[]) ← has lockTag                       │  │
@@ -137,9 +137,9 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  [64:96]    expires (uint256)                              │
     /// │  [96:128]   otherElements length (uint256)                 │
     /// │  [128:...]  otherElements (bytes32 each, pre-hashed)       │
-    /// │  [...]      notarized element:                             │
+    /// │  [...]      element:                                       │
     /// │             ├── arbiter (20 bytes + 12 padding)            │
-    /// │             ├── chainId (32 bytes)                         │
+    /// │             ├── elementIndex (32 bytes)                    │
     /// │             ├── tokenIn OR commitmentsHash                 │
     /// │             └── mandate OR mandateHash                     │
     /// └────────────────────────────────────────────────────────────┘
@@ -209,13 +209,13 @@ contract CompactClaimPolicy is BaseClaimPolicy {
             );
 
         /*//////////////////////////////////////////////////////////////
-                        DECODE NOTARIZED ELEMENT HEADER
+                             DECODE ELEMENT HEADER
         //////////////////////////////////////////////////////////////*/
 
-        // Init notarized element variables
+        // Init element variables
         address arbiter;
-        uint256 chainId;
-        (arbiter, chainId, offset) = _decodeNotarizedElementHeader(data, offset);
+        uint256 elementIndex;
+        (arbiter, elementIndex, offset) = _decodeElementHeader(data, offset);
 
         /*//////////////////////////////////////////////////////////////
                                VALIDATE ARBITER
@@ -235,7 +235,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         bool valid;
         // This validates the tokenIn field
         (valid, commitmentsHash, offset) = CompactValidationLib.validateTokenIn(
-            configId, data, account, offset, chainId, config, $, hash
+            configId, data, account, offset, block.chainid, config, $, hash
         );
         if (!valid) return false;
 
@@ -254,7 +254,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         //      5) destOps
         //      6) qualification
         (mandateValid, mandateHash) = BaseValidationLib.validateMandate(
-            $, data, offset, chainId, arbiter, config, configId, account, hash
+            $, data, offset, block.chainid, arbiter, config, configId, account, hash
         );
         // Early return if mandate invalid
         if (!mandateValid) return false;
@@ -263,16 +263,20 @@ contract CompactClaimPolicy is BaseClaimPolicy {
                          COMPUTE EIP-712 DIGEST
         //////////////////////////////////////////////////////////////*/
 
-        // 1. Hash notarized element
+        // 1. Hash origin element
         bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
 
         // 2. Build allElements array: [elementHash, ...otherElements]
         uint256 totalLength = otherElements.length + 1;
         bytes32[] memory allElements = EfficientHashLib.malloc(totalLength);
-        allElements.set(0, elementHash);
-        for (uint256 i; i < otherElements.length; ++i) {
-            allElements.set(i + 1, otherElements[i]);
+        uint256 j;
+        for (uint256 i = 0; i < totalLength; ++i) {
+            if (i == elementIndex) {
+                allElements.set(i, elementHash);
+            } else {
+                allElements.set(i, otherElements[j++]);
+            }
         }
 
         // 3. Hash all elements
@@ -318,31 +322,31 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     )
         internal
         pure
-        returns (bytes32[] memory otherElements, uint256 newOffset)
+        returns (bytes32[] calldata otherElements, uint256 newOffset)
     {
-        uint256 otherElementsLength = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        uint256 length;
+        assembly {
+            // Load length of otherElements array
+            length := calldataload(add(data.offset, offset))
 
-        otherElements = new bytes32[](otherElementsLength);
-        for (uint256 i = 0; i < otherElementsLength; i++) {
-            otherElements[i] = bytes32(data[offset:offset + 32]);
-            offset += 32;
+            // Set calldata pointer to otherElements array
+            otherElements.offset := add(data.offset, add(offset, 0x20))
+            otherElements.length := length
         }
-
-        newOffset = offset;
+        newOffset = offset + 32 + (length * 32);
     }
 
-    /// @notice Decodes notarized element header from a MultichainCompact claim
-    function _decodeNotarizedElementHeader(
+    /// @notice Decodes origin element header from a MultichainCompact claim
+    function _decodeElementHeader(
         bytes calldata data,
         uint256 offset
     )
         internal
         pure
-        returns (address arbiter, uint256 chainId, uint256 newOffset)
+        returns (address arbiter, uint256 elementIndex, uint256 newOffset)
     {
         arbiter = address(bytes20(data[offset:offset + 20]));
-        chainId = uint256(bytes32(data[offset + 32:offset + 64]));
+        elementIndex = uint256(bytes32(data[offset + 32:offset + 64]));
         newOffset = offset + 64;
     }
 
