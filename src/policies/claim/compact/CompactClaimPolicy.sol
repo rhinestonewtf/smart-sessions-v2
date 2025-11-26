@@ -14,6 +14,8 @@ import { CompactValidationLib } from "@policies/claim/compact/lib/CompactValidat
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 import { Bytes32ArrayLib } from "@rhinestone/compact-utils/src/common/Bytes32ArrayLib.sol";
+import { IdLib } from "@the-compact/lib/IdLib.sol";
+import { EfficiencyLib } from "@the-compact/lib/EfficiencyLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -81,6 +83,9 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using Bytes32ArrayLib for bytes32[];
     using DomainLib for bytes32;
+    using IdLib for address;
+    using EfficiencyLib for bytes12;
+    using EfficiencyLib for address;
 
     /*//////////////////////////////////////////////////////////////
                          TOKEN IN INITIALIZATION
@@ -432,7 +437,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         // Get storage reference
         BasePolicyStorage storage $ = configId.getStorage(account);
         // Pack token + lockTag
-        bytes32 packed = CompactConfigLib.packTokenIn(token, lockTag);
+        bytes32 packed = bytes32(lockTag.asUint256() | token.asUint256());
         // Check if whitelisted
         return $.tokenInSet[chainId].contains(packed);
     }

@@ -27,7 +27,8 @@ import { MODE_SKIP, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTy
 /// │  Input (calldata):                                         │
 /// │  ┌──────────────────────────────────────────────────────┐  │
 /// │  │  length (32 bytes)                                   │  │
-/// │  │  Entry[]: [token (20) | lockTag (12)] × length       │  │
+/// │  │  Lock[]: [id (32) | amount (32)] × length            │  │
+/// │  │  id = [lockTag (96 high) | token (160 low)]          │  │
 /// │  └──────────────────────────────────────────────────────┘  │
 /// │                                                            │
 /// │  Mode routing:                                             │
@@ -57,7 +58,6 @@ library CompactValidationLib {
 
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint8;
-    using CompactConfigLib for address;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
@@ -161,11 +161,10 @@ library CompactValidationLib {
 
         // Validate each entry
         for (uint256 i = 0; i < length; i++) {
-            // Pack: [token (20 bytes) | lockTag (12 bytes)]
-            bytes32 packed =
-                address(uint160(tokenIn[i][0])).packTokenIn(bytes12(uint96(tokenIn[i][1])));
             // Reject if not in set
-            if (!tokenSet.contains(packed)) {
+            if (!tokenSet.contains(
+                    bytes32(tokenIn[i][0]) // packed token+lockTag
+                )) {
                 return (false, bytes32(0), 0);
             }
         }
