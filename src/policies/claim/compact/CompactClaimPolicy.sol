@@ -76,6 +76,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     using BaseConfigLib for uint8;
     using BaseStorageLib for ConfigId;
     using BaseValidationLib for BasePolicyStorage;
+    using CompactValidationLib for BasePolicyStorage;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using Bytes32ArrayLib for bytes32[];
     using DomainLib for bytes32;
@@ -313,9 +314,8 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         // Init commitmentsHash
         bytes32 commitmentsHash;
         // Validate tokenIn and compute commitmentsHash
-        (valid, commitmentsHash, offset) = CompactValidationLib.validateTokenIn(
-            configId, data, account, offset, block.chainid, config, $, hash
-        );
+        (valid, commitmentsHash, offset) =
+            $.validateTokenIn(configId, data, account, offset, block.chainid, config, hash);
         // Early return if invalid
         if (!valid) return (false, bytes32(0), 0);
 
@@ -326,8 +326,8 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         // Init mandateHash
         bytes32 mandateHash;
         // Validate mandate and compute mandateHash
-        (valid, mandateHash) = BaseValidationLib.validateMandate(
-            $, data, offset, block.chainid, arbiter, config, configId, account, hash
+        (valid, mandateHash) = $.validateMandate(
+            data, offset, block.chainid, arbiter, config, configId, account, hash
         );
         // Early return if invalid
         if (!valid) return (false, bytes32(0), 0);

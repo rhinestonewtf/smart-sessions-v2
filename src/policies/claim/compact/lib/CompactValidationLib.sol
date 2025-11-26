@@ -64,25 +64,25 @@ library CompactValidationLib {
 
     /// @notice Validates tokenIn with mode-based routing
     /// @dev Handles SKIP, STORAGE, CATCHALL, and SUBPOLICY modes
+    /// @param baseStorage Base storage for sub-policy lookup
     /// @param configId The configuration ID
     /// @param account The account performing the action
     /// @param data The calldata containing tokenIn
     /// @param offset Current offset in calldata
     /// @param chainId The chain ID for storage lookup
     /// @param config The policy configuration
-    /// @param baseStorage Base storage for sub-policy lookup
     /// @param hash The original hash for sub-policy validation
     /// @return valid True if validation passes
     /// @return tokenInHash The computed EIP-712 hash
     /// @return newOffset Updated offset after tokenIn data
     function validateTokenIn(
+        BasePolicyStorage storage baseStorage,
         ConfigId configId,
         bytes calldata data,
         address account,
         uint256 offset,
         uint256 chainId,
         PolicyConfig config,
-        BasePolicyStorage storage baseStorage,
         bytes32 hash
     )
         internal
