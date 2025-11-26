@@ -13,7 +13,7 @@ import { CompactConfigLib } from "@policies/claim/compact/lib/CompactConfigLib.s
 import { CompactValidationLib } from "@policies/claim/compact/lib/CompactValidationLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
-import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
+import { Bytes32ArrayLib } from "@rhinestone/compact-utils/src/common/Bytes32ArrayLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -75,8 +75,9 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     using BaseConfigLib for uint32;
     using BaseConfigLib for uint8;
     using BaseStorageLib for ConfigId;
+    using BaseValidationLib for BasePolicyStorage;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
-    using EfficientHashLib for bytes32[];
+    using Bytes32ArrayLib for bytes32[];
     using DomainLib for bytes32;
 
     /*//////////////////////////////////////////////////////////////
@@ -187,110 +188,161 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         internal
         view
         override
-        returns (bool)
+        returns (bool valid)
     {
-        // Decode claim header
+        /*//////////////////////////////////////////////////////////////
+                                DECODE HEADER
+        //////////////////////////////////////////////////////////////*/
+
         (bytes32 domainSeparator, uint256 nonce, uint256 expires) = _decodeClaimHeader(data);
 
         /*//////////////////////////////////////////////////////////////
                                VALIDATE EXPIRES
         //////////////////////////////////////////////////////////////*/
 
-        // This validates expires against the claimExpires in config
-        if (!BaseValidationLib.validateExpiry($, expires, config, configId, account, hash)) {
+        if (!$.validateExpiry(expires, config, configId, account, hash)) {
             return false;
         }
 
-        // Decode otherElements
-        (bytes32[] memory otherElements, uint256 offset) =
-            _decodeOtherElements(
-                data,
-                96 // offset after header (3 * 32 bytes)
-            );
+        /*//////////////////////////////////////////////////////////////
+                             DECODE OTHER ELEMENTS
+        //////////////////////////////////////////////////////////////*/
 
+        (bytes32[] calldata otherElements, uint256 offset) = _decodeOtherElements(data, 96);
+
+        /*//////////////////////////////////////////////////////////////
+                             VALIDATE & HASH ELEMENT
+        //////////////////////////////////////////////////////////////*/
+
+        // Init element validation variables
+        bytes32 elementHash;
+        uint256 elementIndex;
+        // Validates:
+        //   1) arbiter
+        //   2) tokenIn (commitments)
+        //   3) mandate (fillExpiry, recipient, tokenOut, originOps, destOps, qualification)
+        (valid, elementHash, elementIndex) =
+            _validateAndHashElement(configId, account, hash, data, offset, $, config);
+        if (!valid) return false;
+
+        /*//////////////////////////////////////////////////////////////
+                             COMPUTE EIP-712 DIGEST
+        //////////////////////////////////////////////////////////////*/
+
+        // 1. Insert origin element hash at its index and hash all elements
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
+
+        // 2. Hash MultichainCompact struct
+        bytes32 compactHash =
+            EIP712TypeHashLib.hashCompact(account, nonce, expires, allElementsHash);
+
+        // 3. Apply domain separator and compare against expected hash
+        return compactHash.withDomain(domainSeparator) == hash;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           ELEMENT VALIDATION
+    //////////////////////////////////////////////////////////////
+
+    Validates the element fields and computes its EIP-712 hash.
+
+    ┌────────────────────────────────────────────────────────────┐
+    │                    Origin Element                          │
+    │  ┌──────────────────────────────────────────────────────┐  │
+    │  │  arbiter (address) ← validated against whitelist     │  │
+    │  ├──────────────────────────────────────────────────────┤  │
+    │  │  elementIndex (uint256) ← position in elements[]     │  │
+    │  ├──────────────────────────────────────────────────────┤  │
+    │  │  tokenIn (Lock[]) ← validated per mode               │  │
+    │  │    Lock = { lockTag, token, amount }                 │  │
+    │  ├──────────────────────────────────────────────────────┤  │
+    │  │  mandate (Mandate) ← nested validation               │  │
+    │  │    ├── target (recipient, tokenOut, fillExpiry)      │  │
+    │  │    ├── minGas                                        │  │
+    │  │    ├── originOpsHash                                 │  │
+    │  │    ├── destOpsHash                                   │  │
+    │  │    └── qualification                                 │  │
+    │  └──────────────────────────────────────────────────────┘  │
+    └────────────────────────────────────────────────────────────┘
+
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Validates the element and computes its EIP-712 hash
+    /// @param configId The configuration ID
+    /// @param account The account being validated
+    /// @param hash The expected final hash (for sub-policy validation)
+    /// @param data The calldata containing the element
+    /// @param offset Current offset in calldata (after otherElements)
+    /// @param $ Storage pointer
+    /// @param config Policy configuration
+    /// @return valid True if all element fields pass validation
+    /// @return elementHash The computed EIP-712 hash of the element
+    /// @return elementIndex The index where this element belongs in allElements[]
+    function _validateAndHashElement(
+        ConfigId configId,
+        address account,
+        bytes32 hash,
+        bytes calldata data,
+        uint256 offset,
+        BasePolicyStorage storage $,
+        PolicyConfig config
+    )
+        internal
+        view
+        returns (bool valid, bytes32 elementHash, uint256 elementIndex)
+    {
         /*//////////////////////////////////////////////////////////////
                              DECODE ELEMENT HEADER
         //////////////////////////////////////////////////////////////*/
 
-        // Init element variables
         address arbiter;
-        uint256 elementIndex;
         (arbiter, elementIndex, offset) = _decodeElementHeader(data, offset);
 
         /*//////////////////////////////////////////////////////////////
                                VALIDATE ARBITER
         //////////////////////////////////////////////////////////////*/
 
-        // This validates the arbiter field
-        if (!BaseValidationLib.validateArbiter($, arbiter, config, configId, account, hash)) {
-            return false;
+        if (!$.validateArbiter(arbiter, config, configId, account, hash)) {
+            return (false, bytes32(0), 0);
         }
 
         /*//////////////////////////////////////////////////////////////
-                                VALIDATE TOKEN IN
+                              VALIDATE TOKEN IN
         //////////////////////////////////////////////////////////////*/
 
-        // Init commitments variables
+        // Init commitmentsHash
         bytes32 commitmentsHash;
-        bool valid;
-        // This validates the tokenIn field
+        // Validate tokenIn and compute commitmentsHash
         (valid, commitmentsHash, offset) = CompactValidationLib.validateTokenIn(
             configId, data, account, offset, block.chainid, config, $, hash
         );
-        if (!valid) return false;
+        // Early return if invalid
+        if (!valid) return (false, bytes32(0), 0);
 
         /*//////////////////////////////////////////////////////////////
-                                  VALIDATE MANDATE
+                               VALIDATE MANDATE
         //////////////////////////////////////////////////////////////*/
 
-        // Init mandate variables
-        bool mandateValid;
+        // Init mandateHash
         bytes32 mandateHash;
-        // This validates nested mandate fields:
-        //      1) fillExpiry
-        //      2) recipient
-        //      3) tokenOut
-        //      4) originOps
-        //      5) destOps
-        //      6) qualification
-        (mandateValid, mandateHash) = BaseValidationLib.validateMandate(
+        // Validate mandate and compute mandateHash
+        (valid, mandateHash) = BaseValidationLib.validateMandate(
             $, data, offset, block.chainid, arbiter, config, configId, account, hash
         );
-        // Early return if mandate invalid
-        if (!mandateValid) return false;
+        // Early return if invalid
+        if (!valid) return (false, bytes32(0), 0);
 
         /*//////////////////////////////////////////////////////////////
-                         COMPUTE EIP-712 DIGEST
+                             COMPUTE ELEMENT HASH
         //////////////////////////////////////////////////////////////*/
 
-        // 1. Hash origin element
-        bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
+        // Compute element hash
+        elementHash = EIP712TypeHashLib.hashElementRaw(
+            arbiter, block.chainid, commitmentsHash, mandateHash
+        );
 
-        // 2. Build allElements array: [elementHash, ...otherElements]
-        uint256 totalLength = otherElements.length + 1;
-        bytes32[] memory allElements = EfficientHashLib.malloc(totalLength);
-        uint256 j;
-        for (uint256 i = 0; i < totalLength; ++i) {
-            if (i == elementIndex) {
-                allElements.set(i, elementHash);
-            } else {
-                allElements.set(i, otherElements[j++]);
-            }
-        }
-
-        // 3. Hash all elements
-        bytes32 allElementsHash = allElements.hash();
-
-        // 4. Hash MultichainCompact struct
-        bytes32 compactHash =
-            EIP712TypeHashLib.hashCompact(account, nonce, expires, allElementsHash);
-
-        // 5. Apply domain separator
-        bytes32 digest = compactHash.withDomain(domainSeparator);
-
-        // 6. Compare against expected hash
-        return digest == hash;
+        // Return success with element hash and index
+        return (true, elementHash, elementIndex);
     }
 
     /*//////////////////////////////////////////////////////////////

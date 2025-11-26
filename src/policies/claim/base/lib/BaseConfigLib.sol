@@ -16,6 +16,7 @@ import {
     OriginOpsStorageConfig,
     DestOpsStorageConfig,
     QualificationStorageConfig,
+    QualificationRulesStorage,
     MODE_SKIP,
     MODE_CHECK_STORAGE,
     MODE_CHECK_CATCHALL,
@@ -381,11 +382,8 @@ library BaseConfigLib {
         pure
         returns (uint256 packed, bytes calldata remaining)
     {
-        // Read min and max expiry values
-        uint128 minExpiry = uint128(bytes16(initData[0:16]));
-        uint128 maxExpiry = uint128(bytes16(initData[16:32]));
-        // Pack into single uint256
-        packed = packUint128(minExpiry, maxExpiry);
+        // Read min and max expiry values packed into uint256
+        packed = uint256(bytes32(initData[0:32]));
         // Calculate remaining data
         remaining = initData[32:];
     }
@@ -719,6 +717,10 @@ library BaseConfigLib {
             address arbiter = address(bytes20(initData[offset:offset + 20]));
             offset += 20;
 
+            // Decode useArbiterHash flag (1 byte)
+            bool useArbiterHash = uint8(initData[offset]) != 0;
+            offset += 1;
+
             // Decode root node index (1 byte)
             uint8 rootNodeIndex = uint8(initData[offset]);
             offset += 1;
@@ -755,7 +757,9 @@ library BaseConfigLib {
                 rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
             });
 
-            configs[j] = QualificationStorageConfig(chainId, arbiter, rules);
+            configs[j] = QualificationStorageConfig(
+                chainId, arbiter, QualificationRulesStorage(useArbiterHash, rules)
+            );
         }
 
         remaining = initData[offset:];

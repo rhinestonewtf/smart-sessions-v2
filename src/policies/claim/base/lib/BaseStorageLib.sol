@@ -6,7 +6,10 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { ParamRules, PolicyConfig } from "@policies/claim/base/types/BaseDataTypes.sol";
+import {
+    QualificationRulesStorage,
+    PolicyConfig
+} from "@policies/claim/base/types/BaseDataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                          STORAGE LAYOUT
@@ -174,8 +177,9 @@ struct BasePolicyStorage {
     ///      chainId = 0 is reserved for catch-all
     ///
     /// Access: qualificationConfig[configId][account][chainId][arbiter] => rules
-    mapping(uint256 chainId => mapping(address arbiter => ParamRules qualificationRules))
-        qualificationConfig;
+    mapping(
+        uint256 chainId => mapping(address arbiter => QualificationRulesStorage qualificationRules)
+    ) qualificationConfig;
 }
 
 /// @title Base Storage Library

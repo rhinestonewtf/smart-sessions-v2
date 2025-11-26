@@ -18,6 +18,7 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
     ParamRules,
+    QualificationRulesStorage,
     MODE_SKIP,
     MODE_CHECK_STORAGE,
     MODE_CHECK_CATCHALL,
@@ -899,6 +900,7 @@ library BaseValidationLib {
     │  ┌────────────────────────────────────────────────┐    │
     │  │  dataLength (uint256) - 32 bytes               │    │
     │  └────────────────────────────────────────────────┘    │
+    │  If we use sub policy mode, we need do include a flag: │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  flags (uint8) - 1 byte                        │    │
     │  │  ┌──────────────────────────────────────────┐  │    │
@@ -986,32 +988,24 @@ library BaseValidationLib {
         uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
         offset += 32;
 
-        // Read flags byte
-        uint8 flags = uint8(data[offset]);
-        offset += 1;
-
-        // Get rules for this chain+arbiter
+        // Get config for this chain+arbiter
         uint256 effectiveChainId = mode.getEffectiveChainId(chainId);
-        ParamRules storage rules = $.qualificationConfig[effectiveChainId][arbiter];
+        QualificationRulesStorage storage config = $.qualificationConfig[effectiveChainId][arbiter];
 
         // Extract qualification data
         bytes calldata qualificationData = data[offset:offset + dataLength];
 
         // Evaluate parameter rules if any exist
-        if (rules.rules.length != 0) {
-            if (!rules.evaluateExpressionTree(qualificationData)) {
+        if (config.rules.rules.length != 0) {
+            if (!config.rules.evaluateExpressionTree(qualificationData)) {
                 return (false, bytes32(0), 0);
             }
         }
 
-        // Compute hash based on flags
-        bool useArbiterHash = (flags & 0x01) != 0;
-
-        if (useArbiterHash) {
-            // Call arbiter to compute custom hash
+        // Compute hash based on stored flag
+        if (config.useArbiterHash) {
             qualificationHash = IArbiter(arbiter).qualificationHash(qualificationData);
         } else {
-            // Use standard keccak256
             qualificationHash = keccak256(qualificationData);
         }
 
@@ -1019,7 +1013,8 @@ library BaseValidationLib {
     }
 
     /// @notice Validates qualification by delegating to external sub-policy
-    /// @param $ The storage pointer
+    /// @dev Compared to storage based validation, this requires the data to includes an extra flag
+    ///      byte to determine hash method @param $ The storage pointer
     /// @param data The calldata containing qualification data
     /// @param offset Current offset in calldata
     /// @param chainId The chain ID

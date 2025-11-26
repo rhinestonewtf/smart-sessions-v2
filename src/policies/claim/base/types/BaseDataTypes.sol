@@ -189,10 +189,19 @@ struct DestOpsStorageConfig {
 ///      arbiters may have different qualification requirements
 /// @param chainId Chain (0 for catch-all)
 /// @param arbiter The arbiter these rules apply to
+/// @parm useArbiterHash If true, use arbiter qualificationHash hash for validation
 /// @param rules Parameter validation rules
 struct QualificationStorageConfig {
     uint256 chainId;
     address arbiter;
+    QualificationRulesStorage rules;
+}
+
+/// @notice Stored qualification configuration
+/// @param useArbiterHash If true, use arbiter qualificationHash hash for validation
+/// @parm rules Parameter validation rules
+struct QualificationRulesStorage {
+    bool useArbiterHash;
     ParamRules rules;
 }
 
