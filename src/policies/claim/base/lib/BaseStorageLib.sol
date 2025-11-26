@@ -38,7 +38,7 @@ This allows:
 │                                                             │
 │  fillExpiryConfig ───► mapping(chainId => uint256)          │
 │                                                             │
-│  tokenInSet ─────────► mapping(chainId => Bytes32Set)        │
+│  tokenInSet ─────────► mapping(chainId => Bytes32Set)       │
 │                                                             │
 │  tokenOutSet ────────► mapping(chainId => AddressSet)       │
 │                                                             │
