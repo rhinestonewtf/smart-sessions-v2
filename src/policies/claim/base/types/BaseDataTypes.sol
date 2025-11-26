@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 /*//////////////////////////////////////////////////////////////
-                    ARCHITECTURE OVERVIEW
+                         ARCHITECTURE OVERVIEW
 //////////////////////////////////////////////////////////////
 
 This module defines shared types for the ClaimPolicy family.
@@ -76,7 +76,7 @@ uint8 constant MODE_CHECK_SUBPOLICY = 3;
 //////////////////////////////////////////////////////////////*/
 
 uint8 constant FIELD_ARBITER = 0;
-uint8 constant FIELD_EXPIRY = 1;
+uint8 constant FIELD_EXPIRY = 1; // claimExpires (Compact) or deadline (Permit2)
 uint8 constant FIELD_TOKEN_IN = 2;
 uint8 constant FIELD_RECIPIENT = 3;
 uint8 constant FIELD_FILL_EXPIRY = 4;
@@ -92,6 +92,17 @@ uint8 constant FIELD_QUALIFICATION = 8;
 Used for qualification parameter validation. Supports complex
 boolean expressions via an expression tree.
 
+Expression Tree Node Format (uint256):
+┌─────────────────────────────────────────────────────────────┐
+│  Bits [7:6] = Node Type                                     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ 00 = RULE node  → Bits [5:0] = rule index            │   │
+│  │ 01 = NOT node   → Bits [5:0] = child node index      │   │
+│  │ 10 = AND node   → Bits [5:0] = left, [13:8] = right  │   │
+│  │ 11 = OR node    → Bits [5:0] = left, [13:8] = right  │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+
 //////////////////////////////////////////////////////////////*/
 
 /// @notice Stores the rules and their logical relationships
@@ -104,12 +115,25 @@ struct ParamRules {
     uint256[] packedNodes;
 }
 
+// forgefmt: disable-start
 /// @notice Defines a condition to check against a parameter
 /// @dev Reads `length` bytes from `offset` and compares to `ref`
+///
+/// ┌─────────────────────────────────────────────────────────┐
+/// │                    Calldata Layout                      │
+/// │  ┌──────────┬──────────────────────┬──────────────────┐ │
+/// │  │ ...      │  param (length bytes) │     ...         │ │
+/// │  │          │  ↑ offset             │                 │ │
+/// │  └──────────┴──────────────────────┴──────────────────┘ │
+/// │                                                         │
+/// │  If length == 0, reads full 32 bytes from offset        │
+/// └─────────────────────────────────────────────────────────┘
+///
 /// @param condition Type of comparison (EQUAL, GREATER_THAN, etc.)
 /// @param offset Byte offset in calldata to read parameter
 /// @param length Number of bytes to read (0 = 32 bytes)
 /// @param ref Reference value to compare against
+// forgefmt: disable-end
 struct ParamRule {
     ParamCondition condition;
     uint64 offset;
@@ -132,74 +156,12 @@ struct SubPolicyConfig {
 }
 
 /*//////////////////////////////////////////////////////////////
-                     STORAGE CONFIGURATIONS
-//////////////////////////////////////////////////////////////
-
-These structs define how field validation rules are stored.
-Most fields support per-chain configuration with optional
-catch-all (chainId=0) fallback.
-
+                     QUALIFICATION STORAGE
 //////////////////////////////////////////////////////////////*/
 
-/// @notice Recipient configuration per target chain
-/// @param targetChainId Target chain (0 for catch-all)
-/// @param recipient Required recipient address
-struct RecipientStorageConfig {
-    uint256 targetChainId;
-    address recipient;
-}
-
-/// @notice Fill expiry bounds per target chain
-/// @dev Stored as packed uint256: lower 128 bits = min, upper 128 bits = max
-/// @param targetChainId Target chain (0 for catch-all)
-/// @param minFillExpiry Minimum allowed fill expiry timestamp
-/// @param maxFillExpiry Maximum allowed fill expiry timestamp
-struct FillExpiryStorageConfig {
-    uint256 targetChainId;
-    uint128 minFillExpiry;
-    uint128 maxFillExpiry;
-}
-
-/// @notice Token output whitelist per target chain
-/// @param targetChainId Target chain (0 for catch-all)
-/// @param token Whitelisted output token address
-struct TokenOutStorageConfig {
-    uint256 targetChainId;
-    address token;
-}
-
-/// @notice Origin operations requirement per chain
-/// @param chainId Origin chain (0 for catch-all)
-/// @param requireOriginOps If true, originOps must be present (non-empty)
-struct OriginOpsStorageConfig {
-    uint256 chainId;
-    bool requireOriginOps;
-}
-
-/// @notice Destination operations requirement per target chain
-/// @param targetChainId Target chain (0 for catch-all)
-/// @param requireDestOps If true, destOps must be present (non-empty)
-struct DestOpsStorageConfig {
-    uint256 targetChainId;
-    bool requireDestOps;
-}
-
-/// @notice Qualification parameter rules per chain and arbiter
-/// @dev Qualification validation is per-arbiter because different
-///      arbiters may have different qualification requirements
-/// @param chainId Chain (0 for catch-all)
-/// @param arbiter The arbiter these rules apply to
-/// @parm useArbiterHash If true, use arbiter qualificationHash hash for validation
-/// @param rules Parameter validation rules
-struct QualificationStorageConfig {
-    uint256 chainId;
-    address arbiter;
-    QualificationRulesStorage rules;
-}
-
 /// @notice Stored qualification configuration
-/// @param useArbiterHash If true, use arbiter qualificationHash hash for validation
-/// @parm rules Parameter validation rules
+/// @param useArbiterHash If true, use arbiter.qualificationHash() for hashing
+/// @param rules Parameter validation rules
 struct QualificationRulesStorage {
     bool useArbiterHash;
     ParamRules rules;
@@ -217,14 +179,14 @@ Wraps uint32 for type safety. Contains 2-bit modes for 9 fields.
 /// @dev Provides type safety for the 32-bit mode configuration
 type PolicyConfig is uint32;
 
-using { neQConfig as != } for PolicyConfig global;
+using { neqConfig as != } for PolicyConfig global;
 using { eqConfig as == } for PolicyConfig global;
 
 /// @notice Inequality comparison for PolicyConfig
 /// @param self The first PolicyConfig to compare
 /// @param config The second PolicyConfig to compare
 /// @return True if the configs are not equal
-function neQConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
+function neqConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
     return PolicyConfig.unwrap(self) != PolicyConfig.unwrap(config);
 }
 
@@ -235,3 +197,4 @@ function neQConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
 function eqConfig(PolicyConfig self, PolicyConfig config) pure returns (bool) {
     return PolicyConfig.unwrap(self) == PolicyConfig.unwrap(config);
 }
+

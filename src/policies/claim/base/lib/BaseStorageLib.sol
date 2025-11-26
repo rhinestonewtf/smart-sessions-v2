@@ -15,30 +15,29 @@ import {
                          STORAGE LAYOUT
 //////////////////////////////////////////////////////////////
 
-The BaseClaimPolicy uses a storage pattern with a unique slot to avoid collisions.
-Storage is organized as nested mappings:
+The BaseClaimPolicy uses a storage pattern with unique
+slot calculation per (configId, account) pair.
 
-    ConfigId → account → field-specific data
+Storage slot = keccak256(BASE_SLOT, configId, account)
 
-This allows:
-• Multiple configurations per account (via ConfigId)
-• Per-chain configurations where applicable
+This provides:
+• Isolated storage per configuration
+• Per-account storage without nested mappings
+• Gas-efficient access patterns
 
 ┌─────────────────────────────────────────────────────────────┐
-│                    PolicyStorage Layout                     │
+│                    BasePolicyStorage Layout                 │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  modeConfig ─────────► uint32 (2 bits × 9 fields = 18 bits) │
+│  modeConfig ─────────► PolicyConfig (uint32)                │
 │                                                             │
-│  arbiterConfig ──────► AddressSet                           │
+│  arbiterConfig ──────► AddressSet (multiple arbiters)       │
 │                                                             │
 │  expiryConfig ───────► uint256 (packed min|max)             │
 │                                                             │
 │  recipientConfig ────► mapping(chainId => address)          │
 │                                                             │
 │  fillExpiryConfig ───► mapping(chainId => uint256)          │
-│                                                             │
-│  tokenInSet ─────────► mapping(chainId => Bytes32Set)       │
 │                                                             │
 │  tokenOutSet ────────► mapping(chainId => AddressSet)       │
 │                                                             │
@@ -62,7 +61,7 @@ struct BasePolicyStorage {
     /// @notice Mode configuration bitmap (2 bits per field, 9 fields)
     /// @dev See DataTypes.sol for field layout diagram
     ///
-    /// Access: modeConfig[configId][account] => uint32
+    /// Access: modeConfig[configId][account] => PolicyConfig
     PolicyConfig modeConfig;
 
     /*//////////////////////////////////////////////////////////////
@@ -73,7 +72,7 @@ struct BasePolicyStorage {
     /// @dev When a field's mode is MODE_CHECK_SUBPOLICY, validation
     ///      is delegated to the policy stored here
     ///
-    /// Access: subPolicies[configId][account][fieldId] => policy
+    /// Access: subPolicies[configId][account][fieldId] => address
     mapping(uint8 fieldId => address policy) subPolicies;
 
     /*//////////////////////////////////////////////////////////////
@@ -98,7 +97,7 @@ struct BasePolicyStorage {
     /// │   bits [255:128]   │   bits [127:0]     │
     /// └────────────────────┴────────────────────┘
     ///
-    /// Access: expiryConfig[configId][account] => packed
+    /// Access: expiryConfig[configId][account] => (packed min|max as uint128|uint128)
     uint256 expiryConfig;
 
     /*//////////////////////////////////////////////////////////////
@@ -242,14 +241,14 @@ library BaseStorageLib {
         assembly {
             // Get the free memory pointer
             let ptr := mload(0x40)
-            // Store baseSlot at ptr
-            mstore(ptr, baseSlot)
-            // Store id at ptr + 32
-            mstore(add(ptr, 0x20), id)
-            // Store account at ptr + 64
-            mstore(add(ptr, 0x40), account)
-            // Compute keccak256 hash of the 96 bytes at ptr
-            slot := keccak256(ptr, 0x60)
+            // Store baseSlot,id,account
+            mstore(0x00, baseSlot)
+            mstore(0x20, id)
+            mstore(0x40, account)
+            // Compute keccak256 hash of the 96 bytes from 0x00 to 0x60
+            slot := keccak256(0x00, 0x60)
+            // Restore the free memory pointer
+            mstore(0x40, ptr)
         }
     }
 }

@@ -7,7 +7,7 @@ import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { Permit2EIP712 } from "@compact-utils/common/Permit2EIP712.sol";
 
 // Libraries
-import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
+import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { BaseValidationLib } from "@policies/claim/base/lib/BaseValidationLib.sol";
 import { Permit2ConfigLib } from "@policies/claim/permit2/lib/Permit2ConfigLib.sol";
@@ -16,8 +16,7 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { Permit2TokenInStorageConfig } from "@policies/claim/permit2/types/Permit2DataTypes.sol";
-import { FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTypes.sol";
+import { PolicyConfig, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
 /// @title Permit2 Claim Policy
@@ -69,6 +68,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     using BaseConfigLib for uint32;
     using BaseConfigLib for uint8;
     using BaseStorageLib for ConfigId;
+    using Permit2ConfigLib for BasePolicyStorage;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
@@ -85,37 +85,16 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
 
     /// @inheritdoc BaseClaimPolicy
     /// @notice Initializes Permit2-specific tokenIn storage (token only, no lockTag)
-    /// @dev Decodes Permit2TokenInStorageConfig[] and stores token addresses.
-    ///      Note: Permit2 tokenIn uses chainId from config (typically 0 for origin chain).
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // TODO: optimize gas by reducing memory writes, we can write to storage directly after reading each field //
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @dev Writes token addresses directly to storage
     function _initializeTokenIn(
-        ConfigId configId,
-        address account,
-        PolicyConfig modeConfig,
+        BasePolicyStorage storage $,
         bytes calldata initData
     )
         internal
         override
         returns (bytes calldata remaining)
     {
-        // Check if tokenIn field uses storage mode
-        if (!modeConfig.getFieldMode(FIELD_TOKEN_IN).isStorageMode()) {
-            return initData;
-        }
-
-        // Get storage reference
-        BasePolicyStorage storage $ = configId.getStorage(account);
-
-        // Decode and store tokenIn whitelist
-        Permit2TokenInStorageConfig[] memory configs;
-        (configs, remaining) = Permit2ConfigLib.decodeTokenInConfig(initData);
-
-        // Initialize tokenIn whitelist (token addresses only, no lockTag)
-        for (uint256 i = 0; i < configs.length; i++) {
-            $.tokenInSet[configs[i].chainId].add(bytes32(bytes20(configs[i].token)));
-        }
+        remaining = $.initializeTokenIn(initData);
     }
 
     /*//////////////////////////////////////////////////////////////

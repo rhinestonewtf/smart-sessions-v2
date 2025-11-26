@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
-import { IERC165 } from "forge-std/interfaces/IERC165.sol";
+import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 // Libraries
 import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
@@ -13,14 +13,7 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
-    ParamRules,
-    SubPolicyConfig,
-    RecipientStorageConfig,
-    FillExpiryStorageConfig,
-    TokenOutStorageConfig,
-    OriginOpsStorageConfig,
-    DestOpsStorageConfig,
-    QualificationStorageConfig,
+    PolicyConfig,
     MODE_SKIP,
     MODE_CHECK_STORAGE,
     MODE_CHECK_CATCHALL,
@@ -33,8 +26,7 @@ import {
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
-    FIELD_QUALIFICATION,
-    PolicyConfig
+    FIELD_QUALIFICATION
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
@@ -69,7 +61,7 @@ abstract contract BaseClaimPolicy is I1271Policy {
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint32;
     using BaseConfigLib for uint8;
-    using BaseStorageLib for BasePolicyStorage;
+    using BaseConfigLib for BasePolicyStorage;
     using BaseStorageLib for ConfigId;
     using EnumerableSetLib for EnumerableSetLib.AddressSet;
 
@@ -211,9 +203,6 @@ abstract contract BaseClaimPolicy is I1271Policy {
     /// @param configId The configuration ID
     /// @param account The account being configured
     /// @param initData The initialization data to decode
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // TODO: optimize gas by reducing memory writes, we can write to storage directly after reading each field //
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     function _initializeBase(
         ConfigId configId,
         address account,
@@ -227,130 +216,93 @@ abstract contract BaseClaimPolicy is I1271Policy {
 
         // ------------------ POLICY CONFIG ------------------ //
 
-        // Decode modeConfig (first 4 bytes)
-        PolicyConfig modeConfig = PolicyConfig.wrap(uint32(bytes4(initData[0:4])));
-
-        // Make sure config is valid
-        require(modeConfig != PolicyConfig.wrap(0), InvalidConfigurationData());
-        $.modeConfig = modeConfig;
-
-        // Move data pointer
-        bytes calldata data = initData[4:];
+        // Decode and initialize policy mode configuration
+        (PolicyConfig modeConfig, bytes calldata data) = $.initializeModeConfig(initData);
 
         // ------------------ ARBITER ------------------ //
 
-        // Decode arbiter if enabled
+        // Decode and initialize arbiter config if enabled
         if (modeConfig.getFieldMode(FIELD_ARBITER).isStorageMode()) {
-            address[] memory arbiters;
-            (arbiters, data) = BaseConfigLib.decodeArbiterConfig(data);
-            for (uint256 i = 0; i < arbiters.length; i++) {
-                $.arbiterConfig.add(arbiters[i]);
-            }
+            data = $.initializeArbiter(data);
         }
 
         // ------------------ CLAIM EXPIRY ------------------ //
 
-        // Decode expiry if enabled
+        // Decode and initialize expiry config if enabled
         if (modeConfig.getFieldMode(FIELD_EXPIRY).isStorageMode()) {
-            uint256 packedExpiry;
-            (packedExpiry, data) = BaseConfigLib.decodeExpiryConfig(data);
-            $.expiryConfig = packedExpiry;
+            data = $.initializeExpiry(data);
         }
 
         // ------------------ TOKEN IN ------------------ //
 
-        // Decode tokenIn (protocol-specific - handled by subclass)
-        data = _initializeTokenIn(configId, account, modeConfig, data);
+        // Decode and initialize tokenIn if enabled (protocol-specific - handled by subclass)
+        if (modeConfig.getFieldMode(FIELD_TOKEN_IN).isStorageMode()) {
+            data = _initializeTokenIn($, data);
+        }
 
         // ------------------ RECIPIENT ------------------ //
 
-        // Decode recipient configs
+        // Decode and initialize recipient configs if enabled
         if (modeConfig.getFieldMode(FIELD_RECIPIENT).isStorageMode()) {
-            RecipientStorageConfig[] memory configs;
-            (configs, data) = BaseConfigLib.decodeRecipientConfig(data);
-            for (uint256 i = 0; i < configs.length; i++) {
-                $.recipientConfig[configs[i].targetChainId] = configs[i].recipient;
-            }
+            data = $.initializeRecipient(data);
         }
 
         // ------------------ FILL EXPIRY ------------------ //
 
-        // Decode fill expiry configs
+        // Decode and initialize fill expiry configs if enabled
         if (modeConfig.getFieldMode(FIELD_FILL_EXPIRY).isStorageMode()) {
-            FillExpiryStorageConfig[] memory configs;
-            (configs, data) = BaseConfigLib.decodeFillExpiryConfig(data);
-            for (uint256 i = 0; i < configs.length; i++) {
-                uint256 packed =
-                    BaseConfigLib.packUint128(configs[i].minFillExpiry, configs[i].maxFillExpiry);
-                $.fillExpiryConfig[configs[i].targetChainId] = packed;
-            }
+            data = $.initializeFillExpiry(data);
         }
 
         // ------------------ TOKEN OUT ------------------ //
 
-        // Decode token out configs
+        // Decode and initialize tokenOut configs if enabled
         if (modeConfig.getFieldMode(FIELD_TOKEN_OUT).isStorageMode()) {
-            TokenOutStorageConfig[] memory configs;
-            (configs, data) = BaseConfigLib.decodeTokenOutConfig(data);
-            for (uint256 i = 0; i < configs.length; i++) {
-                $.tokenOutSet[configs[i].targetChainId].add(configs[i].token);
-            }
+            data = $.initializeTokenOut(data);
         }
 
         // ------------------ ORIGIN OPS ------------------ //
 
-        // Decode origin ops configs
+        // Decode and initialize origin ops configs if enabled
         if (modeConfig.getFieldMode(FIELD_ORIGIN_OPS).isStorageMode()) {
-            OriginOpsStorageConfig[] memory configs;
-            (configs, data) = BaseConfigLib.decodeOriginOpsConfig(data);
-            for (uint256 i = 0; i < configs.length; i++) {
-                $.originOpsConfig[configs[i].chainId] = configs[i].requireOriginOps;
-            }
+            data = $.initializeOriginOps(data);
         }
 
         // ------------------ DESTINATION OPS ------------------ //
 
-        // Decode dest ops configs
+        // Decode and initialize dest ops configs if enabled
         if (modeConfig.getFieldMode(FIELD_DEST_OPS).isStorageMode()) {
-            DestOpsStorageConfig[] memory configs;
-            (configs, data) = BaseConfigLib.decodeDestOpsConfig(data);
-            for (uint256 i = 0; i < configs.length; i++) {
-                $.destOpsConfig[configs[i].targetChainId] = configs[i].requireDestOps;
-            }
+            data = $.initializeDestOps(data);
         }
 
         // ------------------ QUALIFICATION ------------------ //
 
-        // Decode qualification configs
+        // Decode and initialize qualification configs if enabled
         if (modeConfig.getFieldMode(FIELD_QUALIFICATION).isStorageMode()) {
-            QualificationStorageConfig[] memory configs;
-            (configs, data) = BaseConfigLib.decodeQualificationConfig(data);
-            for (uint256 i = 0; i < configs.length; i++) {
-                $.qualificationConfig[configs[i].chainId][configs[i].arbiter] = configs[i].rules;
-            }
+            data = $.initializeQualification(data);
         }
 
         // ------------------ SUB-POLICIES ------------------ //
 
-        // Decode sub-policies if any
-        if (data.length > 0) {
-            SubPolicyConfig[] memory subPolicies;
-            (subPolicies, data) = BaseConfigLib.decodeSubPolicyConfig(data);
-            for (uint256 i = 0; i < subPolicies.length; i++) {
-                SubPolicyConfig memory subPolicy = subPolicies[i];
-
-                $.subPolicies[subPolicy.fieldId] = subPolicy.policyAddress;
-
-                // Verify the field is actually set to MODE_CHECK_SUBPOLICY
-                uint8 mode = modeConfig.getFieldMode(subPolicy.fieldId);
-                if (mode != MODE_CHECK_SUBPOLICY) {
-                    revert InvalidMode();
-                }
-
-                // Initialize the sub-policy with the provided initData
-                I1271Policy(subPolicy.policyAddress)
-                    .initializeWithMultiplexer(account, configId, subPolicy.initData);
+        // Decode and initialize sub-policy configs if any
+        if (data.length != 0) {
+            // Initialize sub-policy config variables
+            uint256 subPolicyCount;
+            uint8[] memory fieldIds;
+            address[] memory policyAddresses;
+            bytes[] memory subPolicyInitDatas;
+            (data, subPolicyCount, fieldIds, policyAddresses, subPolicyInitDatas) =
+                $.initializeSubPolicies(data);
+            // Initialize each sub-policy
+            for (uint256 i = 0; i < subPolicyCount; i++) {
+                // Validate mode is SUBPOLICY
+                require(modeConfig.getFieldMode(fieldIds[i]) == MODE_CHECK_SUBPOLICY, InvalidMode());
+                // Initialize sub-policy
+                I1271Policy(policyAddresses[i])
+                    .initializeWithMultiplexer(account, configId, subPolicyInitDatas[i]);
             }
+            // Make sure all data is consumed
+            require(data.length == 0, InvalidConfigurationData());
         }
 
         // Emit initialized event
@@ -359,15 +311,11 @@ abstract contract BaseClaimPolicy is I1271Policy {
 
     /// @notice Protocol-specific tokenIn initialization
     /// @dev Must be implemented by subclasses to handle Compact vs Permit2 tokenIn formats
-    /// @param configId The configuration ID
-    /// @param account The account being configured
-    /// @param modeConfig The mode configuration bitmap
+    /// @param $ The storage pointer for the account
     /// @param initData Remaining init data starting at tokenIn config
     /// @return remaining Remaining init data after tokenIn config
     function _initializeTokenIn(
-        ConfigId configId,
-        address account,
-        PolicyConfig modeConfig,
+        BasePolicyStorage storage $,
         bytes calldata initData
     )
         internal

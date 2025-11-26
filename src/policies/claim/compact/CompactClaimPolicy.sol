@@ -6,7 +6,7 @@ import { BaseClaimPolicy } from "@policies/claim/base/BaseClaimPolicy.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
 // Libraries
-import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
+import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { BaseValidationLib } from "@policies/claim/base/lib/BaseValidationLib.sol";
 import { CompactConfigLib } from "@policies/claim/compact/lib/CompactConfigLib.sol";
@@ -17,8 +17,8 @@ import { Bytes32ArrayLib } from "@rhinestone/compact-utils/src/common/Bytes32Arr
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { CompactTokenInStorageConfig } from "@policies/claim/compact/types/CompactDataTypes.sol";
 import {
+    PolicyConfig,
     MODE_SKIP,
     MODE_CHECK_SUBPOLICY,
     FIELD_ARBITER,
@@ -76,6 +76,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     using BaseConfigLib for uint8;
     using BaseStorageLib for ConfigId;
     using BaseValidationLib for BasePolicyStorage;
+    using CompactConfigLib for BasePolicyStorage;
     using CompactValidationLib for BasePolicyStorage;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using Bytes32ArrayLib for bytes32[];
@@ -87,38 +88,16 @@ contract CompactClaimPolicy is BaseClaimPolicy {
 
     /// @inheritdoc BaseClaimPolicy
     /// @notice Initializes Compact-specific tokenIn storage (token+lockTag)
-    /// @dev Decodes CompactTokenInStorageConfig[] and stores packed bytes32 values
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // TODO: optimize gas by reducing memory writes, we can write to storage directly after reading each field //
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @dev Writes packed bytes32 values directly to storage
     function _initializeTokenIn(
-        ConfigId configId,
-        address account,
-        PolicyConfig modeConfig,
+        BasePolicyStorage storage $,
         bytes calldata initData
     )
         internal
         override
         returns (bytes calldata remaining)
     {
-        // Check if tokenIn field uses storage mode
-        if (!modeConfig.getFieldMode(FIELD_TOKEN_IN).isStorageMode()) {
-            return initData;
-        }
-
-        // Get storage reference
-        BasePolicyStorage storage $ = configId.getStorage(account);
-
-        // Decode and store tokenIn whitelist
-        CompactTokenInStorageConfig[] memory configs;
-        (configs, remaining) = CompactConfigLib.decodeTokenInConfig(initData);
-
-        // Initialize tokenIn whitelist
-        for (uint256 i = 0; i < configs.length; i++) {
-            // Pack token + lockTag into bytes32
-            bytes32 packed = CompactConfigLib.packTokenIn(configs[i].token, configs[i].lockTag);
-            $.tokenInSet[configs[i].chainId].add(packed);
-        }
+        remaining = $.initializeTokenIn(initData);
     }
 
     /*//////////////////////////////////////////////////////////////

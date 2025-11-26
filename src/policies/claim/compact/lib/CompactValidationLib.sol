@@ -9,6 +9,7 @@ import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfig
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
+import { CompactConfigLib } from "@policies/claim/compact/lib/CompactConfigLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -56,6 +57,7 @@ library CompactValidationLib {
 
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint8;
+    using CompactConfigLib for address;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
@@ -160,11 +162,9 @@ library CompactValidationLib {
         // Validate each entry
         for (uint256 i = 0; i < length; i++) {
             // Pack: [token (20 bytes) | lockTag (12 bytes)]
-            bytes32 packed = bytes32(
-                (uint256(uint160(address(uint160(tokenIn[i][0])))) << 96)
-                    | uint256(uint96(tokenIn[i][1]))
-            );
-
+            bytes32 packed =
+                address(uint160(tokenIn[i][0])).packTokenIn(bytes12(uint96(tokenIn[i][1])));
+            // Reject if not in set
             if (!tokenSet.contains(packed)) {
                 return (false, bytes32(0), 0);
             }

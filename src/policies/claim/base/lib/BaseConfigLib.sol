@@ -2,20 +2,14 @@
 pragma solidity ^0.8.28;
 
 // Libraries
-import { BaseStorageLib } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
     ParamRules,
     ParamRule,
-    SubPolicyConfig,
-    RecipientStorageConfig,
-    FillExpiryStorageConfig,
-    TokenOutStorageConfig,
-    OriginOpsStorageConfig,
-    DestOpsStorageConfig,
-    QualificationStorageConfig,
     QualificationRulesStorage,
     MODE_SKIP,
     MODE_CHECK_STORAGE,
@@ -33,46 +27,138 @@ import {
     PolicyConfig
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 
-/*//////////////////////////////////////////////////////////////
-                      INIT DATA STRUCTURE
-//////////////////////////////////////////////////////////////
-
-Decoded initialization data for shared fields (protocol-specific
-fields like tokenIn are handled by protocol-specific config libs).
-
-//////////////////////////////////////////////////////////////*/
-
-/// @notice Decoded initialization data for base fields
-/// @dev TokenIn configs are NOT included here - see protocol-specific InitData
-struct BaseInitData {
-    /// @notice The mode configuration bitmap (passed through for reference)
-    PolicyConfig modeConfig;
-    /// @notice Required arbiter address
-    address arbiter;
-    /// @notice Minimum expiry value (claimExpires or deadline)
-    uint128 minExpiry;
-    /// @notice Maximum expiry value
-    uint128 maxExpiry;
-    /// @notice Per-chain recipient configurations
-    RecipientStorageConfig[] recipientConfigs;
-    /// @notice Per-chain fill expiry configurations
-    FillExpiryStorageConfig[] fillExpiryConfigs;
-    /// @notice Per-chain token output whitelists
-    TokenOutStorageConfig[] tokenOutConfigs;
-    /// @notice Per-chain origin ops requirements
-    OriginOpsStorageConfig[] originOpsConfigs;
-    /// @notice Per-chain dest ops requirements
-    DestOpsStorageConfig[] destOpsConfigs;
-    /// @notice Per-chain-per-arbiter qualification rules
-    QualificationStorageConfig[] qualificationConfigs;
-    /// @notice Sub-policy configurations
-    SubPolicyConfig[] subPolicies;
-}
-
+// forgefmt: disable-start
 /// @title Base Config Library
 /// @author Rhinestone
-/// @notice Shared configuration decoding and mode extraction for ClaimPolicies
-/// @dev Used by both CompactClaimPolicy and Permit2ClaimPolicy for common functionality
+/// @notice Configuration decoding and initialization for ClaimPolicies
+/// @dev Used by both CompactClaimPolicy and Permit2ClaimPolicy for common functionality.
+/*//////////////////////////////////////////////////////////////
+┌─────────────────────────────────────────────────────────────┐
+│                    Design Principles                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. DIRECT STORAGE WRITES                                   │
+│     - Read directly from calldata                           │
+│     - Write directly to storage                             │
+│     - No intermediate structs or arrays                     │
+│                                                             │
+│  2. DYNAMIC CALLDATA LAYOUT                                 │
+│     - Fields only present if mode != SKIP                   │
+│     - Order is fixed, presence is conditional               │
+│     - Each function returns remaining calldata slice        │
+│                                                             │
+│  3. CALLDATA THREADING                                      │
+│     - Pass calldata slice through each initializer          │
+│     - Each function consumes its bytes, returns the rest    │
+│     - Chain: data → init1 → remaining → init2 → ...         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│              Dynamic Calldata Layout                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  The calldata layout depends on modeConfig. Only fields     │
+│  with mode != SKIP are present in the calldata.             │
+│                                                             │
+│  Example: modeConfig = 0x00000115                           │
+│           AR=01 (storage), EX=01 (storage), TI=01 (storage) │
+│           RC=00 (skip), FE=00 (skip), ...                   │
+│                                                             │
+│  Calldata for this config:                                  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  [0:4]     modeConfig (0x00000115)                     │ │
+│  │  [4:...]   arbiter config    ← AR=01, present          │ │
+│  │  [...]     expiry config     ← EX=01, present          │ │
+│  │  [...]     tokenIn config    ← TI=01, present          │ │
+│  │  [...]     (end)             ← RC=00, FE=00 skipped    │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                             │
+│  Different config = different layout:                       │
+│  modeConfig = 0x00000141 (AR=01, RC=01, TO=01)             │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  [0:4]     modeConfig (0x00000141)                     │ │
+│  │  [4:...]   arbiter config    ← AR=01, present          │ │
+│  │  [...]     recipient config  ← RC=01, present          │ │
+│  │  [...]     tokenOut config   ← TO=01, present          │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│              Calldata Threading Pattern                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Each initialize* function:                                 │
+│  1. Reads its data from the START of the slice              │
+│  2. Writes directly to storage                              │
+│  3. Returns remaining slice (everything after its data)     │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                   Full Calldata                     │    │
+│  │  ┌────────┬────────┬────────┬────────┬────────┐    │    │
+│  │  │ config │ arbiter│ expiry │tokenIn │recipnt │    │    │
+│  │  └────────┴────────┴────────┴────────┴────────┘    │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                         │                                   │
+│                         ▼                                   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  data = initData[4:]     // skip modeConfig         │    │
+│  │  ┌────────┬────────┬────────┬────────┐              │    │
+│  │  │ arbiter│ expiry │tokenIn │recipnt │              │    │
+│  │  └────────┴────────┴────────┴────────┘              │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                         │                                   │
+│                         ▼                                   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  data = initializeArbiter(data, $)                  │    │
+│  │  ┌────────┬────────┬────────┐                       │    │
+│  │  │ expiry │tokenIn │recipnt │  // arbiter consumed  │    │
+│  │  └────────┴────────┴────────┘                       │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                         │                                   │
+│                         ▼                                   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  data = initializeExpiry(data, $)                   │    │
+│  │  ┌────────┬────────┐                                │    │
+│  │  │tokenIn │recipnt │  // expiry consumed            │    │
+│  │  └────────┴────────┘                                │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                         │                                   │
+│                         ▼                                   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  data = initializeTokenIn(data, $)                  │    │
+│  │  ┌────────┐                                         │    │
+│  │  │recipnt │  // tokenIn consumed                    │    │
+│  │  └────────┘                                         │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                         │                                   │
+│                         ▼                                   │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  data = initializeRecipient(data, $)                │    │
+│  │  ┌┐                                                 │    │
+│  │  ││  // empty, all consumed                         │    │
+│  │  └┘                                                 │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                  Conditional Initialization                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  if (mode.isStorageMode()) {                                │
+│      data = initialize*(data, $);  // consume + write       │
+│  }                                                          │
+│  // else: data unchanged, field not in calldata             │
+│                                                             │
+│  We only call initialize* if the mode indicates the field   │
+│  data exists. The encoder must match: only include field    │
+│  data for modes that require it.                            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+//////////////////////////////////////////////////////////////*/
+// forgefmt: disable-end
 library BaseConfigLib {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -80,6 +166,8 @@ library BaseConfigLib {
 
     using BaseStorageLib for *;
     using BaseConfigLib for *;
+    using EnumerableSetLib for EnumerableSetLib.AddressSet;
+    using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
                              MODE EXTRACTION
@@ -132,9 +220,7 @@ library BaseConfigLib {
         pure
         returns (uint32 newConfig)
     {
-        // Create mask with 0s at field position, 1s elsewhere
         uint32 mask = ~(uint32(0x3) << (fieldId * 2));
-        // Clear field bits and set new value
         newConfig = (modeConfig & mask) | (uint32(mode) << (fieldId * 2));
     }
 
@@ -159,7 +245,6 @@ library BaseConfigLib {
     }
 
     /// @notice Checks if validation is enabled for a field (mode != SKIP)
-    /// @dev A field with MODE_SKIP is not validated at all
     /// @param config The policy configuration
     /// @param fieldId The field ID to check
     /// @return True if the field has any validation enabled
@@ -172,65 +257,46 @@ library BaseConfigLib {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Checks if arbiter validation is enabled
-    /// @param config The policy configuration
-    /// @return True if arbiter field has validation enabled (mode != SKIP)
     function hasCheckArbiter(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_ARBITER) != MODE_SKIP;
     }
 
     /// @notice Checks if expiry validation is enabled
-    /// @dev Expiry refers to claimExpires (Compact) or deadline (Permit2)
-    /// @param config The policy configuration
-    /// @return True if expiry field has validation enabled (mode != SKIP)
     function hasCheckExpiry(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_EXPIRY) != MODE_SKIP;
     }
 
     /// @notice Checks if tokenIn validation is enabled
-    /// @param config The policy configuration
-    /// @return True if tokenIn field has validation enabled (mode != SKIP)
     function hasCheckTokenIn(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_TOKEN_IN) != MODE_SKIP;
     }
 
     /// @notice Checks if recipient validation is enabled
-    /// @param config The policy configuration
-    /// @return True if recipient field has validation enabled (mode != SKIP)
     function hasCheckRecipient(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_RECIPIENT) != MODE_SKIP;
     }
 
     /// @notice Checks if fillExpiry validation is enabled
-    /// @param config The policy configuration
-    /// @return True if fillExpiry field has validation enabled (mode != SKIP)
     function hasCheckFillExpiry(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_FILL_EXPIRY) != MODE_SKIP;
     }
 
     /// @notice Checks if tokenOut validation is enabled
-    /// @param config The policy configuration
-    /// @return True if tokenOut field has validation enabled (mode != SKIP)
     function hasCheckTokenOut(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_TOKEN_OUT) != MODE_SKIP;
     }
 
     /// @notice Checks if originOps validation is enabled
-    /// @param config The policy configuration
-    /// @return True if originOps field has validation enabled (mode != SKIP)
     function hasCheckOriginOps(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_ORIGIN_OPS) != MODE_SKIP;
     }
 
     /// @notice Checks if destOps validation is enabled
-    /// @param config The policy configuration
-    /// @return True if destOps field has validation enabled (mode != SKIP)
     function hasCheckDestOps(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_DEST_OPS) != MODE_SKIP;
     }
 
     /// @notice Checks if qualification validation is enabled
-    /// @param config The policy configuration
-    /// @return True if qualification field has validation enabled (mode != SKIP)
     function hasCheckQualification(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_QUALIFICATION) != MODE_SKIP;
     }
@@ -239,23 +305,24 @@ library BaseConfigLib {
                              CHAINID HELPERS
     //////////////////////////////////////////////////////////////*/
 
+    // forgefmt: disable-start
     /// @notice Returns effective chainId for storage lookup based on mode
     /// @dev MODE_CHECK_CATCHALL uses chainId=0 as a wildcard that matches any chain.
     ///      MODE_CHECK_STORAGE requires exact chainId match.
     ///
-    /// ┌────────────────────────────────────────────────────────┐
-    /// │  Mode Resolution:                                      │
-    /// │                                                        │
-    /// ┌─────────────────────────┬──────────────────────────────┐
-    /// │  │ Mode                 │ Effective chainId            │
-    /// │  │ MODE_CHECK_STORAGE   │ Returns actual chainId       │
-    /// │  │ MODE_CHECK_CATCHALL  │ Returns 0 (wildcard)         │
-    /// └─────────────────────────┴──────────────────────────────┘
-    /// └────────────────────────────────────────────────────────┘
-    ///
+    /// ┌─────────────────────────────────────────────────────────┐
+    /// │  Mode Resolution:                                       │
+    /// │  ┌─────────────────────────┬───────────────────────────┐│
+    /// │  │ Mode                    │ Effective chainId         ││
+    /// │  ├─────────────────────────┼───────────────────────────┤│
+    /// │  │ MODE_CHECK_STORAGE      │ Returns actual chainId    ││
+    /// │  │ MODE_CHECK_CATCHALL     │ Returns 0 (wildcard)      ││
+    /// │  └─────────────────────────┴───────────────────────────┘│
+    /// └─────────────────────────────────────────────────────────┘
     /// @param mode The field mode (should be STORAGE or CATCHALL)
     /// @param chainId The actual chain ID from the claim data
     /// @return effectiveChainId 0 if catch-all mode, otherwise the actual chainId
+    // forgefmt: disable-end
     function getEffectiveChainId(
         uint8 mode,
         uint256 chainId
@@ -264,11 +331,9 @@ library BaseConfigLib {
         pure
         returns (uint256 effectiveChainId)
     {
-        // In catch-all mode, use chainId=0 for storage lookup
         if (mode == MODE_CHECK_CATCHALL) {
             return 0;
         }
-        // Otherwise, use the actual chainId
         return chainId;
     }
 
@@ -292,7 +357,6 @@ library BaseConfigLib {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Packs two uint128 values into a single uint256
-    /// @dev Lower value occupies bits [127:0], upper occupies bits [255:128]
     /// @param lower Lower 128 bits value (typically min)
     /// @param upper Upper 128 bits value (typically max)
     /// @return packed The combined uint256 value
@@ -301,7 +365,6 @@ library BaseConfigLib {
     }
 
     /// @notice Unpacks a uint256 into two uint128 values
-    /// @dev Inverse of packUint128
     /// @param packed The combined uint256 value
     /// @return lower Lower 128 bits (bits [127:0])
     /// @return upper Upper 128 bits (bits [255:128])
@@ -311,7 +374,29 @@ library BaseConfigLib {
     }
 
     /*//////////////////////////////////////////////////////////////
-                         ARBITER CONFIG DECODING
+                        MODE CONFIG INITIALIZATION
+    /////////////////////////////////////////////////////////////*/
+
+    /// @notice Decodes modeConfig and writes directly to storage
+    /// @dev Check BaseDataTypes.sol for modeConfig layout
+    /// @param $ Storage pointer to write modeConfig to
+    /// @param initData Calldata starting with modeConfig (4 bytes)
+    /// @return modeConfig The decoded policy configuration
+    /// @return remaining Remaining calldata after modeConfig
+    function initializeModeConfig(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
+        internal
+        returns (PolicyConfig modeConfig, bytes calldata remaining)
+    {
+        modeConfig = PolicyConfig.wrap(uint32(bytes4(initData[0:4])));
+        $.modeConfig = modeConfig;
+        remaining = initData[4:];
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                         ARBITER INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][arbiters...]
@@ -323,41 +408,47 @@ library BaseConfigLib {
     │  │  count (uint256) - 32 bytes                          │  │
     │  └──────────────────────────────────────────────────────┘  │
     │  ┌──────────────────────────────────────────────────────┐  │
-    │  │  arbiter (20 bytes)                                  │  │
+    │  │  arbiter[0] (20 bytes)                               │  │
+    │  ├──────────────────────────────────────────────────────┤  │
+    │  │  arbiter[1] (20 bytes)                               │  │
+    │  ├──────────────────────────────────────────────────────┤  │
+    │  │  ... repeat for count entries ...                    │  │
     │  └──────────────────────────────────────────────────────┘  │
-    │  ... repeat for count entries ...                          │
     └────────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count * 20) bytes
+    Total size: 32 + (count × 20) bytes
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes arbiter addresses from initialization data
+    /// @notice Decodes arbiter addresses and writes directly to storage
     /// @dev Reads count followed by that many 20-byte addresses
+    /// @param $ Storage pointer to write arbiters to
     /// @param initData Calldata starting with the arbiter config
-    /// @return arbiters Array of decoded arbiter addresses
     /// @return remaining Remaining calldata after all arbiters
-    function decodeArbiterConfig(bytes calldata initData)
+    function initializeArbiter(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (address[] memory arbiters, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read count of arbiters
+        // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
-        arbiters = new address[](count);
-
+        // Initial offset after count
+        uint256 offset = 32;
         // Read each arbiter address
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 20;
-            arbiters[i] = address(bytes20(initData[offset:offset + 20]));
+            // Store arbiter
+            $.arbiterConfig.add(address(bytes20(initData[offset:offset + 20])));
+            // Advance offset
+            offset += 20;
         }
-
-        // Calculate remaining data
-        remaining = initData[32 + count * 20:];
+        // Return remaining data
+        remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                       EXPIRY CONFIG DECODING
+                         EXPIRY INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [minExpiry: 16 bytes][maxExpiry: 16 bytes]
@@ -372,24 +463,23 @@ library BaseConfigLib {
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes expiry bounds (min/max) from initialization data
-    /// @dev Returns packed format for efficient storage
+    /// @notice Decodes expiry bounds and writes directly to storage
+    /// @param $ Storage pointer to write expiry to
     /// @param initData Calldata starting with expiry config
-    /// @return packed Packed expiry value (lower 128 bits = min, upper 128 bits = max)
-    /// @return remaining Remaining calldata after expiry config (initData[32:])
-    function decodeExpiryConfig(bytes calldata initData)
+    /// @return remaining Remaining calldata after expiry config
+    function initializeExpiry(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (uint256 packed, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read min and max expiry values packed into uint256
-        packed = uint256(bytes32(initData[0:32]));
-        // Calculate remaining data
+        $.expiryConfig = uint256(bytes32(initData[0:32]));
         remaining = initData[32:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                     RECIPIENT CONFIG DECODING
+                       RECIPIENT INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
@@ -401,7 +491,7 @@ library BaseConfigLib {
     │  │  count (uint256) - 32 bytes                    │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  Entry 0 (52 bytes):                           │    │
+    │  │  Entry (52 bytes):                             │    │
     │  │  ┌────────────────────┬────────────────────┐   │    │
     │  │  │ targetChainId (32) │ recipient (20)     │   │    │
     │  │  └────────────────────┴────────────────────┘   │    │
@@ -409,43 +499,45 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count * 52) bytes
+    Total size: 32 + (count × 52) bytes
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes recipient configurations from initialization data
-    /// @dev Each entry maps a target chain ID to a required recipient address
+    /// @notice Decodes recipient configs and writes directly to storage
+    /// @param $ Storage pointer to write recipients to
     /// @param initData Calldata starting with recipient config
-    /// @return configs Array of RecipientStorageConfig structs
     /// @return remaining Remaining calldata after all recipient configs
-    function decodeRecipientConfig(bytes calldata initData)
+    function initializeRecipient(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (RecipientStorageConfig[] memory configs, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read count of recipient entries
+        // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new RecipientStorageConfig[](count);
-
+        // Initial offset after count
+        uint256 offset = 32;
         // Read each recipient entry
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 52;
+            // Read chainId and recipient address
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
             address recipient = address(bytes20(initData[offset + 32:offset + 52]));
-            // Store in configs array
-            configs[i] = RecipientStorageConfig(chainId, recipient);
+            // Store recipient for chainId
+            $.recipientConfig[chainId] = recipient;
+            // Advance offset
+            offset += 52;
         }
-
-        // Calculate remaining data
-        remaining = initData[32 + count * 52:];
+        // Return remaining data
+        remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                    FILL EXPIRY CONFIG DECODING
+                      FILL EXPIRY INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
-    Entry:  [targetChainId: 32][minFillExpiry: 16][maxFillExpiry: 16] = 64 bytes each
+    Entry:  [targetChainId: 32][minFillExpiry: 16][maxFillExpiry: 16] = 64 bytes
 
     ┌────────────────────────────────────────────────────────┐
     │  FillExpiry Config                                     │
@@ -461,41 +553,39 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count * 64) bytes
+    Total size: 32 + (count × 64) bytes
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes fill expiry configurations from initialization data
-    /// @dev Each entry maps a target chain ID to min/max fill expiry bounds
+    /// @notice Decodes fill expiry configs and writes directly to storage
+    /// @param $ Storage pointer to write fill expiry to
     /// @param initData Calldata starting with fill expiry config
-    /// @return configs Array of FillExpiryStorageConfig structs
     /// @return remaining Remaining calldata after all fill expiry configs
-    function decodeFillExpiryConfig(bytes calldata initData)
+    function initializeFillExpiry(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (FillExpiryStorageConfig[] memory configs, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read count of fill expiry entries
+        // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new FillExpiryStorageConfig[](count);
-
+        // Initial offset after count
+        uint256 offset = 32;
         // Read each fill expiry entry
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 64;
+            // Read chainId, minFillExpiry, maxFillExpiry
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            uint128 minFillExpiry = uint128(bytes16(initData[offset + 32:offset + 48]));
-            uint128 maxFillExpiry = uint128(bytes16(initData[offset + 48:offset + 64]));
-
-            // Store in configs array
-            configs[i] = FillExpiryStorageConfig(chainId, minFillExpiry, maxFillExpiry);
+            $.fillExpiryConfig[chainId] = uint256(bytes32(initData[offset + 32:offset + 64]));
+            // Advance offset
+            offset += 64;
         }
-
-        // Calculate remaining data
-        remaining = initData[32 + count * 64:];
+        // Return remaining data
+        remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                     TOKEN OUT CONFIG DECODING
+                       TOKEN OUT INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
@@ -515,40 +605,41 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count * 52) bytes
+    Total size: 32 + (count × 52) bytes
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes token out configurations from initialization data
-    /// @dev Each entry adds a token to the whitelist for a target chain
+    /// @notice Decodes token out configs and writes directly to storage
+    /// @param $ Storage pointer to write token out to
     /// @param initData Calldata starting with token out config
-    /// @return configs Array of TokenOutStorageConfig structs
     /// @return remaining Remaining calldata after all token out configs
-    function decodeTokenOutConfig(bytes calldata initData)
+    function initializeTokenOut(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (TokenOutStorageConfig[] memory configs, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read count of token out entries
+        // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new TokenOutStorageConfig[](count);
-
+        // Initial offset after count
+        uint256 offset = 32;
         // Read each token out entry
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 52;
+            // Read chainId and token address
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
             address token = address(bytes20(initData[offset + 32:offset + 52]));
-
-            // Store in configs array
-            configs[i] = TokenOutStorageConfig(chainId, token);
+            // Store token for chainId
+            $.tokenOutSet[chainId].add(token);
+            // Advance offset
+            offset += 52;
         }
-
-        // Calculate remaining data
-        remaining = initData[32 + count * 52:];
+        // Return remaining data
+        remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                       ORIGIN OPS CONFIG DECODING
+                       ORIGIN OPS INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
@@ -568,40 +659,41 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count * 33) bytes
+    Total size: 32 + (count × 33) bytes
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes origin operations requirement configurations
-    /// @dev Each entry specifies whether originOps must be present for a chain
+    /// @notice Decodes origin ops configs and writes directly to storage
+    /// @param $ Storage pointer to write origin ops to
     /// @param initData Calldata starting with origin ops config
-    /// @return configs Array of OriginOpsStorageConfig structs
     /// @return remaining Remaining calldata after all origin ops configs
-    function decodeOriginOpsConfig(bytes calldata initData)
+    function initializeOriginOps(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (OriginOpsStorageConfig[] memory configs, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read count of origin ops entries
+        // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new OriginOpsStorageConfig[](count);
-
+        // Initial offset after count
+        uint256 offset = 32;
         // Read each origin ops entry
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 33;
+            // Read chainId and required flag
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            bool requireOriginOps = uint8(initData[offset + 32]) != 0;
-
-            // Store in configs array
-            configs[i] = OriginOpsStorageConfig(chainId, requireOriginOps);
+            bool required = uint8(initData[offset + 32]) != 0;
+            // Store origin ops requirement for chainId
+            $.originOpsConfig[chainId] = required;
+            // Advance offset
+            offset += 33;
         }
-
-        // Calculate remaining data
-        remaining = initData[32 + count * 33:];
+        // Return remaining data
+        remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                       DEST OPS CONFIG DECODING
+                        DEST OPS INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
@@ -621,45 +713,46 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count * 33) bytes
+    Total size: 32 + (count × 33) bytes
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes destination operations requirement configurations
-    /// @dev Each entry specifies whether destOps must be present for a target chain
+    /// @notice Decodes dest ops configs and writes directly to storage
+    /// @param $ Storage pointer to write dest ops to
     /// @param initData Calldata starting with dest ops config
-    /// @return configs Array of DestOpsStorageConfig structs
     /// @return remaining Remaining calldata after all dest ops configs
-    function decodeDestOpsConfig(bytes calldata initData)
+    function initializeDestOps(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (DestOpsStorageConfig[] memory configs, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read count of dest ops entries
+        // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new DestOpsStorageConfig[](count);
-
+        // Initial offset after count
+        uint256 offset = 32;
         // Read each dest ops entry
         for (uint256 i = 0; i < count; i++) {
-            uint256 offset = 32 + i * 33;
+            // Read chainId and required flag
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            bool requireDestOps = uint8(initData[offset + 32]) != 0;
-
-            // Store in configs array
-            configs[i] = DestOpsStorageConfig(chainId, requireDestOps);
+            bool required = uint8(initData[offset + 32]) != 0;
+            // Store dest ops requirement for chainId
+            $.destOpsConfig[chainId] = required;
+            // Advance offset
+            offset += 33;
         }
-
-        // Calculate remaining data
-        remaining = initData[32 + count * 33:];
+        // Return remaining data
+        remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                      QUALIFICATION CONFIG DECODING
+                     QUALIFICATION INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
     Entry (variable size):
-      [chainId: 32][arbiter: 20][rootNodeIndex: 1]
+      [chainId: 32][arbiter: 20][useArbiterHash: 1][rootNodeIndex: 1]
       [ruleCount: 32][rules...][packedNodesCount: 32][packedNodes...]
 
     Rule (42 bytes each):
@@ -676,7 +769,8 @@ library BaseConfigLib {
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (variable):                             │    │
     │  │  ┌─────────────────────────────────────────┐   │    │
-    │  │  │ chainId (32) | arbiter (20) | root (1)  │   │    │
+    │  │  │ chainId (32) | arbiter (20) |           │   │    │
+    │  │  │ useArbiterHash (1) | rootNodeIndex (1)  │   │    │
     │  │  ├─────────────────────────────────────────┤   │    │
     │  │  │ ruleCount (32)                          │   │    │
     │  │  │ Rule: [cond(1)|off(8)|len(1)|ref(32)]   │   │    │
@@ -691,22 +785,22 @@ library BaseConfigLib {
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes qualification configurations with parameter rules
-    /// @dev Each entry contains an expression tree for validating qualification data.
-    ///      Rules are evaluated using the ArgPolicyTreeLibV2 expression evaluator.
+    /// @notice Decodes qualification configs and writes directly to storage
+    /// @dev Each entry contains an expression tree for validating qualification data
+    /// @param $ Storage pointer to write qualification to
     /// @param initData Calldata starting with qualification config
-    /// @return configs Array of QualificationStorageConfig structs
     /// @return remaining Remaining calldata after all qualification configs
-    function decodeQualificationConfig(bytes calldata initData)
+    function initializeQualification(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (QualificationStorageConfig[] memory configs, bytes calldata remaining)
+        returns (bytes calldata remaining)
     {
-        // Read count of qualification entries
+        // Read count
         uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new QualificationStorageConfig[](count);
+        // Initial offset after count
         uint256 offset = 32;
-
         // Read each qualification entry
         for (uint256 j = 0; j < count; j++) {
             // Decode chainId (32 bytes)
@@ -752,62 +846,78 @@ library BaseConfigLib {
                 offset += 32;
             }
 
-            // Assemble the ParamRules struct
-            ParamRules memory rules = ParamRules({
-                rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
+            // Write to storage
+            $.qualificationConfig[chainId][arbiter] = QualificationRulesStorage({
+                useArbiterHash: useArbiterHash,
+                rules: ParamRules({
+                    rootNodeIndex: rootNodeIndex, rules: paramRules, packedNodes: packedNodes
+                })
             });
-
-            configs[j] = QualificationStorageConfig(
-                chainId, arbiter, QualificationRulesStorage(useArbiterHash, rules)
-            );
         }
 
         remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                       SUB-POLICY CONFIG DECODING
+                      SUB-POLICIES INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
     Entry (variable size):
       [fieldId: 1][policyAddress: 20][initDataLength: 32][initData: variable]
 
-    ┌────────────────────────────────────────────────────────┐
-    │  SubPolicy Config                                      │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
-    │  └────────────────────────────────────────────────┘    │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  Entry (variable):                             │    │
-    │  │  ┌─────────────────────────────────────────┐   │    │
-    │  │  │ fieldId (1) | policyAddress (20)        │   │    │
-    │  │  ├─────────────────────────────────────────┤   │    │
-    │  │  │ initDataLength (32)                     │   │    │
-    │  │  ├─────────────────────────────────────────┤   │    │
-    │  │  │ initData (initDataLength bytes)         │   │    │
-    │  │  └─────────────────────────────────────────┘   │    │
-    │  └────────────────────────────────────────────────┘    │
-    │  ... repeat for count entries ...                      │
-    └────────────────────────────────────────────────────────┘
+    ┌────────────────────────────────────────────────────────────┐
+    │  SubPolicy Config                                          │
+    │  ┌────────────────────────────────────────────────────┐    │
+    │  │  count (uint256) - 32 bytes                        │    │
+    │  └────────────────────────────────────────────────────┘    │
+    │  ┌────────────────────────────────────────────────────┐    │
+    │  │  Entry (variable):                                 │    │
+    │  │  ┌─────────────────────────────────────────────┐   │    │
+    │  │  │ fieldId (1) | policyAddress (20)            │   │    │
+    │  │  ├─────────────────────────────────────────────┤   │    │
+    │  │  │ initDataLength (32)                         │   │    │
+    │  │  ├─────────────────────────────────────────────┤   │    │
+    │  │  │ initData (initDataLength bytes)             │   │    │
+    │  │  └─────────────────────────────────────────────┘   │    │
+    │  └────────────────────────────────────────────────────┘    │
+    │  ... repeat for count entries ...                          │
+    └────────────────────────────────────────────────────────────┘
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes sub-policy configurations
-    /// @dev Sub-policies are external I1271Policy contracts that handle
-    ///      validation for specific fields when mode is MODE_CHECK_SUBPOLICY
+    /// @notice Decodes sub-policy configs and writes addresses to storage
+    /// @dev Returns extracted data for external initializer calls.
+    ///      We can't avoid memory here since we need to call external contracts.
+    /// @param $ Storage pointer to write sub-policy addresses to
     /// @param initData Calldata starting with sub-policy config
-    /// @return configs Array of SubPolicyConfig structs
     /// @return remaining Remaining calldata after all sub-policy configs
-    function decodeSubPolicyConfig(bytes calldata initData)
+    /// @return count Number of sub-policies
+    /// @return fieldIds Array of field IDs for each sub-policy
+    /// @return policyAddresses Array of sub-policy contract addresses
+    /// @return initDatas Array of init data for each sub-policy
+    function initializeSubPolicies(
+        BasePolicyStorage storage $,
+        bytes calldata initData
+    )
         internal
-        pure
-        returns (SubPolicyConfig[] memory configs, bytes calldata remaining)
+        returns (
+            bytes calldata remaining,
+            uint256 count,
+            uint8[] memory fieldIds,
+            address[] memory policyAddresses,
+            bytes[] memory initDatas
+        )
     {
-        // Read count of sub-policy entries
-        uint256 count = uint256(bytes32(initData[0:32]));
-        configs = new SubPolicyConfig[](count);
+        // Read count
+        count = uint256(bytes32(initData[0:32]));
+        // Initial offset after count
         uint256 offset = 32;
+
+        // Prepare arrays
+        fieldIds = new uint8[](count);
+        policyAddresses = new address[](count);
+        initDatas = new bytes[](count);
 
         // Read each sub-policy entry
         for (uint256 i = 0; i < count; i++) {
@@ -827,12 +937,15 @@ library BaseConfigLib {
             bytes memory policyInitData = initData[offset:offset + initDataLength];
             offset += initDataLength;
 
-            configs[i] = SubPolicyConfig({
-                fieldId: fieldId, policyAddress: policyAddress, initData: policyInitData
-            });
-        }
+            // Write policy address to storage
+            $.subPolicies[fieldId] = policyAddress;
 
-        // Calculate remaining data
+            // Store for external calls
+            fieldIds[i] = fieldId;
+            policyAddresses[i] = policyAddress;
+            initDatas[i] = policyInitData;
+        }
+        // Return remaining data
         remaining = initData[offset:];
     }
 }
