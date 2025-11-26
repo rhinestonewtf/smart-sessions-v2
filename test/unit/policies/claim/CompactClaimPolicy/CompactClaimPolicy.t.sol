@@ -5,7 +5,7 @@ pragma solidity >=0.8.27;
 import { Base_Test } from "@test/Base.t.sol";
 
 // Contracts
-import { CompactClaimPolicy } from "@policies/claimv2/compact/CompactClaimPolicy.sol";
+import { CompactClaimPolicy } from "@policies/claim/compact/CompactClaimPolicy.sol";
 
 contract CompactClaimPolicy_Unit_Test is Base_Test {
     /*//////////////////////////////////////////////////////////////
