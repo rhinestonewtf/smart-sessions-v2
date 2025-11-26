@@ -13,7 +13,7 @@ import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { ParamRules, ParamRule } from "@policies/compact/types/DataTypes.sol";
+import { ParamRules, ParamRule } from "@policies/claimv2/compact/types/DataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
     MODE_SKIP,
@@ -28,7 +28,7 @@ import {
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
     FIELD_QUALIFICATION
-} from "@policies/compact/types/DataTypes.sol";
+} from "@policies/claimv2/compact/types/DataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
 import { console2 } from "forge-std/console2.sol";
 

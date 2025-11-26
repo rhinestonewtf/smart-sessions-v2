@@ -150,10 +150,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
 
         // Pre-populate cache directly
         smartSessionEmissary.setDigestCacheSmartSession(
-            instance.account,
-            smartSessionEmissary.calculateEIP712Digest(testClaimHash),
-            testPermissionId,
-            testLockTag
+            instance.account, testClaimHash, testPermissionId, testLockTag
         );
 
         // Mock validator to fail - cache should still make it succeed

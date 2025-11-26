@@ -206,9 +206,4 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
             tstore(slot, 0)
         }
     }
-
-    /// @notice Public 712 digest calculation helper
-    function calculateEIP712Digest(bytes32 structHash) external view returns (bytes32) {
-        return _hashTypedDataV4(structHash);
-    }
 }

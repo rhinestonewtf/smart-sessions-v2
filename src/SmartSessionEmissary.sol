@@ -11,7 +11,15 @@ import { ERC7579ValidatorBase } from "@modulekit/module-bases/ERC7579ValidatorBa
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 
 // Libraries
-import { ModeLib, EmissaryMode, EMISSARY_VANILLA, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
+import {
+    ModeLib,
+    EmissaryMode,
+    SignatureMode,
+    EMISSARY_VANILLA,
+    EMISSARY_SMART_SESSION,
+    IS_VALID_SIG_1271,
+    IS_VALID_SIG_1271_7739
+} from "@lib/ModeLib.sol";
 
 // Types
 import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
@@ -90,9 +98,32 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         }
         // disallow that session can be authorized by other sessions
         if (sender == address(this)) return INVALID_SIGNATURE;
-        bool success = _erc1271IsValidSignatureViaNestedEIP712(
-            sender, hash, _erc1271UnwrapSignature(signature)
-        );
+
+        // Unwrap ERC-6492 if present
+        signature = _erc1271UnwrapSignature(signature);
+
+        // Decode mode from first byte
+        SignatureMode mode = signature.decodeSignatureMode();
+
+        // Extract actual signature (skip mode byte)
+        bytes calldata actualSignature = signature[1:];
+
+        // If mode is unrecognized, success is false by default
+        bool success;
+        if (mode == IS_VALID_SIG_1271) {
+            // IS_VALID_SIG_1271 mode uses direct validation without ERC-7739 wrapping
+            success = _erc1271IsValidSignatureNowCalldata(
+                sender,
+                hash,
+                actualSignature,
+                bytes32(0), // No domain separator
+                signature[0:0] // No extra data
+            );
+        } else if (mode == IS_VALID_SIG_1271_7739) {
+            // IS_VALID_SIG_1271_7739 mode uses nested EIP-712 validation with ERC-7739 wrapping
+            success = _erc1271IsValidSignatureViaNestedEIP712(sender, hash, actualSignature);
+        }
+
         /// @solidity memory-safe-assembly
         assembly {
             // `success ? bytes4(keccak256("isValidSignature(bytes32,bytes)")) : 0xffffffff`.
@@ -124,7 +155,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes4)
     {
         // Extract mode from first byte of emissaryData
-        EmissaryMode mode = emissaryData.decodeMode();
+        EmissaryMode mode = emissaryData.decodeEmissaryMode();
 
         // Mode-based dispatch for claim verification
         if (mode == EMISSARY_VANILLA) {
@@ -164,7 +195,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes4)
     {
         // Extract mode from first byte
-        EmissaryMode mode = emissaryData.decodeMode();
+        EmissaryMode mode = emissaryData.decodeEmissaryMode();
 
         // Mode-based dispatch for execution verification
         if (mode == EMISSARY_VANILLA) {
@@ -209,15 +240,5 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes32)
     {
         return _hashTypedDataSansChainId(hash);
-    }
-
-    /// @notice Returns the EIP-712 typed data hash for a given hash with chain ID
-    function _hashTypedDataV4(bytes32 hash)
-        internal
-        view
-        override(SmartSessionMixin)
-        returns (bytes32)
-    {
-        return _hashTypedData(hash);
     }
 }
