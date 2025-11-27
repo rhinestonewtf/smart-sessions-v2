@@ -1031,7 +1031,6 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     }
 
     /// @notice Initialize policy with qualification check
-    /// @notice Initialize policy with qualification check
     function _initializePolicyWithQualification(
         address arbiter,
         uint256 targetChainId,
