@@ -104,7 +104,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
-            _createBasicMandateData()
+            mandateHash
         );
 
         // Compute expected hash
@@ -138,7 +138,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(usedArbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
-            _createBasicMandateData()
+            mandateHash
         );
 
         // Compute expected hash (with used arbiter)
@@ -176,7 +176,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, actualDeadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
-            _createBasicMandateData()
+            mandateHash
         );
 
         // Compute expected hash
@@ -210,7 +210,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, actualDeadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
-            _createBasicMandateData()
+            mandateHash
         );
 
         // Compute expected hash
@@ -250,7 +250,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsArray(testToken, amount),
-            _createBasicMandateData()
+            mandateHash
         );
 
         // Compute expected hash
@@ -287,7 +287,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsArray(usedToken, amount),
-            _createBasicMandateData()
+            mandateHash
         );
 
         // Compute expected hash

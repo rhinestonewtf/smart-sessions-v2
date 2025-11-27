@@ -113,7 +113,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │  [20:52]    nonce (uint256)                                │
     /// │  [52:84]    deadline (uint256)                             │
     /// │  [84:...]   tokenIn OR tokenPermissionsHash                │
-    /// │  [...]      mandate (always parsed, see below)             │
+    /// │  [...]      mandate (variable, see below)                  │
     /// └────────────────────────────────────────────────────────────┘
     ///
     /// Variable encoding based on mode:
@@ -124,15 +124,16 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │                 │  CHECK → [len (32)] + [TokenPerms[] (64)]  │
     /// │                 │          TokenPerms = [token (32), amt]    │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  mandate        │  Always parsed field-by-field to compute   │
-    /// │                 │  mandateHash. Individual fields may be     │
-    /// │                 │  hashes or expanded structs (see below).   │
+    /// │  mandate        │  If ALL mandate fields SKIP →              │
+    /// │                 │     mandateHash (32 bytes)                 │
+    /// │                 │  If ANY mandate field CHECK →              │
+    /// │                 │     parsed field-by-field (see below)      │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  target         │  If ALL target fields SKIP →               │
     /// │  (in mandate)   │     targetHash (32) + targetChainId (32)   │
     /// │                 │  If ANY target field CHECK →               │
-    /// │                 │     recipient (32) + targetChainId (32) +  │
-    /// │                 │     fillExpiry (32) + tokenOut             │
+    /// │                 │     recipient (20+12) + targetChainId (32) │
+    /// │                 │     + fillExpiry (32) + tokenOut           │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  minGas         │  Always uint128 (16 bytes)                 │
     /// │  (in mandate)   │  Not validated, used for hash computation  │
@@ -151,7 +152,12 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │  (in mandate)   │  CHECK → [len (32)] + [data]               │
     /// └─────────────────┴────────────────────────────────────────────┘
     ///
-    /// Mandate structure (when target fields SKIP):
+    /// Mandate encoding (when ALL mandate fields SKIP):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:32]     mandateHash (bytes32)                          │
+    /// └────────────────────────────────────────────────────────────┘
+    ///
+    /// Mandate encoding (when ANY mandate field CHECK, target SKIP):
     /// ┌────────────────────────────────────────────────────────────┐
     /// │  [0:32]     targetHash (bytes32)                           │
     /// │  [32:64]    targetChainId (uint256)                        │
@@ -161,12 +167,12 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │  [144:176]  qualificationHash (bytes32) OR [len + data]    │
     /// └────────────────────────────────────────────────────────────┘
     ///
-    /// Mandate structure (when any target field CHECK):
+    /// Mandate encoding (when ANY target field CHECK):
     /// ┌────────────────────────────────────────────────────────────┐
-    /// │  [0:32]     recipient (address, left-padded)               │
-    /// │  [32:64]    targetChainId (uint256)                        │
-    /// │  [64:96]    fillExpiry (uint256)                           │
-    /// │  [96:...]   tokenOutHash (32) OR [len + entries]           │
+    /// │  [0:20]     recipient (address)                            │                        
+    /// │  [20:52]    targetChainId (uint256)                        │
+    /// │  [52:84]    fillExpiry (uint256)                           │
+    /// │  [84:...]   tokenOutHash (bytes32) OR [len + entries]      │
     /// │  [...]      minGas (uint128, 16 bytes)                     │
     /// │  [...]      originOpsHash (bytes32)                        │
     /// │  [...]      destOpsHash (bytes32)                          │

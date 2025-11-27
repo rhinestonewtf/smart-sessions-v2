@@ -124,10 +124,10 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  [96:128]   otherElements length (uint256)                 │
     /// │  [128:...]  otherElements (bytes32 each, pre-hashed)       │
     /// │  [...]      element:                                       │
-    /// │             ├── arbiter (20 bytes + 12 padding)            │
-    /// │             ├── elementIndex (32 bytes)                    │
+    /// │             ├── arbiter (address)                          │
+    /// │             ├── elementIndex (uint256)                     │
     /// │             ├── tokenIn OR commitmentsHash                 │
-    /// │             └── mandate (always parsed, see below)         │
+    /// │             └── mandate OR mandateHash                     │
     /// └────────────────────────────────────────────────────────────┘
     ///
     /// Variable encoding based on mode:
@@ -138,15 +138,16 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │                 │  CHECK → [len (32)] + [Lock[] (64 each)]   │
     /// │                 │          Lock = [token+lockTag (32), amt]  │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  mandate        │  Always parsed field-by-field to compute   │
-    /// │                 │  mandateHash. Individual fields may be     │
-    /// │                 │  hashes or expanded structs (see below).   │
+    /// │  mandate        │  If ALL mandate fields SKIP →              │
+    /// │                 │     mandateHash (32 bytes)                 │
+    /// │                 │  If ANY mandate field CHECK →              │
+    /// │                 │     parsed field-by-field (see below)      │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  target         │  If ALL target fields SKIP →               │
     /// │  (in mandate)   │     targetHash (32) + targetChainId (32)   │
     /// │                 │  If ANY target field CHECK →               │
-    /// │                 │     recipient (32) + targetChainId (32) +  │
-    /// │                 │     fillExpiry (32) + tokenOut             │
+    /// │                 │     recipient (20+12) + targetChainId (32) │
+    /// │                 │     + fillExpiry (32) + tokenOut           │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  minGas         │  Always uint128 (16 bytes)                 │
     /// │  (in mandate)   │  Not validated, used for hash computation  │
@@ -164,7 +165,12 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  (in mandate)   │  CHECK → [len (32)] + [data]               │
     /// └─────────────────┴────────────────────────────────────────────┘
     ///
-    /// Mandate structure (when target fields SKIP):
+    /// Mandate encoding (when ALL mandate fields SKIP):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:32]     mandateHash (bytes32)                          │
+    /// └────────────────────────────────────────────────────────────┘
+    ///
+    /// Mandate encoding (when ANY mandate field CHECK, target SKIP):
     /// ┌────────────────────────────────────────────────────────────┐
     /// │  [0:32]     targetHash (bytes32)                           │
     /// │  [32:64]    targetChainId (uint256)                        │
@@ -174,12 +180,12 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  [144:176]  qualificationHash (bytes32) OR [len + data]    │
     /// └────────────────────────────────────────────────────────────┘
     ///
-    /// Mandate structure (when any target field CHECK):
+    /// Mandate encoding (when ANY target field CHECK):
     /// ┌────────────────────────────────────────────────────────────┐
-    /// │  [0:32]     recipient (address, left-padded)               │
-    /// │  [32:64]    targetChainId (uint256)                        │
-    /// │  [64:96]    fillExpiry (uint256)                           │
-    /// │  [96:...]   tokenOutHash (32) OR [len + entries]           │
+    /// │  [0:20]     recipient (address)                            │
+    /// │  [20:52]    targetChainId (uint256)                        │
+    /// │  [52:84]    fillExpiry (uint256)                           │
+    /// │  [84:...]   tokenOutHash(bytes32) OR [len + entries]       │
     /// │  [...]      minGas (uint128, 16 bytes)                     │
     /// │  [...]      originOpsHash (bytes32)                        │
     /// │  [...]      destOpsHash (bytes32)                          │

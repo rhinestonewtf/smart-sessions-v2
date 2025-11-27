@@ -24,7 +24,9 @@ import {
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
     FIELD_QUALIFICATION,
-    PolicyConfig
+    PolicyConfig,
+    MASK_TARGET_CHECKS,
+    MASK_MANDATE_CHECKS
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
@@ -306,6 +308,16 @@ library BaseConfigLib {
     /// @notice Checks if qualification validation is enabled
     function hasCheckQualification(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_QUALIFICATION) != MODE_SKIP;
+    }
+
+    /// @notice Check if any target-level validation is enabled
+    function hasAnyTargetCheck(PolicyConfig config) internal pure returns (bool) {
+        return (PolicyConfig.unwrap(config) & MASK_TARGET_CHECKS) != 0;
+    }
+
+    /// @notice Check if any mandate-level validation is enabled
+    function hasAnyMandateCheck(PolicyConfig config) internal pure returns (bool) {
+        return (PolicyConfig.unwrap(config) & MASK_MANDATE_CHECKS) != 0;
     }
 
     /*//////////////////////////////////////////////////////////////

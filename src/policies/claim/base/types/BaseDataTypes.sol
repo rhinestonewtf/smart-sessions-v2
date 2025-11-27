@@ -86,6 +86,21 @@ uint8 constant FIELD_DEST_OPS = 7;
 uint8 constant FIELD_QUALIFICATION = 8;
 
 /*//////////////////////////////////////////////////////////////
+                        MODE CHECK MASKS
+//////////////////////////////////////////////////////////////*/
+
+// Mask for target fields: recipient (bits 6-7), fillExpiry (bits 8-9), tokenOut (bits 10-11)
+uint32 constant MASK_TARGET_CHECKS = uint32(0x3) << 6 | uint32(0x3) << 8 | uint32(0x3) << 10;
+// = 0b111111000000 = 0xFC0
+
+// Mask for mandate fields: target fields + originOps (12-13) + destOps (14-15) + qualification
+// (16-17)
+uint32 constant MASK_MANDATE_CHECKS =
+    MASK_TARGET_CHECKS | uint32(0x3) << 12 | uint32(0x3) << 14 | uint32(0x3) << 16;
+
+// = 0b111111111111000000 = 0x3FFC0
+
+/*//////////////////////////////////////////////////////////////
                          PARAM RULES
 //////////////////////////////////////////////////////////////
 

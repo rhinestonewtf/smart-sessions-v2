@@ -1127,12 +1127,18 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 mandateHash)
     {
+        // Fast path: if no mandate-level checks are enabled, just read pre-computed hash
+        if (!config.hasAnyMandateCheck()) {
+            mandateHash = bytes32(data[offset:offset + 32]);
+            return (true, mandateHash);
+        }
+
+        // Initialize variables
         bytes32 targetHash;
         uint256 targetChainId;
 
         // Validate Target if any target-related checks are enabled
-        if (config.hasCheckRecipient() || config.hasCheckFillExpiry() || config.hasCheckTokenOut())
-        {
+        if (config.hasAnyTargetCheck()) {
             bool targetValid;
             (targetValid, targetHash, targetChainId, offset) =
                 validateTarget($, data, offset, config, configId, account, hash);
