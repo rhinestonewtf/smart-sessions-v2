@@ -749,7 +749,6 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         // Create target data WITHOUT tokenOut validation (so use hash, not length)
         bytes memory targetData = abi.encodePacked(
             recipient,
-            bytes12(0), // reserved
             targetChainId,
             uint256(block.timestamp + 7200), // fillExpiry
             Constants.EMPTY_TOKEN_OUT_HASH // tokenOutHash
@@ -803,11 +802,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(
-            arbiter,
-            bytes12(0), // reserved
-            elementIndex
-        );
+        return abi.encodePacked(arbiter, elementIndex);
     }
 
     /// @notice Create basic mandate data
@@ -850,7 +845,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
+        offset += 20; // arbiter + reserved
         uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
@@ -904,7 +899,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
+        offset += 20; // arbiter + reserved
         uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
@@ -912,7 +907,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Parse TARGET (expanded!)
         address recipient = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // recipient + reserved
+        offset += 20; // recipient + reserved
         uint256 targetChainId = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         uint256 fillExpiry = uint256(bytes32(compactData[offset:offset + 32]));
@@ -972,7 +967,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
+        offset += 20; // arbiter + reserved
         uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
@@ -1077,7 +1072,6 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         // Create target data with specific fillExpiry
         bytes memory targetData = abi.encodePacked(
             makeAddr("recipient"),
-            bytes12(0), // reserved
             targetChainId,
             fillExpiry,
             Constants.EMPTY_TOKEN_OUT_HASH // tokenOutHash
@@ -1106,7 +1100,6 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         uint256 tokenData = uint256(uint160(token));
         bytes memory targetData = abi.encodePacked(
             makeAddr("recipient"),
-            bytes12(0), // reserved
             targetChainId,
             uint256(block.timestamp + 7200), // fillExpiry
             uint256(1), // tokenOut length
@@ -1165,7 +1158,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
+        offset += 20; // arbiter + reserved
         uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
@@ -1173,7 +1166,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Parse TARGET (expanded!)
         address recipient = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // recipient + reserved
+        offset += 20; // recipient + reserved
         uint256 targetChainId = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         uint256 fillExpiry = uint256(bytes32(compactData[offset:offset + 32]));
@@ -1319,7 +1312,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
+        offset += 20; // arbiter + reserved
         uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);

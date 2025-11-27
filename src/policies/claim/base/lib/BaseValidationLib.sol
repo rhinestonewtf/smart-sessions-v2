@@ -1252,10 +1252,9 @@ library BaseValidationLib {
     {
         // Decode Target header
         address recipient = address(bytes20(data[offset:offset + 20]));
-        // Skip 12 bytes padding
-        targetChainId = uint256(bytes32(data[offset + 32:offset + 64]));
-        uint256 fillExpiry = uint256(bytes32(data[offset + 64:offset + 96]));
-        offset += 96;
+        targetChainId = uint256(bytes32(data[offset + 20:offset + 52]));
+        uint256 fillExpiry = uint256(bytes32(data[offset + 52:offset + 84]));
+        offset += 84;
 
         // Validate recipient if required
         if (config.hasCheckRecipient()) {

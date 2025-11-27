@@ -170,6 +170,13 @@ library BaseConfigLib {
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when no qualification rules are set but qualification check is required
+    error QualificationRulesNotSet();
+
+    /*//////////////////////////////////////////////////////////////
                              MODE EXTRACTION
     //////////////////////////////////////////////////////////////
 
@@ -845,6 +852,9 @@ library BaseConfigLib {
                 packedNodes[i] = uint256(bytes32(initData[offset:offset + 32]));
                 offset += 32;
             }
+
+            // Make sure there are rules defined
+            require(ruleCount != 0 && packedNodesLength != 0, QualificationRulesNotSet());
 
             // Write to storage
             $.qualificationConfig[chainId][arbiter] = QualificationRulesStorage({
