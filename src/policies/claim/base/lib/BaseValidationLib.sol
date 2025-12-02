@@ -31,7 +31,8 @@ import {
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
-    FIELD_QUALIFICATION
+    FIELD_QUALIFICATION,
+    ANY_ADDRESS
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
 
@@ -342,7 +343,7 @@ library BaseValidationLib {
         uint256 effectiveChainId = mode.getEffectiveChainId(targetChainId);
         // Get expected recipient
         address expected = $.recipientConfig[effectiveChainId];
-        return recipient == expected;
+        return recipient == expected || expected == ANY_ADDRESS;
     }
 
     /// @notice Validates recipient by delegating to external sub-policy
