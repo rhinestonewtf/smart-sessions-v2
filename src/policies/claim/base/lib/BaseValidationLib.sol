@@ -32,6 +32,7 @@ import {
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
     FIELD_QUALIFICATION,
+    FIELD_RECIPIENT_IS_SPONSOR,
     ANY_ADDRESS
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
@@ -273,11 +274,26 @@ library BaseValidationLib {
     }
 
     /*//////////////////////////////////////////////////////////////
-                        RECIPIENT VALIDATION
+                            RECIPIENT VALIDATION
     //////////////////////////////////////////////////////////////
 
     Recipient validation ensures funds are sent to authorized
     addresses on the target chain.
+
+    Two validation modes available:
+    ┌─────────────────────────────────────────────────────────────┐
+    │  FIELD_RECIPIENT (storage-based)                            │
+    │  ├── Validates against stored recipient per chainId         │
+    │  ├── Supports ANY_ADDRESS sentinel for wildcards            │
+    │  └── Requires SLOAD for each validation                     │
+    ├─────────────────────────────────────────────────────────────┤
+    │  FIELD_RECIPIENT_IS_SPONSOR (flag-based)                    │
+    │  ├── Enforces recipient == sponsor (the account)            │
+    │  ├── No storage lookup required - just memory comparison    │
+    │  └── Ideal for "bridge to self" session keys                │
+    └─────────────────────────────────────────────────────────────┘
+
+    //////////////////////////////////////////////////////////////*/
 
     //////////////////////////////////////////////////////////////*/
 
@@ -1264,7 +1280,13 @@ library BaseValidationLib {
         offset += 84;
 
         // Validate recipient if required
-        if (config.hasCheckRecipient()) {
+        if (config.hasCheckRecipientIsSponsor()) {
+            // Fast path: recipient must equal sponsor (no storage lookup)
+            if (recipient != account) {
+                return (false, bytes32(0), 0, 0);
+            }
+        } else if (config.hasCheckRecipient()) {
+            // Storage path: validate against stored config
             if (!validateRecipient($, recipient, targetChainId, config, configId, account, hash)) {
                 return (false, bytes32(0), 0, 0);
             }

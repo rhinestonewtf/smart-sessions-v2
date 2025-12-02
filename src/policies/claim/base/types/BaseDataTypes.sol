@@ -42,20 +42,21 @@ Each field has a 2-bit mode controlling how it's validated:
 ┌─────────────────────────────────────────────────────────────┐
 │                    modeConfig (uint32)                      │
 │                                                             │
-│  Bits [31:18] = Reserved (unused)                           │
-│  Bits [17:0]  = 9 fields × 2 bits each                      │
+│  Bits [31:20] = Reserved (unused)                           │
+│  Bits [19:0]  = 10 fields × 2 bits each                     │
 │                                                             │
-│  ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐    │
-│  │  Q  │ DO  │ OO  │ TO  │ FE  │ RC  │ TI  │ EX  │ AR  │    │
-│  │17:16│15:14│13:12│11:10│ 9:8 │ 7:6 │ 5:4 │ 3:2 │ 1:0 │    │
-│  └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘    │
+│ ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬────┐│
+│ │ RIS │  Q  │ DO  │ OO  │ TO  │ FE  │ RC  │ TI  │ EX  │ AR ││
+│ │19:18│17:16│15:14│13:12│11:10│ 9:8 │ 7:6 │ 5:4 │ 3:2 │ 1:0││
+│ └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴────┘│
 │                                                             │
 │  Field IDs:                                                 │
-│  AR = Arbiter (0)        FE = FillExpiry (4)                │
-│  EX = Expiry (1)         TO = TokenOut (5)                  │
-│  TI = TokenIn (2)        OO = OriginOps (6)                 │
-│  RC = Recipient (3)      DO = DestOps (7)                   │
-│                          Q  = Qualification (8)             │
+│  AR  = Arbiter (0)           FE  = FillExpiry (4)           │
+│  EX  = Expiry (1)            TO  = TokenOut (5)             │
+│  TI  = TokenIn (2)           OO  = OriginOps (6)            │
+│  RC  = Recipient (3)         DO  = DestOps (7)              │
+│                              Q   = Qualification (8)        │
+│                              RIS = RecipientIsSponsor (9)   │
 └─────────────────────────────────────────────────────────────┘
 
 Mode values (2 bits each):
@@ -63,6 +64,12 @@ Mode values (2 bits each):
   01 (1) = CHECK_STORAGE   - Validate against stored config (exact chainId)
   10 (2) = CHECK_CATCHALL  - Validate with chainId=0 fallback
   11 (3) = CHECK_SUBPOLICY - Delegate to external policy contract
+
+Special case - FIELD_RECIPIENT_IS_SPONSOR:
+  This field only uses mode != SKIP as a flag. When enabled (any non-zero
+  mode), it enforces that recipient == sponsor (the account). No storage
+  or init data is required - just a single comparison against the sponsor
+  address already in memory. This is useful for "bridge to self" sessions.
 
 //////////////////////////////////////////////////////////////*/
 
@@ -84,24 +91,54 @@ uint8 constant FIELD_TOKEN_OUT = 5;
 uint8 constant FIELD_ORIGIN_OPS = 6;
 uint8 constant FIELD_DEST_OPS = 7;
 uint8 constant FIELD_QUALIFICATION = 8;
+uint8 constant FIELD_RECIPIENT_IS_SPONSOR = 9;
 
 /*//////////////////////////////////////////////////////////////
                         MODE CHECK MASKS
 //////////////////////////////////////////////////////////////*/
 
-// Mask for target fields: recipient (bits 6-7), fillExpiry (bits 8-9), tokenOut (bits 10-11)
-uint32 constant MASK_TARGET_CHECKS = uint32(0x3) << 6 | uint32(0x3) << 8 | uint32(0x3) << 10;
-// = 0b111111000000 = 0xFC0
+// Mask for target fields: recipient (bits 6-7), fillExpiry (bits 8-9), tokenOut (bits 10-11),
+// recipientIsSponsor (bits 18-19)
+uint32 constant MASK_TARGET_CHECKS =
+    uint32(0x3) << 6 | uint32(0x3) << 8 | uint32(0x3) << 10 | uint32(0x3) << 18;
+// = 0xC0FC0
 
 // Mask for mandate fields: target fields + originOps (12-13) + destOps (14-15) + qualification
 // (16-17)
 uint32 constant MASK_MANDATE_CHECKS =
     MASK_TARGET_CHECKS | uint32(0x3) << 12 | uint32(0x3) << 14 | uint32(0x3) << 16;
 
-// = 0b111111111111000000 = 0x3FFC0
+// = 0x3FFC0
 
 /*//////////////////////////////////////////////////////////////
                            SENTINELS
+//////////////////////////////////////////////////////////////
+
+Special address values used as configuration wildcards.
+
+┌─────────────────────────────────────────────────────────────┐
+│                    ANY_ADDRESS Sentinel                     │
+│                                                             │
+│  Value: 0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF          │
+│                                                             │
+│  When used as a stored recipient address, validation will   │
+│  pass for ANY recipient value. This allows configuring a    │
+│  session that permits bridging to any address on a given    │
+│  target chain, without restricting the specific recipient.  │
+│                                                             │
+│  Example usage in init data:                                │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  chainId: 137                                          │ │
+│  │  recipient: 0xFFFF...FFFF  ← allows any recipient      │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                             │
+│  This is useful when you want to:                           │
+│  • Lock the arbiter, tokens, and chain but allow flexible   │
+│    recipient selection                                      │
+│  • Allow the session to send to any address on specific     │
+│    whitelisted destination chains                           │
+└─────────────────────────────────────────────────────────────┘
+
 //////////////////////////////////////////////////////////////*/
 
 // Sentinel value allowing any address

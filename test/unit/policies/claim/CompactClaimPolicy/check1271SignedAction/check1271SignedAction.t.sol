@@ -28,7 +28,8 @@ import {
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
-    FIELD_QUALIFICATION
+    FIELD_QUALIFICATION,
+    FIELD_RECIPIENT_IS_SPONSOR
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
 
@@ -246,6 +247,63 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         );
 
         assertTrue(result, "Action with valid recipient should be allowed");
+    }
+
+    //-------------------------------------
+    // 4b) RECIPIENT IS SPONSOR
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with recipientIsSponsor check - should pass when
+    /// recipient == sponsor
+    function test_check1271SignedAction_recipientIsSponsor_valid_shouldPass() public {
+        uint256 targetChainId = 137;
+
+        // Initialize policy with recipientIsSponsor check (no init data needed, just the mode flag)
+        _initializePolicyWithRecipientIsSponsor();
+
+        // Create Compact data with recipient = testAccount (the sponsor)
+        bytes memory compactData = _createCompactDataWithRecipient(testAccount, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        // Check the action
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Action with recipient == sponsor should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with recipientIsSponsor check - should fail when
+    /// recipient != sponsor
+    function test_check1271SignedAction_recipientIsSponsor_invalid_shouldFail() public {
+        address wrongRecipient = makeAddr("wrongRecipient");
+        uint256 targetChainId = 137;
+
+        // Initialize policy with recipientIsSponsor check
+        _initializePolicyWithRecipientIsSponsor();
+
+        // Create Compact data with recipient != testAccount
+        bytes memory compactData = _createCompactDataWithRecipient(wrongRecipient, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        // Check the action
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Action with recipient != sponsor should be rejected");
     }
 
     //-------------------------------------
@@ -656,12 +714,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     }
 
     /// @notice Initialize policy with recipient check
-    function _initializePolicyWithRecipient(
-        address recipient,
-        uint256 targetChainId
-    )
-        internal
-    {
+    function _initializePolicyWithRecipient(address recipient, uint256 targetChainId) internal {
         uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         bytes memory initData = abi.encodePacked(
             modeConfig,
@@ -1397,5 +1450,14 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
 
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
+    }
+
+    /// @notice Initialize policy with recipientIsSponsor check (no storage data needed)
+    function _initializePolicyWithRecipientIsSponsor() internal {
+        // Just set the mode bit - no config data required
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+        bytes memory initData = abi.encodePacked(modeConfig);
+
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 }

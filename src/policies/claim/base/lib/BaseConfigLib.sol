@@ -26,7 +26,8 @@ import {
     FIELD_QUALIFICATION,
     PolicyConfig,
     MASK_TARGET_CHECKS,
-    MASK_MANDATE_CHECKS
+    MASK_MANDATE_CHECKS,
+    FIELD_RECIPIENT_IS_SPONSOR
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
@@ -202,14 +203,7 @@ library BaseConfigLib {
     /// @param config The policy configuration wrapper
     /// @param fieldId The field ID (0-8, see FIELD_* constants)
     /// @return mode The 2-bit mode value (0=SKIP, 1=STORAGE, 2=CATCHALL, 3=SUBPOLICY)
-    function getFieldMode(
-        PolicyConfig config,
-        uint8 fieldId
-    )
-        internal
-        pure
-        returns (uint8 mode)
-    {
+    function getFieldMode(PolicyConfig config, uint8 fieldId) internal pure returns (uint8 mode) {
         uint32 modeConfig = PolicyConfig.unwrap(config);
         mode = uint8((modeConfig >> (fieldId * 2)) & 0x3);
     }
@@ -308,6 +302,12 @@ library BaseConfigLib {
     /// @notice Checks if qualification validation is enabled
     function hasCheckQualification(PolicyConfig config) internal pure returns (bool) {
         return getFieldMode(config, FIELD_QUALIFICATION) != MODE_SKIP;
+    }
+
+    /// @notice Checks if recipient-is-sponsor validation is enabled
+    /// @dev When enabled, enforces recipient == sponsor with no storage lookup
+    function hasCheckRecipientIsSponsor(PolicyConfig config) internal pure returns (bool) {
+        return getFieldMode(config, FIELD_RECIPIENT_IS_SPONSOR) != MODE_SKIP;
     }
 
     /// @notice Check if any target-level validation is enabled
@@ -498,11 +498,24 @@ library BaseConfigLib {
     }
 
     /*//////////////////////////////////////////////////////////////
-                       RECIPIENT INITIALIZATION
+                           RECIPIENT INITIALIZATION
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 32 bytes][entries...]
     Entry:  [targetChainId: 32 bytes][recipient: 20 bytes] = 52 bytes each
+
+    The recipient config maps target chain IDs to recipient addresses.
+
+    Special values:
+    ┌─────────────────────────────────────────────────────────────┐
+    │  ANY_ADDRESS (0xFFFF...FFFF)                                │
+    │  ├── When stored as recipient, allows ANY recipient value   │
+    │  └── Useful for "any recipient on whitelisted chains"       │
+    └─────────────────────────────────────────────────────────────┘
+
+    Note: For "recipient must equal sponsor" use case, prefer
+    FIELD_RECIPIENT_IS_SPONSOR instead - it requires no storage
+    lookups and is more gas efficient.
 
     ┌────────────────────────────────────────────────────────┐
     │  Recipient Config                                      │

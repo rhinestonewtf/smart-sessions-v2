@@ -27,7 +27,8 @@ import {
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
-    FIELD_QUALIFICATION
+    FIELD_QUALIFICATION,
+    FIELD_RECIPIENT_IS_SPONSOR
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
 
@@ -358,6 +359,119 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         );
 
         assertTrue(result, "Action with valid recipient should be allowed");
+    }
+
+    //-------------------------------------
+    // 4b) RECIPIENT IS SPONSOR
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with recipientIsSponsor check - should pass when
+    /// recipient == sponsor
+    function test_check1271SignedAction_recipientIsSponsor_valid_shouldPass() public {
+        uint256 targetChainId = 137;
+        uint256 fillExpiry = block.timestamp + 7200;
+
+        // Initialize policy with recipientIsSponsor check (no init data needed)
+        _initializePolicyWithRecipientIsSponsor();
+
+        // Create test data with recipient = testAccount (the sponsor)
+        (address arbiter,) = makeAddrAndKey("arbiter");
+        uint256 nonce = 1;
+        uint256 deadline = block.timestamp + 3600;
+        bytes32 tokenPermissionsHash = keccak256("tokenPermissions");
+        bytes32 tokenOutHash = keccak256("tokenOut");
+
+        // Compute mandate hash with recipient = testAccount
+        bytes32 mandateHash = _computeMandateHash(
+            testAccount, // recipient == sponsor
+            targetChainId,
+            fillExpiry,
+            tokenOutHash,
+            Constants.NO_OPS,
+            Constants.NO_OPS,
+            SAMPLE_QUALIFICATION_HASH
+        );
+
+        // Build calldata with full mandate (target expanded since we're checking recipient)
+        bytes memory permit2Data = abi.encodePacked(
+            _createPermit2Header(arbiter, nonce, deadline),
+            _createTokenPermissionsHash(tokenPermissionsHash),
+            _createMandateWithTarget(
+                testAccount, // recipient == sponsor
+                targetChainId,
+                fillExpiry,
+                tokenOutHash,
+                Constants.NO_OPS,
+                Constants.NO_OPS,
+                SAMPLE_QUALIFICATION_HASH
+            )
+        );
+
+        // Compute expected hash
+        bytes32 expectedHash =
+            _computeExpectedHash(arbiter, nonce, deadline, tokenPermissionsHash, mandateHash);
+
+        // Check the action
+        bool result = permit2ClaimPolicy.check1271SignedAction(
+            testConfigId, admin.addr, testAccount, expectedHash, permit2Data
+        );
+
+        assertTrue(result, "Action with recipient == sponsor should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with recipientIsSponsor check - should fail when
+    /// recipient != sponsor
+    function test_check1271SignedAction_recipientIsSponsor_invalid_shouldFail() public {
+        address wrongRecipient = makeAddr("wrongRecipient");
+        uint256 targetChainId = 137;
+        uint256 fillExpiry = block.timestamp + 7200;
+
+        // Initialize policy with recipientIsSponsor check
+        _initializePolicyWithRecipientIsSponsor();
+
+        // Create test data with recipient != testAccount
+        (address arbiter,) = makeAddrAndKey("arbiter");
+        uint256 nonce = 1;
+        uint256 deadline = block.timestamp + 3600;
+        bytes32 tokenPermissionsHash = keccak256("tokenPermissions");
+        bytes32 tokenOutHash = keccak256("tokenOut");
+
+        // Compute mandate hash with wrong recipient
+        bytes32 mandateHash = _computeMandateHash(
+            wrongRecipient,
+            targetChainId,
+            fillExpiry,
+            tokenOutHash,
+            Constants.NO_OPS,
+            Constants.NO_OPS,
+            SAMPLE_QUALIFICATION_HASH
+        );
+
+        // Build calldata
+        bytes memory permit2Data = abi.encodePacked(
+            _createPermit2Header(arbiter, nonce, deadline),
+            _createTokenPermissionsHash(tokenPermissionsHash),
+            _createMandateWithTarget(
+                wrongRecipient,
+                targetChainId,
+                fillExpiry,
+                tokenOutHash,
+                Constants.NO_OPS,
+                Constants.NO_OPS,
+                SAMPLE_QUALIFICATION_HASH
+            )
+        );
+
+        // Compute expected hash
+        bytes32 expectedHash =
+            _computeExpectedHash(arbiter, nonce, deadline, tokenPermissionsHash, mandateHash);
+
+        // Check the action
+        bool result = permit2ClaimPolicy.check1271SignedAction(
+            testConfigId, admin.addr, testAccount, expectedHash, permit2Data
+        );
+
+        assertFalse(result, "Action with recipient != sponsor should be rejected");
     }
 
     //-------------------------------------
@@ -976,12 +1090,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     }
 
     /// @notice Initialize policy with recipient check
-    function _initializePolicyWithRecipient(
-        address recipient,
-        uint256 targetChainId
-    )
-        internal
-    {
+    function _initializePolicyWithRecipient(address recipient, uint256 targetChainId) internal {
         uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         bytes memory initData = abi.encodePacked(modeConfig, uint256(1), targetChainId, recipient);
 
@@ -1262,14 +1371,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     }
 
     /// @notice Helper to build tokenOut array and compute hash
-    function _computeTokenOutHash(
-        address token,
-        uint256 amount
-    )
-        internal
-        view
-        returns (bytes32)
-    {
+    function _computeTokenOutHash(address token, uint256 amount) internal view returns (bytes32) {
         uint256[2][] memory tokenOut = new uint256[2][](1);
         tokenOut[0][0] = uint256(uint160(token));
         tokenOut[0][1] = amount;
@@ -1298,5 +1400,14 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         return EIP712TypeHashLib.hashMandateRaw(
             targetHash, SAMPLE_MIN_GAS, originOpsHash, destOpsHash, qualificationHash
         );
+    }
+
+    /// @notice Initialize policy with recipientIsSponsor check (no storage data needed)
+    function _initializePolicyWithRecipientIsSponsor() internal {
+        // Just set the mode bit - no config data required
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+        bytes memory initData = abi.encodePacked(modeConfig);
+
+        permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 }

@@ -152,6 +152,10 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │  (in mandate)   │  CHECK → [len (32)] + [data]               │
     /// └─────────────────┴────────────────────────────────────────────┘
     ///
+    /// Note: FIELD_RECIPIENT_IS_SPONSOR requires no calldata -
+    /// when enabled, it simply enforces recipient == sponsor
+    /// during target validation.
+    ///
     /// Mandate encoding (when ALL mandate fields SKIP):
     /// ┌────────────────────────────────────────────────────────────┐
     /// │  [0:32]     mandateHash (bytes32)                          │
