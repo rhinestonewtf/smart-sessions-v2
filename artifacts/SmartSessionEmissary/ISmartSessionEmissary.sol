@@ -31,7 +31,6 @@ interface Interface {
     type PolicyType is uint8;
     type ResetPeriod is uint8;
     type Scope is uint8;
-    type ActionId is bytes32;
     type PermissionId is bytes32;
 
     struct ActionData {
@@ -108,12 +107,9 @@ interface Interface {
     error InvalidActionId();
     error InvalidAllocatorSignature();
     error InvalidAllocatorSignature();
-    error InvalidData();
     error InvalidDataLength();
-    error InvalidEmissaryConfig();
     error InvalidEmissaryDisableData();
     error InvalidEmissaryEnableData();
-    error InvalidEnableSignature(address account, bytes32 hash);
     error InvalidISessionValidator(address sessionValidator);
     error InvalidNonce();
     error InvalidPermissionId(PermissionId permissionId);
@@ -129,27 +125,23 @@ interface Interface {
     error NotSet();
     error PolicyViolation(PermissionId permissionId, address policy);
     error SignerNotFound(PermissionId permissionId, address account);
-    error SmartSessionModuleAlreadyInstalled();
     error UnauthorizedSource();
     error UnsafeFallbackNotAllowed();
-    error UnsupportedExecutionType();
     error UnsupportedPolicy(address policy);
-    error UnsupportedSelector();
 
     event EmissaryConfigUpdated(address indexed account, address indexed validator, bytes12 indexed lockTag);
-    event NonceIterated(bytes12 lockTag, address indexed account, uint256 nonce);
     event PolicyEnabled(PermissionId permissionId, PolicyType policyType, address policy, address smartAccount);
-    event SessionCreated(PermissionId permissionId, address account);
-    event SessionRemoved(PermissionId permissionId, address smartAccount);
     event SessionValidatorDisabled(PermissionId permissionId, address sessionValidator, address smartAccount);
     event SessionValidatorEnabled(PermissionId permissionId, address sessionValidator, address smartAccount);
     event SmartSessionEmissaryConfigUpdated(
-        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag, bool enabled
     );
-    event WhitelistStatusUpdated(address source, bool status);
+
+    fallback() external;
 
     function DOMAIN_SEPARATOR() external view returns (bytes32);
     function INTENT_EXECUTOR() external view returns (address);
+    function LENS() external view returns (address);
     function eip712Domain()
         external
         view
@@ -162,43 +154,19 @@ interface Interface {
             bytes32 salt,
             uint256[] memory extensions
         );
-    function getActionPolicies(address account, PermissionId permissionId, ActionId actionId, bytes12 lockTag)
-        external
-        view
-        returns (address[] memory);
     function getConfig(address account, uint8 configId, address validator, bytes12 lockTag)
         external
         view
         returns (bytes memory config);
-    function getERC1271Policies(address account, PermissionId permissionId) external view returns (address[] memory);
-    function getEnabledActions(address account, PermissionId permissionId, bytes12 lockTag)
-        external
-        view
-        returns (bytes32[] memory);
-    function getNonce(address sponsor, bytes12 lockTag) external view returns (uint256);
-    function getPermissionId(Session memory session) external pure returns (PermissionId permissionId);
-    function getSessionDigest(address account, Session memory data, bytes12 lockTag, uint256 expires)
-        external
-        view
-        returns (bytes32);
-    function getSessionValidatorAndConfig(address account, PermissionId permissionId)
-        external
-        view
-        returns (address sessionValidator, bytes memory sessionValidatorData);
-    function isInitialized(address smartAccount) external view returns (bool);
-    function isModuleType(uint256 typeID) external pure returns (bool);
     function isValidSignatureWithSender(address sender, bytes32 hash, bytes memory signature)
         external
         view
         returns (bytes4 result);
-    function onInstall(bytes memory data) external;
-    function onUninstall(bytes memory) external;
     function removeConfig(
         address account,
         SmartSessionEmissaryConfig memory config,
         SmartSessionEmissaryDisable memory disableData
     ) external;
-    function revokeNonce(bytes12 lockTag) external;
     function setConfig(
         address account,
         IEmissary.EmissaryConfig memory config,
@@ -209,7 +177,7 @@ interface Interface {
         SmartSessionEmissaryConfig memory config,
         SmartSessionEmissaryEnable memory enableData
     ) external;
-    function verifyClaim(address sponsor, bytes32 digest, bytes32 claimHash, bytes memory emissaryData, bytes12 lockTag)
+    function verifyClaim(address sponsor, bytes32 digest, bytes32, bytes memory emissaryData, bytes12 lockTag)
         external
         view
         returns (bytes4);
