@@ -114,13 +114,13 @@ abstract contract BaseClaimPolicy is I1271Policy {
     ///
     /// modeConfig (uint32) - 2 bits per field:
     /// ┌─────────────────────────────────────────────────────────────┐
-    /// │  Bits [31:18] = Reserved (unused)                           │
-    /// │  Bits [17:0]  = 9 fields × 2 bits each                      │
+    /// │  Bits [31:20] = Reserved (unused)                           │
+    /// │  Bits [19:0]  = 10 fields × 2 bits each                     │
     /// │                                                             │
-    /// │  ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐    │
-    /// │  │  Q  │ DO  │ OO  │ TO  │ FE  │ RC  │ TI  │ EX  │ AR  │    │
-    /// │  │17:16│15:14│13:12│11:10│ 9:8 │ 7:6 │ 5:4 │ 3:2 │ 1:0 │    │
-    /// │  └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘    │
+    /// │ ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬────┐│
+    /// │ │ RIS │  Q  │ DO  │ OO  │ TO  │ FE  │ RC  │ TI  │ EX  │ AR ││
+    /// │ │19:18│17:16│15:14│13:12│11:10│ 9:8 │ 7:6 │ 5:4 │ 3:2 │ 1:0││
+    /// │ └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴────┘│
     /// │                                                             │
     /// │  Mode values:                                               │
     /// │  0b00 = MODE_SKIP         (no validation)                   │
@@ -169,6 +169,10 @@ abstract contract BaseClaimPolicy is I1271Policy {
     /// │  subPolicies    │  [count (32)] + entries:                   │
     /// │  (if any        │    [fieldId (1)] + [policyAddr (20)] +     │
     /// │   SUBPOLICY)    │    [initDataLen (32)] + [initData (...)]   │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  recipientIs    │  No init data required - just a flag       │
+    /// │  Sponsor        │  If mode != SKIP, enforces recipient ==    │
+    /// │                 │  sponsor at validation time                │
     /// └─────────────────┴────────────────────────────────────────────┘
     ///
     /// Example - Compact with arbiter + tokenIn + recipient:
@@ -389,10 +393,7 @@ abstract contract BaseClaimPolicy is I1271Policy {
     /// @param configId The configuration ID
     /// @param account The account to query
     /// @return The mode configuration bitmap
-    function getModeConfig(
-        ConfigId configId,
-        address account
-    )
+    function getModeConfig(ConfigId configId, address account)
         external
         view
         returns (PolicyConfig)

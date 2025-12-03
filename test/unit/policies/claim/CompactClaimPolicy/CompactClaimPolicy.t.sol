@@ -5,15 +5,15 @@ pragma solidity >=0.8.27;
 import { Base_Test } from "@test/Base.t.sol";
 
 // Contracts
-import { MultiChainClaimPolicy } from "@policies/claim/MultiChainClaimPolicy.sol";
+import { CompactClaimPolicy } from "@policies/claim/compact/CompactClaimPolicy.sol";
 
-contract MultiChainClaimPolicy_Unit_Test is Base_Test {
+contract CompactClaimPolicy_Unit_Test is Base_Test {
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice The MultiChainClaimPolicy contract instance.
-    MultiChainClaimPolicy internal multiChainClaimPolicy;
+    /// @notice The CompactClaimPolicy contract instance.
+    CompactClaimPolicy internal compactClaimPolicy;
 
     /*//////////////////////////////////////////////////////////////
                                    SETUP
@@ -22,7 +22,7 @@ contract MultiChainClaimPolicy_Unit_Test is Base_Test {
     function setUp() public virtual override {
         // Call the base setup function.
         super.setUp();
-        // Deploy the MultiChainClaimPolicy contract.
-        multiChainClaimPolicy = new MultiChainClaimPolicy();
+        // Deploy the CompactClaimPolicy contract.
+        compactClaimPolicy = new CompactClaimPolicy();
     }
 }

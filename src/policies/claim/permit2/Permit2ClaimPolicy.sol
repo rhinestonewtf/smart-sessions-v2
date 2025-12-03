@@ -113,7 +113,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │  [20:52]    nonce (uint256)                                │
     /// │  [52:84]    deadline (uint256)                             │
     /// │  [84:...]   tokenIn OR tokenPermissionsHash                │
-    /// │  [...]      mandate OR mandateHash                         │
+    /// │  [...]      mandate (variable, see below)                  │
     /// └────────────────────────────────────────────────────────────┘
     ///
     /// Variable encoding based on mode:
@@ -127,13 +127,16 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │  mandate        │  If ALL mandate fields SKIP →              │
     /// │                 │     mandateHash (32 bytes)                 │
     /// │                 │  If ANY mandate field CHECK →              │
-    /// │                 │     decode mandate struct (see below)      │
+    /// │                 │     parsed field-by-field (see below)      │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  target         │  If ALL target fields SKIP →               │
     /// │  (in mandate)   │     targetHash (32) + targetChainId (32)   │
     /// │                 │  If ANY target field CHECK →               │
-    /// │                 │     recipient (32) + targetChainId (32) +  │
-    /// │                 │     fillExpiry (32) + tokenOut             │
+    /// │                 │     recipient (20+12) + targetChainId (32) │
+    /// │                 │     + fillExpiry (32) + tokenOut           │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  minGas         │  Always uint128 (16 bytes)                 │
+    /// │  (in mandate)   │  Not validated, used for hash computation  │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  tokenOut       │  SKIP  → tokenOutHash (32 bytes)           │
     /// │  (in target)    │  CHECK → [len (32)] + [entries (64 each)]  │
@@ -146,10 +149,39 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// │                 │  Note: Uses targetChainId for lookup       │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  qualification  │  SKIP  → qualificationHash (32 bytes)      │
-    /// │  (in mandate)   │  CHECK → [len (32)] + [flags (1)] + [data] │
-    /// │                 │  flags: 0x00 = keccak256                   │
-    /// │                 │         0x01 = arbiter.qualificationHash() │
+    /// │  (in mandate)   │  CHECK → [len (32)] + [data]               │
     /// └─────────────────┴────────────────────────────────────────────┘
+    ///
+    /// Note: FIELD_RECIPIENT_IS_SPONSOR requires no calldata -
+    /// when enabled, it simply enforces recipient == sponsor
+    /// during target validation.
+    ///
+    /// Mandate encoding (when ALL mandate fields SKIP):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:32]     mandateHash (bytes32)                          │
+    /// └────────────────────────────────────────────────────────────┘
+    ///
+    /// Mandate encoding (when ANY mandate field CHECK, target SKIP):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:32]     targetHash (bytes32)                           │
+    /// │  [32:64]    targetChainId (uint256)                        │
+    /// │  [64:80]    minGas (uint128)                               │
+    /// │  [80:112]   originOpsHash (bytes32)                        │
+    /// │  [112:144]  destOpsHash (bytes32)                          │
+    /// │  [144:176]  qualificationHash (bytes32) OR [len + data]    │
+    /// └────────────────────────────────────────────────────────────┘
+    ///
+    /// Mandate encoding (when ANY target field CHECK):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:20]     recipient (address)                            │                        
+    /// │  [20:52]    targetChainId (uint256)                        │
+    /// │  [52:84]    fillExpiry (uint256)                           │
+    /// │  [84:...]   tokenOutHash (bytes32) OR [len + entries]      │
+    /// │  [...]      minGas (uint128, 16 bytes)                     │
+    /// │  [...]      originOpsHash (bytes32)                        │
+    /// │  [...]      destOpsHash (bytes32)                          │
+    /// │  [...]      qualificationHash (32) OR [len + data]         │
+    /// └────────────────────────────────────────────────────────────┘
     // forgefmt: disable-end
     function _validateClaim(
         ConfigId configId,
@@ -169,9 +201,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         //////////////////////////////////////////////////////////////*/
 
         // Decode Permit2 header fields
-        address arbiter = address(bytes20(data[0:20]));
-        uint256 nonce = uint256(bytes32(data[20:52]));
-        uint256 deadline = uint256(bytes32(data[52:84]));
+        (address arbiter, uint256 nonce, uint256 deadline) = _decodePermit2Header(data);
 
         /*//////////////////////////////////////////////////////////////
                                  VALIDATE ARBITER
@@ -202,6 +232,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         (valid, tokenPermissionsHash, offset) = Permit2ValidationLib.validateTokenIn(
             configId, data, account, offset, config, $, hash
         );
+        // Early return if tokenIn invalid
         if (!valid) return false;
 
         /*//////////////////////////////////////////////////////////////
@@ -236,6 +267,21 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
 
         // Compare digest against expected hash
         return digest == hash;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 DECODE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Decodes the Permit2 header fields from calldata
+    function _decodePermit2Header(bytes calldata data)
+        internal
+        pure
+        returns (address arbiter, uint256 nonce, uint256 deadline)
+    {
+        arbiter = address(bytes20(data[0:20]));
+        nonce = uint256(bytes32(data[20:52]));
+        deadline = uint256(bytes32(data[52:84]));
     }
 
     /*//////////////////////////////////////////////////////////////

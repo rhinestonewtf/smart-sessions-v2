@@ -4,32 +4,36 @@ pragma solidity >=0.8.27;
 // Dependencies
 import {
     CompactClaimPolicy_Unit_Test
-} from "@test/unit/CompactClaimPolicy/compactClaimPolicy.t.sol";
+} from "@test/unit/policies/claim/CompactClaimPolicy/compactClaimPolicy.t.sol";
 
 // Libraries
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { DomainLib } from "@the-compact/lib/DomainLib.sol";
 import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
+import { Bytes32ArrayLib } from "@rhinestone/compact-utils/src/common/Bytes32ArrayLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { ParamRules, ParamRule } from "@policies/claimv2/compact/types/DataTypes.sol";
+import { ParamRules, ParamRule } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
     MODE_SKIP,
     MODE_CHECK_STORAGE,
     MODE_CHECK_CATCHALL,
     FIELD_ARBITER,
-    FIELD_CLAIM_EXPIRES,
+    FIELD_EXPIRY,
     FIELD_TOKEN_IN,
     FIELD_RECIPIENT,
     FIELD_FILL_EXPIRY,
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
-    FIELD_QUALIFICATION
-} from "@policies/claimv2/compact/types/DataTypes.sol";
+    FIELD_QUALIFICATION,
+    FIELD_RECIPIENT_IS_SPONSOR
+} from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
+
+// Utils
 import { console2 } from "forge-std/console2.sol";
 
 contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Unit_Test {
@@ -38,6 +42,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     //////////////////////////////////////////////////////////////*/
 
     using EfficientHashLib for bytes32[];
+    using Bytes32ArrayLib for bytes32[];
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -190,14 +195,14 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     function test_check1271SignedAction_tokenIn_valid_shouldPass() public {
         address testToken = makeAddr("testToken");
         bytes12 testLockTag = bytes12("test_lock");
-        uint256 chainId = 1;
+        uint256 elementIndex = 0;
 
         // Initialize policy with tokenIn check
-        _initializePolicyWithTokenIn(testToken, testLockTag, chainId);
+        _initializePolicyWithTokenIn(testToken, testLockTag, block.chainid);
 
         // Create Compact data with valid tokenIn
         bytes memory compactData =
-            _createCompactDataWithTokenIn(testToken, testLockTag, 1000, chainId);
+            _createCompactDataWithTokenIn(testToken, testLockTag, 1000, elementIndex);
 
         // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
@@ -245,24 +250,81 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     }
 
     //-------------------------------------
+    // 4b) RECIPIENT IS SPONSOR
+    //-------------------------------------
+
+    /// @notice Test check1271SignedAction with recipientIsSponsor check - should pass when
+    /// recipient == sponsor
+    function test_check1271SignedAction_recipientIsSponsor_valid_shouldPass() public {
+        uint256 targetChainId = 137;
+
+        // Initialize policy with recipientIsSponsor check (no init data needed, just the mode flag)
+        _initializePolicyWithRecipientIsSponsor();
+
+        // Create Compact data with recipient = testAccount (the sponsor)
+        bytes memory compactData = _createCompactDataWithRecipient(testAccount, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        // Check the action
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Action with recipient == sponsor should be allowed");
+    }
+
+    /// @notice Test check1271SignedAction with recipientIsSponsor check - should fail when
+    /// recipient != sponsor
+    function test_check1271SignedAction_recipientIsSponsor_invalid_shouldFail() public {
+        address wrongRecipient = makeAddr("wrongRecipient");
+        uint256 targetChainId = 137;
+
+        // Initialize policy with recipientIsSponsor check
+        _initializePolicyWithRecipientIsSponsor();
+
+        // Create Compact data with recipient != testAccount
+        bytes memory compactData = _createCompactDataWithRecipient(wrongRecipient, targetChainId);
+
+        // Compute expected hash
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        // Check the action
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Action with recipient != sponsor should be rejected");
+    }
+
+    //-------------------------------------
     // 5) ORIGIN OPS
     //-------------------------------------
 
     /// @notice Test check1271SignedAction with originOps check - should pass when required and
     /// present
     function test_check1271SignedAction_originOps_requiredAndPresent_shouldPass() public {
-        uint256 chainId = 1;
+        uint256 elementIndex = 0;
         bool requireOriginOps = true;
 
         // Initialize policy requiring originOps
-        _initializePolicyWithOriginOps(requireOriginOps, chainId);
+        _initializePolicyWithOriginOps(requireOriginOps, block.chainid);
 
         // Create Compact data with originOps present
         bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, chainId);
+        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, elementIndex);
 
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHash(compactData);
+        // Compute expected hash - use expanded mandate hash function
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
 
         // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
@@ -279,17 +341,17 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Test check1271SignedAction with originOps check - should fail when required but
     /// missing
     function test_check1271SignedAction_originOps_requiredButMissing_shouldFail() public {
-        uint256 chainId = 1;
+        uint256 elementIndex = 0;
         bool requireOriginOps = true;
 
         // Initialize policy requiring originOps
-        _initializePolicyWithOriginOps(requireOriginOps, chainId);
+        _initializePolicyWithOriginOps(requireOriginOps, block.chainid);
 
         // Create Compact data with NO_OPS
-        bytes memory compactData = _createCompactDataWithOriginOps(Constants.NO_OPS, chainId);
+        bytes memory compactData = _createCompactDataWithOriginOps(Constants.NO_OPS, elementIndex);
 
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHash(compactData);
+        // Compute expected hash - use expanded mandate hash function
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
 
         // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
@@ -465,8 +527,8 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         bytes32 nonEmptyOpsHash = keccak256("some dest ops");
         bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
 
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHash(compactData);
+        // Compute expected hash - use expanded mandate hash function
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
 
         // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
@@ -492,8 +554,8 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         // Create Compact data with NO_OPS
         bytes memory compactData = _createCompactDataWithDestOps(Constants.NO_OPS, targetChainId);
 
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHash(compactData);
+        // Compute expected hash - use expanded mandate hash function
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
 
         // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
@@ -513,7 +575,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
     /// @notice Test check1271SignedAction with qualification check - should pass when valid
     function test_check1271SignedAction_qualification_valid_shouldPass() public {
-        uint256 chainId = 1;
+        uint256 elementIndex = 0;
         address arbiter = makeAddr("qualificationArbiter");
 
         // Create simple rule: bytes[0:32] EQUAL to 0x123...
@@ -531,15 +593,14 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
 
         // Initialize policy with qualification check
-        _initializePolicyWithQualification(arbiter, paramRules, chainId);
+        _initializePolicyWithQualification(arbiter, paramRules, block.chainid);
 
         // Create qualification data that matches the rule
         bytes memory qualData = abi.encodePacked(expectedValue);
         bytes memory compactData = _createCompactDataWithQualification(
             arbiter,
             qualData,
-            0x00, // Use keccak256 flag
-            chainId
+            elementIndex // element index
         );
 
         // Compute expected hash
@@ -559,7 +620,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
     /// @notice Test check1271SignedAction with qualification check - should fail when invalid
     function test_check1271SignedAction_qualification_invalid_shouldFail() public {
-        uint256 chainId = 1;
+        uint256 elementIndex = 0;
         address arbiter = makeAddr("qualificationArbiter");
 
         // Create simple rule: bytes[0:32] EQUAL to 0x123...
@@ -577,17 +638,13 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
 
         // Initialize policy with qualification check
-        _initializePolicyWithQualification(arbiter, paramRules, chainId);
+        _initializePolicyWithQualification(arbiter, paramRules, block.chainid);
 
         // Create qualification data that DOESN'T match the rule
         bytes32 wrongValue = bytes32(uint256(0x456));
         bytes memory qualData = abi.encodePacked(wrongValue);
-        bytes memory compactData = _createCompactDataWithQualification(
-            arbiter,
-            qualData,
-            0x00, // Use keccak256 flag
-            chainId
-        );
+        bytes memory compactData =
+            _createCompactDataWithQualification(arbiter, qualData, elementIndex);
 
         // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHashWithQualification(compactData);
@@ -616,22 +673,23 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Initialize policy with arbiter check
     function _initializePolicyWithArbiter(address arbiter) internal {
         uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(modeConfig, arbiter);
+        bytes memory initData = abi.encodePacked(modeConfig, uint256(1), arbiter);
 
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
     /// @notice Initialize policy with claim expires check
     function _initializePolicyWithClaimExpires(uint128 min, uint128 max) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_CLAIM_EXPIRES, MODE_CHECK_STORAGE);
+        uint32 modeConfig = _createModeConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         bytes memory initData = abi.encodePacked(
             modeConfig,
-            uint256((uint256(min) << 128) | uint256(max)) // packed uint128
+            uint256(min) | (uint256(max) << 128) // packed uint128
         );
 
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
+    /// @notice Initialize policy with tokenIn check
     /// @notice Initialize policy with tokenIn check
     function _initializePolicyWithTokenIn(
         address token,
@@ -641,24 +699,22 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         internal
     {
         uint32 modeConfig = _createModeConfig(FIELD_TOKEN_IN, MODE_CHECK_STORAGE);
+
+        // Create Compact ID in native format: [lockTag HIGH | token LOW]
+        uint256 compactId = (uint256(uint96(lockTag)) << 160) | uint256(uint160(token));
+
         bytes memory initData = abi.encodePacked(
             modeConfig,
             uint256(1), // count
             uint256(chainId),
-            token,
-            lockTag
+            compactId // pass the full Compact ID directly
         );
 
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
     /// @notice Initialize policy with recipient check
-    function _initializePolicyWithRecipient(
-        address recipient,
-        uint256 targetChainId
-    )
-        internal
-    {
+    function _initializePolicyWithRecipient(address recipient, uint256 targetChainId) internal {
         uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         bytes memory initData = abi.encodePacked(
             modeConfig,
@@ -683,16 +739,16 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Create Compact data with specific arbiter
+    /// @notice Create Compact data with specific arbiter (fast path - mandateHash only)
     function _createCompactDataWithArbiter(address arbiter) internal view returns (bytes memory) {
         bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(arbiter, 1);
-        bytes memory mandateData = _createMandateData();
+        bytes memory elementHeader = _createElementHeader(arbiter, 0);
+        bytes32 mandateHash = _computeBasicMandateHash();
 
-        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateHash);
     }
 
-    /// @notice Create Compact data with specific expires
+    /// @notice Create Compact data with specific expires (fast path - mandateHash only)
     function _createCompactDataWithExpires(uint256 expires) internal returns (bytes memory) {
         bytes memory header = abi.encodePacked(
             uint256(1), // nonce
@@ -700,24 +756,24 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             uint256(0) // otherElements length
         );
 
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 1);
-        bytes memory mandateData = _createMandateData();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
+        bytes32 mandateHash = _computeBasicMandateHash();
 
-        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateHash);
     }
 
-    /// @notice Create Compact data with tokenIn
+    /// @notice Create Compact data with tokenIn (fast path - mandateHash only)
     function _createCompactDataWithTokenIn(
         address token,
         bytes12 lockTag,
         uint256 amount,
-        uint256 chainId
+        uint256 elementIndex
     )
         internal
         returns (bytes memory)
     {
         bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), chainId);
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), elementIndex);
 
         // Create tokenIn data: length + packed token/lockTag + amount
         uint256 tokenData = (uint256(uint96(lockTag)) << 160) | uint256(uint160(token));
@@ -727,9 +783,20 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             amount
         );
 
-        bytes memory mandateData = _createMandateData();
+        bytes32 mandateHash = _computeBasicMandateHash();
 
-        return abi.encodePacked(header, elementHeader, tokenInData, mandateData);
+        return abi.encodePacked(header, elementHeader, tokenInData, mandateHash);
+    }
+
+    /// @notice Compute basic mandate hash
+    function _computeBasicMandateHash() private pure returns (bytes32) {
+        return EIP712TypeHashLib.hashMandateRaw(
+            keccak256("target"),
+            uint128(0), // minGas
+            Constants.NO_OPS,
+            Constants.NO_OPS,
+            keccak256("qualification")
+        );
     }
 
     /// @notice Create Compact data with recipient
@@ -741,12 +808,11 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         returns (bytes memory)
     {
         bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 1);
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
 
         // Create target data WITHOUT tokenOut validation (so use hash, not length)
         bytes memory targetData = abi.encodePacked(
             recipient,
-            bytes12(0), // reserved
             targetChainId,
             uint256(block.timestamp + 7200), // fillExpiry
             Constants.EMPTY_TOKEN_OUT_HASH // tokenOutHash
@@ -757,29 +823,6 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         return abi.encodePacked(
             header, elementHeader, keccak256("commitments"), targetData, mandateFooter
         );
-    }
-
-    /// @notice Create Compact data with originOps
-    function _createCompactDataWithOriginOps(
-        bytes32 originOpsHash,
-        uint256 chainId
-    )
-        internal
-        returns (bytes memory)
-    {
-        bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), chainId);
-
-        bytes memory mandateData = abi.encodePacked(
-            keccak256("target"), // targetHash (32 bytes)
-            uint256(1), // targetChainId (32 bytes)
-            uint128(0), // minGas (16 bytes)
-            originOpsHash, // originOpsHash (32 bytes)
-            Constants.NO_OPS, // destOpsHash (32 bytes)
-            keccak256("qualification") // qualificationHash (32 bytes)
-        );
-
-        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
     }
 
     /// @notice Create basic compact header
@@ -794,17 +837,13 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Create element header with arbiter and chainId
     function _createElementHeader(
         address arbiter,
-        uint256 chainId
+        uint256 elementIndex
     )
         private
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(
-            arbiter,
-            bytes12(0), // reserved
-            chainId
-        );
+        return abi.encodePacked(arbiter, elementIndex);
     }
 
     /// @notice Create basic mandate data
@@ -830,48 +869,38 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         );
     }
 
-    /// @notice Compute expected hash for Compact
+    /// @notice Compute expected hash for Compact (fast path - mandateHash directly in calldata)
     function computeExpectedHash(bytes calldata compactData) external view returns (bytes32) {
         // Parse compact data
         uint256 nonce = uint256(bytes32(compactData[0:32]));
         uint256 expires = uint256(bytes32(compactData[32:64]));
 
-        // Skip otherElements (length = 0)
-        uint256 offset = 96; // 32 + 32 + 32
+        // Parse otherElements as calldata
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
-        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
 
-        // Parse mandate
-        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        offset += 32;
-        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
-        offset += 16;
-        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash mandate
-        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
-            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
-        );
+        // Fast path: mandateHash is directly in calldata (32 bytes)
+        bytes32 mandateHash = bytes32(compactData[offset:offset + 32]);
 
         // Hash element
         bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
 
-        // Hash compact
-        bytes32[] memory allElements = new bytes32[](1);
-        allElements[0] = elementHash;
-        bytes32 allElementsHash = EfficientHashLib.hash(allElements);
+        // Insert at index and hash
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
 
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
@@ -886,26 +915,32 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         uint256 nonce = uint256(bytes32(compactData[0:32]));
         uint256 expires = uint256(bytes32(compactData[32:64]));
 
-        // Skip otherElements (length = 0)
-        uint256 offset = 96;
+        // Parse otherElements as calldata
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
-        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 20; // arbiter + reserved
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
 
         // Parse TARGET (expanded!)
         address recipient = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // recipient + reserved
+        offset += 20; // recipient + reserved
         uint256 targetChainId = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         uint256 fillExpiry = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
-        // Since tokenOut is NOT being validated, read the HASH directly
+        // Read tokenOut hash directly
         bytes32 tokenOutHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
 
@@ -930,17 +965,16 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Hash element
         bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
 
-        // Hash compact
-        bytes32[] memory allElements = new bytes32[](1);
-        allElements[0] = elementHash;
-        bytes32 allElementsHash = EfficientHashLib.hash(allElements);
+        // Insert at index and hash
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
 
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
 
     /// @notice Compute expected hash when tokenIn is expanded
+    /// @notice Compute expected hash when tokenIn is expanded (but mandate is fast path)
     function computeExpectedHashWithTokenIn(bytes calldata compactData)
         external
         view
@@ -950,13 +984,19 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         uint256 nonce = uint256(bytes32(compactData[0:32]));
         uint256 expires = uint256(bytes32(compactData[32:64]));
 
-        // Skip otherElements (length = 0)
-        uint256 offset = 96;
+        // Parse otherElements as calldata
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
-        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
         // Parse tokenIn (expanded!)
@@ -974,31 +1014,15 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         bytes32 commitmentsHash = EIP712TypeHashLib.hashTokenIn(tokenIn);
         offset += tokenInLength * 64;
 
-        // Parse mandate
-        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        offset += 32;
-        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
-        offset += 16;
-        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash mandate
-        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
-            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
-        );
+        // Fast path: mandateHash directly (32 bytes)
+        bytes32 mandateHash = bytes32(compactData[offset:offset + 32]);
 
         // Hash element
         bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
 
-        // Hash compact
-        bytes32[] memory allElements = new bytes32[](1);
-        allElements[0] = elementHash;
-        bytes32 allElementsHash = EfficientHashLib.hash(allElements);
+        // Insert at index and hash
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
 
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
@@ -1016,7 +1040,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             modeConfig,
             uint256(1), // count
             targetChainId,
-            uint256((uint256(min) << 128) | uint256(max)) // packed uint128
+            uint256(min) | (uint256(max) << 128) // packed uint128
         );
 
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
@@ -1048,6 +1072,114 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
+    /// @notice Create Compact data with originOps (expanded mandate format)
+    function _createCompactDataWithOriginOps(
+        bytes32 originOpsHash,
+        uint256 elementIndex
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), elementIndex);
+
+        // Use pre-computed targetHash since no target checks
+        bytes32 targetHash = keccak256("target");
+        uint256 targetChainId = block.chainid;
+
+        bytes memory mandateData = abi.encodePacked(
+            targetHash, // targetHash (32 bytes)
+            targetChainId, // targetChainId (32 bytes)
+            uint128(0), // minGas (16 bytes)
+            originOpsHash, // originOpsHash (32 bytes)
+            Constants.NO_OPS, // destOpsHash (32 bytes)
+            keccak256("qualification") // qualificationHash (32 bytes)
+        );
+
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Create Compact data with destOps (expanded mandate format)
+    function _createCompactDataWithDestOps(
+        bytes32 destOpsHash,
+        uint256 targetChainId
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
+
+        // Use pre-computed targetHash since no target checks
+        bytes32 targetHash = keccak256("target");
+
+        bytes memory mandateData = abi.encodePacked(
+            targetHash, // targetHash (32 bytes)
+            targetChainId, // targetChainId (32 bytes)
+            uint128(0), // minGas (16 bytes)
+            Constants.NO_OPS, // originOpsHash (32 bytes)
+            destOpsHash, // destOpsHash (32 bytes)
+            keccak256("qualification") // qualificationHash (32 bytes)
+        );
+
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Compute expected hash when mandate is expanded (no target expansion)
+    /// @dev Used for originOps, destOps tests where mandate fields are checked but target is not
+    function computeExpectedHashWithMandateExpanded(bytes calldata compactData)
+        external
+        view
+        returns (bytes32)
+    {
+        // Parse compact data
+        uint256 nonce = uint256(bytes32(compactData[0:32]));
+        uint256 expires = uint256(bytes32(compactData[32:64]));
+
+        // Parse otherElements as calldata
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
+
+        // Parse element
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+
+        // Parse expanded mandate (no target expansion)
+        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        offset += 32; // skip targetChainId (not needed for hash)
+        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
+        offset += 16;
+        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
+
+        // Hash mandate
+        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
+            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
+        );
+
+        // Hash element
+        bytes32 elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
+
+        // Insert at index and hash
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
+
+        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
+    }
+
     /// @notice Create Compact data with fillExpiry
     function _createCompactDataWithFillExpiry(
         uint256 fillExpiry,
@@ -1057,12 +1189,11 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         returns (bytes memory)
     {
         bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 1);
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
 
         // Create target data with specific fillExpiry
         bytes memory targetData = abi.encodePacked(
             makeAddr("recipient"),
-            bytes12(0), // reserved
             targetChainId,
             fillExpiry,
             Constants.EMPTY_TOKEN_OUT_HASH // tokenOutHash
@@ -1085,13 +1216,12 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         returns (bytes memory)
     {
         bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 1);
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
 
         // Create target data with tokenOut
         uint256 tokenData = uint256(uint160(token));
         bytes memory targetData = abi.encodePacked(
             makeAddr("recipient"),
-            bytes12(0), // reserved
             targetChainId,
             uint256(block.timestamp + 7200), // fillExpiry
             uint256(1), // tokenOut length
@@ -1106,29 +1236,6 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         );
     }
 
-    /// @notice Create Compact data with destOps
-    function _createCompactDataWithDestOps(
-        bytes32 destOpsHash,
-        uint256 targetChainId
-    )
-        internal
-        returns (bytes memory)
-    {
-        bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 1);
-
-        bytes memory mandateData = abi.encodePacked(
-            keccak256("target"), // targetHash (32 bytes)
-            targetChainId, // targetChainId (32 bytes)
-            uint128(0), // minGas (16 bytes)
-            Constants.NO_OPS, // originOpsHash (32 bytes)
-            destOpsHash, // destOpsHash (32 bytes)
-            keccak256("qualification") // qualificationHash (32 bytes)
-        );
-
-        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
-    }
-
     /// @notice Compute expected hash when tokenOut is expanded
     function computeExpectedHashWithTokenOut(bytes calldata compactData)
         external
@@ -1139,20 +1246,26 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         uint256 nonce = uint256(bytes32(compactData[0:32]));
         uint256 expires = uint256(bytes32(compactData[32:64]));
 
-        // Skip otherElements (length = 0)
-        uint256 offset = 96;
+        // Parse otherElements as calldata
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
-        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 20; // arbiter + reserved
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
 
         // Parse TARGET (expanded!)
         address recipient = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // recipient + reserved
+        offset += 20; // recipient + reserved
         uint256 targetChainId = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         uint256 fillExpiry = uint256(bytes32(compactData[offset:offset + 32]));
@@ -1194,12 +1307,10 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Hash element
         bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
 
-        // Hash compact
-        bytes32[] memory allElements = new bytes32[](1);
-        allElements[0] = elementHash;
-        bytes32 allElementsHash = EfficientHashLib.hash(allElements);
+        // Insert at index and hash
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
 
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
@@ -1219,6 +1330,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             uint256(1), // count
             chainId,
             arbiter,
+            uint8(0), // useArbiterHash = false
             paramRules.rootNodeIndex
         );
 
@@ -1251,20 +1363,18 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     function _createCompactDataWithQualification(
         address arbiter,
         bytes memory qualificationData,
-        uint8 flags,
-        uint256 chainId
+        uint256 elementIndex
     )
         internal
         view
         returns (bytes memory)
     {
         bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(arbiter, chainId);
+        bytes memory elementHeader = _createElementHeader(arbiter, elementIndex);
 
         // Create qualification section
         bytes memory qualificationSection = abi.encodePacked(
             uint256(qualificationData.length), // dataLength
-            flags, // flags (0x00 = keccak256, 0x01 = arbiter hash)
             qualificationData // actual qualification data
         );
 
@@ -1290,13 +1400,19 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         uint256 nonce = uint256(bytes32(compactData[0:32]));
         uint256 expires = uint256(bytes32(compactData[32:64]));
 
-        // Skip otherElements (length = 0)
-        uint256 offset = 96;
+        // Parse otherElements as calldata
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
 
         // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 32; // arbiter + reserved
-        uint256 chainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 20; // arbiter + reserved
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
@@ -1316,24 +1432,10 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         uint256 dataLength = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
 
-        uint8 flags = uint8(compactData[offset]);
-        offset += 1;
-
-        // NO SKIP HERE - arbiter is not in the qualification section!
-        // It's already been read from the Element header above!
-
         // Get qualification data
         bytes calldata qualData = compactData[offset:offset + dataLength];
 
-        // Hash based on flags
-        bytes32 qualificationHash;
-        if ((flags & 0x01) != 0) {
-            // Would call arbiter.qualificationHash(qualData)
-            // For tests without arbiter, just use keccak256
-            qualificationHash = keccak256(qualData);
-        } else {
-            qualificationHash = keccak256(qualData);
-        }
+        bytes32 qualificationHash = keccak256(qualData);
 
         // Hash mandate
         bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
@@ -1342,13 +1444,20 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         // Hash element
         bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, chainId, commitmentsHash, mandateHash);
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
 
-        // Hash compact
-        bytes32[] memory allElements = new bytes32[](1);
-        allElements[0] = elementHash;
-        bytes32 allElementsHash = EfficientHashLib.hash(allElements);
+        // Insert at index and hash
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
 
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
+    }
+
+    /// @notice Initialize policy with recipientIsSponsor check (no storage data needed)
+    function _initializePolicyWithRecipientIsSponsor() internal {
+        // Just set the mode bit - no config data required
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+        bytes memory initData = abi.encodePacked(modeConfig);
+
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 }

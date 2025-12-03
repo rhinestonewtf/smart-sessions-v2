@@ -72,7 +72,7 @@ library IdLibV2 {
         returns (bytes12 lockTag)
     {
         // If no allocator is set, use NO_LOCKTAG, otherwise derive from allocator
-        if (allocator == address(0)) {
+        if (allocator != address(0)) {
             lockTag = allocator.toAllocatorId().toLockTag(scope, resetPeriod);
         }
         // Defaults to NO_LOCKTAG

@@ -61,7 +61,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
 
     /// @notice Modifier to restrict access to only Intent Executor
     modifier onlyIntentExecutor() {
-        require(msg.sender == INTENT_EXECUTOR, ISmartSessionEmissary.UnauthorizedSource());
+        require(msg.sender == INTENT_EXECUTOR, UnauthorizedSource());
         _;
     }
 

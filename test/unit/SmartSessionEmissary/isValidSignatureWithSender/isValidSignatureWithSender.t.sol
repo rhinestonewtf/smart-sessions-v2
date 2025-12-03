@@ -430,7 +430,12 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         uint256 policyDataOffset = 64 + validatorSignature.length;
 
         // Return complete signature
-        return abi.encodePacked(testPermissionId, policyDataOffset, signatureWithWrapper);
+        return abi.encodePacked(
+            bytes1(0x01), // 7739 mode
+            testPermissionId,
+            policyDataOffset,
+            signatureWithWrapper
+        );
     }
 
     function _erc6492Wrap(bytes memory signature) internal pure returns (bytes memory) {

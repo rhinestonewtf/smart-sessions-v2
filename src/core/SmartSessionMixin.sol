@@ -20,6 +20,7 @@ import { EncodeLibV2 } from "@lib/EncodeLibV2.sol";
 import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
 import { ExecutionLibV2 } from "@lib/ExecutionLibV2.sol";
+import { ECDSA } from "solady/utils/ECDSA.sol";
 
 // Types
 import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
@@ -414,10 +415,11 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         if (!valid) return false;
 
-        // Determine the digest based on mode
-        // Direct mode: Simple account binding for session keys (cheap, no readability needed)
-        // ERC-7739 mode: Hash already wrapped by _erc1271IsValidSignatureViaNestedEIP712
-        bytes32 digest = directMode ? keccak256(abi.encode(msg.sender, hash)) : hash;
+        // Determine the digest based on mode:
+        // 1) Direct mode: Hash bound to msg.sender and wrapped via ERC191 toEthSignedMessageHash
+        // 2) ERC-7739 mode: Hash wrapped via ERC7739 _erc1271IsValidSignatureViaNestedEIP712
+        bytes32 digest =
+            directMode ? ECDSA.toEthSignedMessageHash(abi.encode(msg.sender, hash)) : hash;
 
         // Validate signature using ISessionValidator
         return $sessionValidators.isValidISessionValidator({

@@ -124,8 +124,8 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  [96:128]   otherElements length (uint256)                 │
     /// │  [128:...]  otherElements (bytes32 each, pre-hashed)       │
     /// │  [...]      element:                                       │
-    /// │             ├── arbiter (20 bytes + 12 padding)            │
-    /// │             ├── elementIndex (32 bytes)                    │
+    /// │             ├── arbiter (address)                          │
+    /// │             ├── elementIndex (uint256)                     │
     /// │             ├── tokenIn OR commitmentsHash                 │
     /// │             └── mandate OR mandateHash                     │
     /// └────────────────────────────────────────────────────────────┘
@@ -141,13 +141,16 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  mandate        │  If ALL mandate fields SKIP →              │
     /// │                 │     mandateHash (32 bytes)                 │
     /// │                 │  If ANY mandate field CHECK →              │
-    /// │                 │     decode mandate struct (see below)      │
+    /// │                 │     parsed field-by-field (see below)      │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  target         │  If ALL target fields SKIP →               │
     /// │  (in mandate)   │     targetHash (32) + targetChainId (32)   │
     /// │                 │  If ANY target field CHECK →               │
-    /// │                 │     recipient (32) + chainId (32) +        │
-    /// │                 │     fillExpiry (32) + tokenOut             │
+    /// │                 │     recipient (20+12) + targetChainId (32) │
+    /// │                 │     + fillExpiry (32) + tokenOut           │
+    /// ├─────────────────┼────────────────────────────────────────────┤
+    /// │  minGas         │  Always uint128 (16 bytes)                 │
+    /// │  (in mandate)   │  Not validated, used for hash computation  │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  tokenOut       │  SKIP  → tokenOutHash (32 bytes)           │
     /// │  (in target)    │  CHECK → [len (32)] + [entries (64 each)]  │
@@ -159,8 +162,38 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  (in mandate)   │  Validation checks hash != NO_OPS if req'd │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  qualification  │  SKIP  → qualificationHash (32 bytes)      │
-    /// │  (in mandate)   │  CHECK → [len (32)] + [flags (1)] + [data] │
+    /// │  (in mandate)   │  CHECK → [len (32)] + [data]               │
     /// └─────────────────┴────────────────────────────────────────────┘
+    /// Note: FIELD_RECIPIENT_IS_SPONSOR requires no calldata -
+    /// when enabled, it simply enforces recipient == sponsor
+    /// during target validation.
+    ///
+    /// Mandate encoding (when ALL mandate fields SKIP):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:32]     mandateHash (bytes32)                          │
+    /// └────────────────────────────────────────────────────────────┘
+    ///
+    /// Mandate encoding (when ANY mandate field CHECK, target SKIP):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:32]     targetHash (bytes32)                           │
+    /// │  [32:64]    targetChainId (uint256)                        │
+    /// │  [64:80]    minGas (uint128)                               │
+    /// │  [80:112]   originOpsHash (bytes32)                        │
+    /// │  [112:144]  destOpsHash (bytes32)                          │
+    /// │  [144:176]  qualificationHash (bytes32) OR [len + data]    │
+    /// └────────────────────────────────────────────────────────────┘
+    ///
+    /// Mandate encoding (when ANY target field CHECK):
+    /// ┌────────────────────────────────────────────────────────────┐
+    /// │  [0:20]     recipient (address)                            │
+    /// │  [20:52]    targetChainId (uint256)                        │
+    /// │  [52:84]    fillExpiry (uint256)                           │
+    /// │  [84:...]   tokenOutHash(bytes32) OR [len + entries]       │
+    /// │  [...]      minGas (uint128, 16 bytes)                     │
+    /// │  [...]      originOpsHash (bytes32)                        │
+    /// │  [...]      destOpsHash (bytes32)                          │
+    /// │  [...]      qualificationHash (32) OR [len + data]         │
+    /// └────────────────────────────────────────────────────────────┘
     // forgefmt: disable-end
     function _validateClaim(
         ConfigId configId,
@@ -382,8 +415,8 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         returns (address arbiter, uint256 elementIndex, uint256 newOffset)
     {
         arbiter = address(bytes20(data[offset:offset + 20]));
-        elementIndex = uint256(bytes32(data[offset + 32:offset + 64]));
-        newOffset = offset + 64;
+        elementIndex = uint256(bytes32(data[offset + 20:offset + 52]));
+        newOffset = offset + 52;
     }
 
     /*//////////////////////////////////////////////////////////////

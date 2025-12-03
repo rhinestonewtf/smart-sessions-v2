@@ -31,7 +31,9 @@ import {
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
-    FIELD_QUALIFICATION
+    FIELD_QUALIFICATION,
+    FIELD_RECIPIENT_IS_SPONSOR,
+    ANY_ADDRESS
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
 
@@ -272,11 +274,26 @@ library BaseValidationLib {
     }
 
     /*//////////////////////////////////////////////////////////////
-                        RECIPIENT VALIDATION
+                            RECIPIENT VALIDATION
     //////////////////////////////////////////////////////////////
 
     Recipient validation ensures funds are sent to authorized
     addresses on the target chain.
+
+    Two validation modes available:
+    ┌─────────────────────────────────────────────────────────────┐
+    │  FIELD_RECIPIENT (storage-based)                            │
+    │  ├── Validates against stored recipient per chainId         │
+    │  ├── Supports ANY_ADDRESS sentinel for wildcards            │
+    │  └── Requires SLOAD for each validation                     │
+    ├─────────────────────────────────────────────────────────────┤
+    │  FIELD_RECIPIENT_IS_SPONSOR (flag-based)                    │
+    │  ├── Enforces recipient == sponsor (the account)            │
+    │  ├── No storage lookup required - just memory comparison    │
+    │  └── Ideal for "bridge to self" session keys                │
+    └─────────────────────────────────────────────────────────────┘
+
+    //////////////////////////////////////////////////////////////*/
 
     //////////////////////////////////////////////////////////////*/
 
@@ -342,7 +359,7 @@ library BaseValidationLib {
         uint256 effectiveChainId = mode.getEffectiveChainId(targetChainId);
         // Get expected recipient
         address expected = $.recipientConfig[effectiveChainId];
-        return recipient == expected;
+        return recipient == expected || expected == ANY_ADDRESS;
     }
 
     /// @notice Validates recipient by delegating to external sub-policy
@@ -1127,12 +1144,18 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 mandateHash)
     {
+        // Fast path: if no mandate-level checks are enabled, just read pre-computed hash
+        if (!config.hasAnyMandateCheck()) {
+            mandateHash = bytes32(data[offset:offset + 32]);
+            return (true, mandateHash);
+        }
+
+        // Initialize variables
         bytes32 targetHash;
         uint256 targetChainId;
 
         // Validate Target if any target-related checks are enabled
-        if (config.hasCheckRecipient() || config.hasCheckFillExpiry() || config.hasCheckTokenOut())
-        {
+        if (config.hasAnyTargetCheck()) {
             bool targetValid;
             (targetValid, targetHash, targetChainId, offset) =
                 validateTarget($, data, offset, config, configId, account, hash);
@@ -1252,13 +1275,18 @@ library BaseValidationLib {
     {
         // Decode Target header
         address recipient = address(bytes20(data[offset:offset + 20]));
-        // Skip 12 bytes padding
-        targetChainId = uint256(bytes32(data[offset + 32:offset + 64]));
-        uint256 fillExpiry = uint256(bytes32(data[offset + 64:offset + 96]));
-        offset += 96;
+        targetChainId = uint256(bytes32(data[offset + 20:offset + 52]));
+        uint256 fillExpiry = uint256(bytes32(data[offset + 52:offset + 84]));
+        offset += 84;
 
         // Validate recipient if required
-        if (config.hasCheckRecipient()) {
+        if (config.hasCheckRecipientIsSponsor()) {
+            // Fast path: recipient must equal sponsor (no storage lookup)
+            if (recipient != account) {
+                return (false, bytes32(0), 0, 0);
+            }
+        } else if (config.hasCheckRecipient()) {
+            // Storage path: validate against stored config
             if (!validateRecipient($, recipient, targetChainId, config, configId, account, hash)) {
                 return (false, bytes32(0), 0, 0);
             }
