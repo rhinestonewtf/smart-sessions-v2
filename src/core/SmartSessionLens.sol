@@ -1,0 +1,417 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.28;
+
+// Contracts
+import { SmartSessionStorage } from "@core/SmartSessionStorage.sol";
+
+// Interfaces
+import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
+
+// Libraries
+import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
+import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
+import { HashLib } from "@smartsessions/lib/HashLib.sol";
+import { HashLibV2 } from "@lib/HashLibV2.sol";
+import { IdLibV2 } from "@lib/IdLibV2.sol";
+
+// Types
+import {
+    PermissionId,
+    ActionId,
+    SignerConf,
+    ERC7739ContextHashes,
+    ERC7579_MODULE_TYPE_VALIDATOR
+} from "@smartsessions/DataTypes.sol";
+import { Session } from "@types/DataTypes.sol";
+
+/// @title SmartSessionLens
+/// @notice Helper contract for reading SmartSession state and managing nonces
+/// @dev Added to mitigate contract size limit, called via delegatecall from SmartSessionEmissary
+///      fallback. This contract inherits SmartSessionStorage to ensure identical storage layout.
+contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
+    /*//////////////////////////////////////////////////////////////
+                               LIBRARIES
+    //////////////////////////////////////////////////////////////*/
+
+    using EnumerableSet for *;
+    using FlatBytesLib for *;
+    using HashLib for string;
+    using HashLibV2 for Session;
+    using IdLibV2 for Session;
+
+    /*//////////////////////////////////////////////////////////////
+                                  7579
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Initialize the module with the given data
+    /// @dev No-op for SmartSessionEmissary, sessions are enabled via setConfig
+    function onInstall(bytes calldata) external { }
+
+    /// @notice De-initialize the module
+    /// @dev No-op for SmartSessionEmissary, sessions are disabled via removeConfig
+    function onUninstall(bytes calldata) external { }
+
+    /// @notice Check if the module is initialized for a specific smart account
+    /// @param smartAccount The smart account address to check
+    /// @return True if the module has any enabled sessions
+    function isInitialized(address smartAccount) external view returns (bool) {
+        return $enabledSessions.length({ account: smartAccount }) != 0;
+    }
+
+    /// @notice Check if the module type matches the validator type
+    /// @param typeID The type ID to check
+    /// @return True if the module type matches
+    function isModuleType(uint256 typeID) external pure returns (bool) {
+        return typeID == ERC7579_MODULE_TYPE_VALIDATOR;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                  NONCE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the current nonce for a given lock tag and sponsor
+    /// @param sponsor The sponsor address
+    /// @param lockTag The lock tag associated with the nonce
+    /// @return The current nonce value
+    function getNonce(address sponsor, bytes12 lockTag) external view returns (uint256) {
+        return $emissaryNonce[sponsor][lockTag];
+    }
+
+    /// @notice Revoke the current nonce for a given lock tag, sponsor being the caller
+    /// @param lockTag The lock tag associated with the nonce to be revoked
+    function revokeNonce(bytes12 lockTag) external {
+        uint256 nonce = ++$emissaryNonce[msg.sender][lockTag];
+        emit NonceIterated(lockTag, msg.sender, nonce);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               PERMISSIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the permission ID from a session
+    /// @param session The session data
+    /// @return permissionId The permission ID derived from the session
+    function getPermissionId(Session calldata session)
+        public
+        pure
+        returns (PermissionId permissionId)
+    {
+        permissionId = session.toPermissionId();
+    }
+
+    /// @notice Get all permission IDs for an account
+    /// @param account The account address
+    /// @return permissionIds Array of permission IDs
+    function getPermissionIds(address account)
+        external
+        view
+        returns (PermissionId[] memory permissionIds)
+    {
+        bytes32[] memory _permissionIds = $enabledSessions.values(account);
+        assembly {
+            permissionIds := _permissionIds
+        }
+    }
+
+    /// @notice Check if a permission ID is enabled for an account
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @return True if the permission is enabled
+    function isPermissionEnabled(
+        address account,
+        PermissionId permissionId
+    )
+        external
+        view
+        returns (bool)
+    {
+        return
+            $enabledSessions.contains({
+                account: account, value: PermissionId.unwrap(permissionId)
+            });
+    }
+
+    /// @notice Check if a lockTag is enabled for an account
+    /// @param account The account address
+    /// @param lockTag The lock tag
+    /// @return True if the lockTag is enabled
+    function isLockTagEnabled(address account, bytes12 lockTag) external view returns (bool) {
+        return $enabledLockTags.contains({ account: account, value: bytes32(lockTag) });
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             ACTION POLICIES
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the action policies for a specific action ID
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param actionId The action ID
+    /// @param lockTag The associated lock tag
+    /// @return Array of policy addresses
+    function getActionPolicies(
+        address account,
+        PermissionId permissionId,
+        ActionId actionId,
+        bytes12 lockTag
+    )
+        external
+        view
+        returns (address[] memory)
+    {
+        return $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].values(
+            account
+        );
+    }
+
+    /// @notice Get all enabled actions for an account
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param lockTag The associated lock tag
+    /// @return Array of enabled action IDs as bytes32
+    function getEnabledActions(
+        address account,
+        PermissionId permissionId,
+        bytes12 lockTag
+    )
+        external
+        view
+        returns (bytes32[] memory)
+    {
+        return $actionPolicies[lockTag].enabledActionIds[permissionId].values(account);
+    }
+
+    /// @notice Check if a specific action policy is enabled
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param actionId The action ID
+    /// @param lockTag The associated lock tag
+    /// @param policy The policy address to check
+    /// @return True if the policy is enabled
+    function isActionPolicyEnabled(
+        address account,
+        PermissionId permissionId,
+        ActionId actionId,
+        bytes12 lockTag,
+        address policy
+    )
+        external
+        view
+        returns (bool)
+    {
+        return $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].contains(
+            account, policy
+        );
+    }
+
+    /// @notice Check if an action ID is enabled
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param actionId The action ID
+    /// @param lockTag The associated lock tag
+    /// @return True if the action ID is enabled
+    function isActionIdEnabled(
+        address account,
+        PermissionId permissionId,
+        ActionId actionId,
+        bytes12 lockTag
+    )
+        external
+        view
+        returns (bool)
+    {
+        return $actionPolicies[lockTag].enabledActionIds[permissionId].contains(
+            account, ActionId.unwrap(actionId)
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             CLAIM POLICIES
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the claim policies for a specific permission ID and lock tag
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param lockTag The associated lock tag
+    /// @return Array of claim policy addresses
+    function getClaimPolicies(
+        address account,
+        PermissionId permissionId,
+        bytes12 lockTag
+    )
+        external
+        view
+        returns (address[] memory)
+    {
+        return $claimPolicies[lockTag].policyList[permissionId].values(account);
+    }
+
+    /// @notice Check if a specific claim policy is enabled
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param lockTag The associated lock tag
+    /// @param policy The policy address to check
+    /// @return True if the policy is enabled
+    function isClaimPolicyEnabled(
+        address account,
+        PermissionId permissionId,
+        bytes12 lockTag,
+        address policy
+    )
+        external
+        view
+        returns (bool)
+    {
+        return $claimPolicies[lockTag].policyList[permissionId].contains(account, policy);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            ERC1271 POLICIES
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the ERC1271 policies for a specific permission ID
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @return Array of ERC1271 policy addresses
+    function getERC1271Policies(
+        address account,
+        PermissionId permissionId
+    )
+        external
+        view
+        returns (address[] memory)
+    {
+        return $erc1271Policies.policyList[permissionId].values(account);
+    }
+
+    /// @notice Check if a specific ERC1271 policy is enabled
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param policy The policy address to check
+    /// @return True if the policy is enabled
+    function isERC1271PolicyEnabled(
+        address account,
+        PermissionId permissionId,
+        address policy
+    )
+        external
+        view
+        returns (bool)
+    {
+        return $erc1271Policies.policyList[permissionId].contains(account, policy);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               ERC7739
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get all enabled ERC7739 content for an account and permission
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @return enabledERC7739ContentHashes Array of ERC7739 context hashes
+    function getEnabledERC7739Content(
+        address account,
+        PermissionId permissionId
+    )
+        external
+        view
+        returns (ERC7739ContextHashes[] memory enabledERC7739ContentHashes)
+    {
+        uint256 length = $enabledERC7739.enabledDomainSeparators[permissionId].length(account);
+        enabledERC7739ContentHashes = new ERC7739ContextHashes[](length);
+
+        for (uint256 i; i < length; i++) {
+            enabledERC7739ContentHashes[i].appDomainSeparator = $enabledERC7739.enabledDomainSeparators[permissionId].at({
+                account: account, index: i
+            });
+            enabledERC7739ContentHashes[i].contentNameHashes = $enabledERC7739.enabledContentNames[permissionId][enabledERC7739ContentHashes[i].appDomainSeparator].values(
+                account
+            );
+        }
+    }
+
+    /// @notice Check if a specific ERC7739 content is enabled
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @param appDomainSeparator The app domain separator
+    /// @param content The content string to check
+    /// @return True if the content is enabled
+    function isERC7739ContentEnabled(
+        address account,
+        PermissionId permissionId,
+        bytes32 appDomainSeparator,
+        string calldata content
+    )
+        external
+        view
+        returns (bool)
+    {
+        return $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(
+            account, content.hashERC7739Content()
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               VALIDATORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the session validator and its configuration
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @return sessionValidator The address of the session validator
+    /// @return sessionValidatorData The session validator configuration data
+    function getSessionValidatorAndConfig(
+        address account,
+        PermissionId permissionId
+    )
+        external
+        view
+        returns (address sessionValidator, bytes memory sessionValidatorData)
+    {
+        SignerConf storage $s = $sessionValidators[permissionId][account];
+        sessionValidator = address($s.sessionValidator);
+        sessionValidatorData = $s.config.load();
+    }
+
+    /// @notice Check if a session validator is set for a permission
+    /// @param account The account address
+    /// @param permissionId The permission ID
+    /// @return True if a session validator is set
+    function isSessionValidatorSet(
+        address account,
+        PermissionId permissionId
+    )
+        external
+        view
+        returns (bool)
+    {
+        return address($sessionValidators[permissionId][account].sessionValidator) != address(0);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                SESSION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the session digest for verification
+    /// @param account The account address
+    /// @param lockTag The lock tag used to identify the session
+    /// @param data The session data
+    /// @param expires The expiration timestamp for the session
+    /// @return The session digest
+    function getSessionDigest(
+        address account,
+        Session memory data,
+        bytes12 lockTag,
+        uint256 expires
+    )
+        external
+        view
+        returns (bytes32)
+    {
+        uint256 nonce = $emissaryNonce[account][lockTag];
+        return
+            data.sessionDigest({
+                account: account, lockTag: lockTag, expires: expires, nonce: nonce
+            });
+    }
+}

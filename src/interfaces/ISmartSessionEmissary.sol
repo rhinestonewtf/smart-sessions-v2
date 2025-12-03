@@ -22,23 +22,11 @@ interface ISmartSessionEmissary is IEmissary {
     /// @notice Thrown when the msg.sender is not the intent executor
     error UnauthorizedSource();
 
-    /// @notice Thrown when the calldata selector is not supported
-    error UnsupportedSelector();
-
-    /// @notice Thrown when the data is not valid
-    error InvalidData();
-
     /// @notice Thrown when the session is not valid
     error InvalidSession(PermissionId permissionId);
 
     /// @notice Thrown when a permission ID is not valid
     error InvalidPermissionId(PermissionId permissionId);
-
-    /// @notice Thrown when the execution type is not supported
-    error UnsupportedExecutionType();
-
-    /// @notice Thrown when the enable session signature is not valid
-    error InvalidEnableSignature(address account, bytes32 hash);
 
     /// @notice Thrown when the Emissary enable data is not valid
     error InvalidEmissaryEnableData();
@@ -46,38 +34,24 @@ interface ISmartSessionEmissary is IEmissary {
     /// @notice Thrown when the Emissary disable data is not valid
     error InvalidEmissaryDisableData();
 
-    /// @notice Thrown when the Emissary configuration is not valid
-    error InvalidEmissaryConfig();
-
     /// @notice Thrown when the Emissary enable data allocator signature is not valid
     error InvalidAllocatorSignature();
 
     /// @notice Thrown when the Emissary enable data user signature is not valid
     error InvalidUserSignature();
 
-    /// @notice Thrown when attempting to install the Smart Session module more than once
-    error SmartSessionModuleAlreadyInstalled();
-
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Emitted when a session is created
-    event SessionCreated(PermissionId permissionId, address account);
-
-    /// @notice Emitted when a session is removed
-    event SessionRemoved(PermissionId permissionId, address smartAccount);
-
-    /// @notice Emitted when an address whitelist status is updated
-    event WhitelistStatusUpdated(address source, bool status);
 
     /// @notice Emitted when a Smart Session Emissary configuration is successfully set for an
     ///         account.
     /// @param account The address of the account for which the configuration was set.
     /// @param permissionId The permission ID associated with the Smart Session.
     /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
+    /// @param enabled Indicates whether the Smart Session Emissary is enabled or disabled.
     event SmartSessionEmissaryConfigUpdated(
-        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag, bool enabled
     );
 
     /*//////////////////////////////////////////////////////////////

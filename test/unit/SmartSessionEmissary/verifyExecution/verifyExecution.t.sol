@@ -11,6 +11,7 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
+import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
 
 // Libraries
 import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
@@ -314,7 +315,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         smartSessionEmissary.enableSessions(sessions, testLockTag);
 
         // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        testPermissionId = ISmartSessionLens(address(smartSessionEmissary)).getPermissionId(session);
 
         // Continue with the test
         _;
@@ -360,7 +361,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         smartSessionEmissary.enableSessions(sessions, testLockTag);
 
         // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        testPermissionId = ISmartSessionLens(address(smartSessionEmissary)).getPermissionId(session);
 
         // Continue with the test
         _;
@@ -399,7 +400,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         smartSessionEmissary.enableSessions(sessions, testLockTag);
 
         // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        testPermissionId = ISmartSessionLens(address(smartSessionEmissary)).getPermissionId(session);
 
         // Continue with the test
         _;
@@ -464,6 +465,6 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         });
 
         // Calculate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        testPermissionId = ISmartSessionLens(address(smartSessionEmissary)).getPermissionId(session);
     }
 }

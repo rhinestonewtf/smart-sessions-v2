@@ -164,6 +164,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// │  qualification  │  SKIP  → qualificationHash (32 bytes)      │
     /// │  (in mandate)   │  CHECK → [len (32)] + [data]               │
     /// └─────────────────┴────────────────────────────────────────────┘
+    ///
     /// Note: FIELD_RECIPIENT_IS_SPONSOR requires no calldata -
     /// when enabled, it simply enforces recipient == sponsor
     /// during target validation.

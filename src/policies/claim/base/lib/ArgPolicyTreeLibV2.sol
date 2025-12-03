@@ -76,8 +76,8 @@ library ArgPolicyTreeLibV2 {
                 param < (ref >> 128) // Check if param is less than min value (high 128 bits)
                     || param
                         > (ref & 0x00000000000000000000000000000000ffffffffffffffffffffffffffffffff) // Check
-                    // if
-                    // param is greater than max value (low 128 bits)
+                // if
+                // param is greater than max value (low 128 bits)
             ) {
                 return false;
             }

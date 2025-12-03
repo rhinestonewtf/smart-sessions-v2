@@ -23,7 +23,45 @@ library DigestCacheLib {
     uint256 private constant TSTORE_BASE_SLOT = 0x468e535faa4b0ffe3d06;
 
     /*//////////////////////////////////////////////////////////////
-                              SMART SESSION
+                                INTERNAL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Computes the transient storage slot for a given digest and session parameters
+    /// @dev Hashes the base slot with account, digest, permissionId, and lockTag to create
+    ///      a unique slot that avoids collisions across different sessions
+    /// @param digest The digest that was verified
+    /// @param account The account address associated with the verification
+    /// @param permissionId The SmartSession permission identifier
+    /// @param lockTag The lock tag associated with the session
+    /// @return slot The computed transient storage slot
+    function _computeSlot(
+        bytes32 digest,
+        address account,
+        PermissionId permissionId,
+        bytes12 lockTag
+    )
+        private
+        pure
+        returns (bytes32 slot)
+    {
+        assembly {
+            // Get the free memory pointer
+            let ptr := mload(0x40)
+
+            // Pack data for hashing: [baseSlot, account, digest, permissionId, lockTag]
+            mstore(ptr, TSTORE_BASE_SLOT)
+            mstore(add(ptr, 0x20), account)
+            mstore(add(ptr, 0x40), digest)
+            mstore(add(ptr, 0x60), permissionId)
+            mstore(add(ptr, 0x80), lockTag)
+
+            // Compute the unique slot via keccak256
+            slot := keccak256(ptr, 0xa0)
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                  GET
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Checks if a digest has already been verified for a SmartSession
@@ -43,21 +81,15 @@ library DigestCacheLib {
         view
         returns (bool isVerified)
     {
+        bytes32 slot = _computeSlot(digest, account, permissionId, lockTag);
         assembly {
-            // Get the free memory pointer
-            let ptr := mload(0x40)
-
-            // Pack data for hashing: [baseSlot, account, digest, permissionId, lockTag]
-            mstore(ptr, TSTORE_BASE_SLOT)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), permissionId)
-            mstore(add(ptr, 0x80), lockTag)
-
-            // Load verification status from transient storage
-            isVerified := tload(keccak256(ptr, 0xa0))
+            isVerified := tload(slot)
         }
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                  SET
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Marks a digest as verified for a SmartSession
     /// @dev Computes a unique slot from the input parameters and stores in transient storage
@@ -73,19 +105,9 @@ library DigestCacheLib {
     )
         internal
     {
+        bytes32 slot = _computeSlot(digest, account, permissionId, lockTag);
         assembly {
-            // Get the free memory pointer
-            let ptr := mload(0x40)
-
-            // Pack data for hashing: [baseSlot, account, digest, permissionId, lockTag]
-            mstore(ptr, TSTORE_BASE_SLOT)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), permissionId)
-            mstore(add(ptr, 0x80), lockTag)
-
-            // Store verified flag in transient storage
-            tstore(keccak256(ptr, 0xa0), VERIFIED)
+            tstore(slot, VERIFIED)
         }
     }
 }

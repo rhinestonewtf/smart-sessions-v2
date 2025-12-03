@@ -8,6 +8,9 @@ import { Solarray } from "solarray/Solarray.sol";
 // Contracts
 import { SmartSessionEmissaryMock } from "@test/mock/SmartSessionEmissaryMock.sol";
 
+// Interfaces
+import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
+
 // Libraries
 import { IntegrationEncodeLib } from "@smartsessions-test/utils/lib/IntegrationEncodeLib.sol";
 
@@ -55,9 +58,10 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         view
         returns (EnableSession memory enableData)
     {
-        bytes32 sessionDigest = smartSessionEmissary.getSessionDigest({
-            lockTag: lockTag, account: instance.account, data: session, expires: expires
-        });
+        bytes32 sessionDigest = ISmartSessionLens(address(smartSessionEmissary))
+            .getSessionDigest({
+                lockTag: lockTag, account: instance.account, data: session, expires: expires
+            });
 
         ChainDigest[] memory chainDigests = IntegrationEncodeLib.encodeHashesAndChainIds(
             Solarray.uint64s(181_818, uint64(block.chainid), 777),

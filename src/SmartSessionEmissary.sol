@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 // Contracts
 import { Emissary as VanillaEmissary } from "@compact-utils/emissary/Emissary.sol";
@@ -24,7 +24,6 @@ import {
 // Types
 import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
 import { PackedUserOperation } from "@modulekit/external/ERC4337.sol";
-import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 /// @title Smart Session Emissary
@@ -45,14 +44,19 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     /// @notice Address of the Intent Executor contract
     address public immutable INTENT_EXECUTOR;
 
+    /// @notice Address of the SmartSessionLens contract for view functions
+    address public immutable LENS;
+
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Constructor to initialize the Smart Session Emissary
     /// @param intentExecutor The address of the Intent Executor contract
-    constructor(address intentExecutor) {
+    /// @param lens The address of the SmartSessionLens contract for view function delegation
+    constructor(address intentExecutor, address lens) {
         INTENT_EXECUTOR = intentExecutor;
+        LENS = lens;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -92,36 +96,34 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         view
         returns (bytes4 result)
     {
-        // ERC-7739 support detection
-        if (hash == 0x7739773977397739773977397739773977397739773977397739773977397739) {
-            return bytes4(0x77390001);
-        }
         // disallow that session can be authorized by other sessions
         if (sender == address(this)) return INVALID_SIGNATURE;
 
         // Unwrap ERC-6492 if present
-        signature = _erc1271UnwrapSignature(signature);
+        signature = _erc1271UnwrapSignature({ signature: signature });
 
         // Decode mode from first byte
         SignatureMode mode = signature.decodeSignatureMode();
 
-        // Extract actual signature (skip mode byte)
+        // Get the actual signature without mode byte
         bytes calldata actualSignature = signature[1:];
 
         // If mode is unrecognized, success is false by default
         bool success;
         if (mode == IS_VALID_SIG_1271) {
             // IS_VALID_SIG_1271 mode uses direct validation without ERC-7739 wrapping
-            success = _erc1271IsValidSignatureNowCalldata(
-                sender,
-                hash,
-                actualSignature,
-                bytes32(0), // No domain separator
-                signature[0:0] // No extra data
-            );
+            success = _erc1271IsValidSignatureNowCalldata({
+                sender: sender, // The address of ERC-1271 sender
+                hash: hash, // The hash of the message
+                signature: actualSignature, // The signature without mode byte
+                appDomainSeparator: bytes32(0), // No app domain separator
+                contents: signature[0:0] // No additional contents
+            });
         } else if (mode == IS_VALID_SIG_1271_7739) {
             // IS_VALID_SIG_1271_7739 mode uses nested EIP-712 validation with ERC-7739 wrapping
-            success = _erc1271IsValidSignatureViaNestedEIP712(sender, hash, actualSignature);
+            success = _erc1271IsValidSignatureViaNestedEIP712({
+                sender: sender, hash: hash, signature: actualSignature
+            });
         }
 
         /// @solidity memory-safe-assembly
@@ -145,7 +147,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     function verifyClaim(
         address sponsor,
         bytes32 digest,
-        bytes32 claimHash,
+        bytes32, // claimHash
         bytes calldata emissaryData,
         bytes12 lockTag
     )
@@ -160,12 +162,16 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         // Mode-based dispatch for claim verification
         if (mode == EMISSARY_VANILLA) {
             // Validate using vanilla emissary signature validation
-            return _validateSignature(sponsor, digest, emissaryData, lockTag)
+            return _validateSignature({
+                sponsor: sponsor, digest: digest, emissaryData: emissaryData, lockTag: lockTag
+            })
                 ? this.verifyClaim.selector
                 : INVALID_SIGNATURE;
         } else if (mode == EMISSARY_SMART_SESSION) {
             // Validate using SmartSession verification
-            return _verifyClaimSmartSession(sponsor, claimHash, emissaryData[1:], lockTag);
+            return _verifyClaimSmartSession({
+                sponsor: sponsor, digest: digest, emissaryData: emissaryData[1:], lockTag: lockTag
+            });
         }
 
         // Default case for unsupported modes
@@ -200,13 +206,20 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         // Mode-based dispatch for execution verification
         if (mode == EMISSARY_VANILLA) {
             // Validate using vanilla emissary signature validation
-            return _validateSignature(sponsor, digest, emissaryData, lockTag)
+            return _validateSignature({
+                sponsor: sponsor, digest: digest, emissaryData: emissaryData, lockTag: lockTag
+            })
                 ? this.verifyExecution.selector
                 : INVALID_SIGNATURE;
         } else if (mode == EMISSARY_SMART_SESSION) {
             // Validate using SmartSession verification
-            return
-                _verifyExecutionSmartSession(sponsor, digest, emissaryData[1:], executions, lockTag);
+            return _verifyExecutionSmartSession({
+                account: sponsor,
+                digest: digest,
+                emissaryData: emissaryData[1:],
+                executions: executions,
+                lockTag: lockTag
+            });
         }
 
         // Default case for unsupported modes
@@ -228,7 +241,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         override
         returns (string memory name, string memory version)
     {
-        name = "SmartSessionEmissary";
+        name = "SSE";
         version = "0.0.1";
     }
 
@@ -240,5 +253,30 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes32)
     {
         return _hashTypedDataSansChainId(hash);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                FALLBACK
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Delegates unknown function calls to the LENS contract
+    /// @dev Enables view functions and nonce management without bloating main contract bytecode
+    fallback() external {
+        address lens = LENS;
+        assembly {
+            // Copy calldata to memory
+            calldatacopy(0, 0, calldatasize())
+
+            // Delegatecall to lens
+            let result := delegatecall(gas(), lens, 0, calldatasize(), 0, 0)
+
+            // Copy returndata to memory
+            returndatacopy(0, 0, returndatasize())
+
+            // Return or revert based on result
+            switch result
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
     }
 }

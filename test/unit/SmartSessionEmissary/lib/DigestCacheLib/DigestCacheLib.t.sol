@@ -27,11 +27,6 @@ contract DigestCacheLib_Unit_Test is Base_Test {
     bytes32 internal digest2;
     bytes32 internal digest3;
 
-    /// @notice Test cache keys
-    bytes32 internal cacheKey1;
-    bytes32 internal cacheKey2;
-    bytes32 internal cacheKey3;
-
     /*//////////////////////////////////////////////////////////////
                                   SETUP
     //////////////////////////////////////////////////////////////*/
@@ -48,11 +43,6 @@ contract DigestCacheLib_Unit_Test is Base_Test {
         digest1 = keccak256("digest1");
         digest2 = keccak256("digest2");
         digest3 = keccak256("digest3");
-
-        // Setup test cache keys
-        cacheKey1 = keccak256("cacheKey1");
-        cacheKey2 = keccak256("cacheKey2");
-        cacheKey3 = keccak256("cacheKey3");
 
         // Label addresses for better trace output
         vm.label(account1, "Account1");

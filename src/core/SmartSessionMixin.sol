@@ -9,13 +9,10 @@ import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { IdLibV2 } from "@lib/IdLibV2.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
-import { ExecutionLib } from "@smartsessions/lib/ExecutionLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
 import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { SignerLib } from "@smartsessions/lib/SignerLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
-import { HashLibV2 } from "@lib/HashLibV2.sol";
-import { SignatureCheckerLib } from "@solady/utils/SignatureCheckerLib.sol";
 import { EncodeLibV2 } from "@lib/EncodeLibV2.sol";
 import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
@@ -47,14 +44,11 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     using IdLib for *;
     using IdLibV2 for *;
     using EnumerableSet for *;
-    using ExecutionLib for *;
     using ExecutionLibV2 for *;
     using PolicyLib for *;
     using PolicyLibV2 for *;
     using SignerLib for *;
     using HashLib for *;
-    using HashLibV2 for *;
-    using SignatureCheckerLib for *;
     using DigestCacheLib for *;
     using SmartExecutionLib for *;
 
@@ -71,7 +65,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         SmartSessionEmissaryConfig calldata config,
         SmartSessionEmissaryEnable calldata enableData
     )
-        public
+        external
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
@@ -80,10 +74,12 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
 
         // Enable policies
-        _enableSession(account, enableData, config, lockTag);
+        _enableSession({
+            account: account, enableData: enableData, config: config, lockTag: lockTag
+        });
 
         // Emit event if the session is enabled
-        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
+        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag, true);
     }
 
     /// @notice Removes a Smart Session Emissary configuration for a specific account
@@ -105,19 +101,19 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
 
         // Disable sessions
-        _disableSessions(
-            account,
-            disableData.session,
-            config.permissionId,
-            lockTag,
-            disableData.expires,
-            config.allocator,
-            disableData.allocatorSig,
-            disableData.userSig
-        );
+        _disableSessions({
+            account: account,
+            disableData: disableData.session,
+            permissionId: config.permissionId,
+            lockTag: lockTag,
+            expires: disableData.expires,
+            allocator: config.allocator,
+            allocatorSig: disableData.allocatorSig,
+            userSig: disableData.userSig
+        });
 
         // Emit event if the session is removed
-        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag);
+        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag, false);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -126,13 +122,13 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Verifies digests using SmartSession (mode 2)
     /// @param sponsor The sponsor account associated with the claim
-    /// @param claimHash The hash of the claim being verified
+    /// @param digest The digest of the claim being verified
     /// @param emissaryData Data containing the permissionId and signature
     /// @param lockTag The lock tag associated with the claim
     /// @return result The verifyClaim selector if valid, otherwise 0xffffffff
     function _verifyClaimSmartSession(
         address sponsor,
-        bytes32 claimHash,
+        bytes32 digest,
         bytes calldata emissaryData,
         bytes12 lockTag
     )
@@ -141,9 +137,13 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         virtual
         returns (bytes4 result)
     {
-        bool success = _claimIsValidSignatureNowCalldata(
-            msg.sender, claimHash, emissaryData, sponsor, lockTag
-        );
+        bool success = _claimIsValidSignatureNowCalldata({
+            sender: msg.sender,
+            digest: digest,
+            signature: emissaryData,
+            sponsor: sponsor,
+            lockTag: lockTag
+        });
         /// @solidity memory-safe-assembly
         // solhint-disable-next-line no-inline-assembly
         assembly {
@@ -159,21 +159,21 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Validates executions using SmartSession policies
     /// @param account The account for which the policies are being enforced
-    /// @param hash The hash of the user operation
+    /// @param digest The digest of claim being verified which includes executions
     /// @param emissaryData Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
     /// @param lockTag The lock tag associated with the execution configuration
-    /// @return bytes4 The function selector on success, or a specific failure code otherwise
+    /// @return result The function selector on success, or a specific failure code otherwise
     function _verifyExecutionSmartSession(
         address account,
-        bytes32 hash,
+        bytes32 digest,
         bytes calldata emissaryData,
         Types.Operation calldata executions,
         bytes12 lockTag
     )
         internal
         virtual
-        returns (bytes4)
+        returns (bytes4 result)
     {
         // Init validSig
         bool validSig;
@@ -184,15 +184,20 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // Enforce action policies
         validSig = _enforceActionPolicies({
             permissionId: permissionId,
-            hash: hash,
+            digest: digest,
             executions: executions.safeToERC7579().parse(),
             decompressedSignature: packedSig,
             account: account,
             lockTag: lockTag
         });
 
-        // Return the function selector on success, or a specific failure code otherwise.
-        return validSig ? this.verifyExecution.selector : INVALID_SIGNATURE;
+        /// @solidity memory-safe-assembly
+        assembly {
+            // forgefmt: disable-next-line
+            // validSig ? bytes4(keccak256("verifyExecution(address,bytes32,bytes,Types.Operation,bytes12)")) : 0xffffffff`.
+            // We use `0xffffffff` for invalid signatures.
+            result := shl(224, or(0x88ec78fb, sub(0, iszero(validSig))))
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -202,7 +207,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @notice Enforces action policies and checks ISessionValidator signature for a session
     /// @dev This function is the core of policy enforcement in SmartSession
     /// @param permissionId The unique identifier for the permission set
-    /// @param hash Message hash to be validated
+    /// @param digest Message digest to be validated
     /// @param executions The execution data for the user operation
     /// @param decompressedSignature The decompressed signature for validation
     /// @param account The account for which policies are being enforced
@@ -210,7 +215,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @return validSig True if the signature is valid, false otherwise
     function _enforceActionPolicies(
         PermissionId permissionId,
-        bytes32 hash,
+        bytes32 digest,
         Execution[] calldata executions,
         bytes memory decompressedSignature,
         address account,
@@ -220,7 +225,9 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         returns (bool validSig)
     {
         // ensure that the permissionId is enabled for the sender, account, and lockTag
-        if (!$enabledSessions.contains(account, PermissionId.unwrap(permissionId))) {
+        if (!$enabledSessions.contains({
+                account: account, value: PermissionId.unwrap(permissionId)
+            })) {
             revert InvalidPermissionId(permissionId);
         }
 
@@ -241,15 +248,17 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
                                 CHECK SESSION KEY
         //////////////////////////////////////////////////////////////*/
 
-        // Check if this hash was already validated
-        if (hash.isAlreadyVerified(account, permissionId, lockTag)) {
+        // Check if this digest was already validated
+        if (digest.isAlreadyVerified({
+                account: account, permissionId: permissionId, lockTag: lockTag
+            })) {
             return true;
         }
 
         // perform signature check with ISessionValidator
         // this function will revert if no ISessionValidator is set for this permissionId
         validSig = $sessionValidators.isValidISessionValidator({
-            hash: hash,
+            hash: digest,
             account: account,
             permissionId: permissionId,
             signature: decompressedSignature
@@ -257,7 +266,9 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         // Cache the result if valid
         if (validSig) {
-            hash.markAsVerified(account, permissionId, lockTag);
+            digest.markAsVerified({
+                account: account, permissionId: permissionId, lockTag: lockTag
+            });
         }
     }
 
@@ -269,14 +280,14 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     ///      4. Validates the signature using ISessionValidator
     /// @dev Signature format:
     /// [permissionId(32)][sigLength(32)][validatorSig(sigLength)][policyData]
-    /// @param hash The hash of the data to be signed
+    /// @param digest The digest of the data to be signed
     /// @param signature The signature to be validated
     /// @param sponsor The address of the account for which the signature is being validated
     /// @param lockTag The lock tag associated with the session
     /// @return valid Boolean indicating whether the signature is valid
     function _claimIsValidSignatureNowCalldata(
         address sender,
-        bytes32 hash,
+        bytes32 digest,
         bytes calldata signature,
         address sponsor,
         bytes12 lockTag
@@ -292,7 +303,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         if (
             // return false if permissionId is not enabled for lockTag and sender
              !$enabledSessions.contains(
-                sponsor, PermissionId.unwrap(permissionId)
+               {account: sponsor, value: PermissionId.unwrap(permissionId)}
             )
         ) return false;
 
@@ -300,13 +311,12 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         uint256 policyDataOffset = uint256(bytes32(signature[32:64]));
 
         // check the claim policy
-        bool valid = $claimPolicies[lockTag]
-        .checkERC1271({
+        bool valid = $claimPolicies[lockTag].checkERC1271({
             account: sponsor,
             requestSender: sender,
-            hash: hash,
+            hash: digest,
             signature: signature[policyDataOffset:], // extract the policy data after the
-                // validator signature
+            // validator signature
             permissionId: permissionId,
             configId: permissionId.toErc1271PolicyId().toConfigId(sponsor),
             minPoliciesToEnforce: 1
@@ -315,14 +325,16 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // if the claim policy check failed, return false
         if (!valid) return valid;
 
-        // Check if this hash was already validated
-        if (hash.isAlreadyVerified(sponsor, permissionId, lockTag)) {
+        // Check if this digest was already validated
+        if (digest.isAlreadyVerified({
+                account: sponsor, permissionId: permissionId, lockTag: lockTag
+            })) {
             return true;
         }
 
         // this call reverts if the ISessionValidator is not set
         return $sessionValidators.isValidISessionValidator({
-            hash: hash,
+            hash: digest,
             account: sponsor,
             permissionId: permissionId,
             signature: signature[64:policyDataOffset] // extract the validator signature
@@ -378,7 +390,9 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         PermissionId permissionId = PermissionId.wrap(bytes32(signature[0:32]));
 
         // Check if permissionId is enabled for msg.sender
-        if (!$enabledSessions.contains(msg.sender, PermissionId.unwrap(permissionId))) {
+        if (!$enabledSessions.contains({
+                account: msg.sender, value: PermissionId.unwrap(permissionId)
+            })) {
             return false;
         }
 
@@ -394,8 +408,9 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         }
 
         // Check that the content hash is enabled for the given permissionId and appDomainSeparator
-        if (!$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator]
-            .contains(msg.sender, contentHash)) {
+        if (!$enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains({
+                account: msg.sender, value: contentHash
+            })) {
             return false;
         }
 

@@ -10,6 +10,7 @@ import {
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
+import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
 
 // Libraries
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
@@ -150,7 +151,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
 
         // Pre-populate cache directly
         smartSessionEmissary.setDigestCacheSmartSession(
-            instance.account, testClaimHash, testPermissionId, testLockTag
+            instance.account, testDigest, testPermissionId, testLockTag
         );
 
         // Mock validator to fail - cache should still make it succeed
@@ -207,7 +208,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.enableSessions(sessions, testLockTag);
 
         // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        testPermissionId = ISmartSessionLens(address(smartSessionEmissary)).getPermissionId(session);
 
         //_ Create mock signature
         _createMockSignature();

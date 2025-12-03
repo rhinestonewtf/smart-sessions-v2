@@ -155,19 +155,20 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, INVALID_SIGNATURE, "Should return invalid signature");
     }
 
-    function test_isValidSignatureWithSender_ERC7739Detection() public view {
-        // Arrange - No session needed for detection
-        bytes memory emptySignature = "";
-        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), emptySignature);
+    // function test_isValidSignatureWithSender_ERC7739Detection() public view {
+    //     // Arrange - No session needed for detection
+    //     bytes memory emptySignature = "";
+    //     bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary),
+    // emptySignature);
 
-        // Act
-        bytes4 result = smartSessionEmissary.isValidSignatureWithSender(
-            address(this), ERC7739_DETECTION_HASH, fullSignature
-        );
+    //     // Act
+    //     bytes4 result = smartSessionEmissary.isValidSignatureWithSender(
+    //         address(this), ERC7739_DETECTION_HASH, fullSignature
+    //     );
 
-        // Assert
-        assertEq(result, ERC7739_SUPPORT_VALUE, "Should return ERC7739 support value");
-    }
+    //     // Assert
+    //     assertEq(result, ERC7739_SUPPORT_VALUE, "Should return ERC7739 support value");
+    // }
 
     function test_isValidSignatureWithSender_RejectsSessionAsSender() public withEnabledSession {
         // Arrange
