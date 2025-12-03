@@ -38,7 +38,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     using ModeLib for bytes;
 
     /*//////////////////////////////////////////////////////////////
-                              CONSTRUCTOR
+                               CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Address of the Intent Executor contract
