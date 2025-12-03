@@ -100,7 +100,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         if (sender == address(this)) return INVALID_SIGNATURE;
 
         // Unwrap ERC-6492 if present
-        signature = _erc1271UnwrapSignature({ signature: signature });
+        signature = _erc1271UnwrapSignature(signature);
 
         // Decode mode from first byte
         SignatureMode mode = signature.decodeSignatureMode();

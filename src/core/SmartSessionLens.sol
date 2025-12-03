@@ -199,9 +199,9 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
         view
         returns (bool)
     {
-        return $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].contains(
-            account, policy
-        );
+        return $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].contains({
+            account: account, value: policy
+        });
     }
 
     /// @notice Check if an action ID is enabled
@@ -220,9 +220,9 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
         view
         returns (bool)
     {
-        return $actionPolicies[lockTag].enabledActionIds[permissionId].contains(
-            account, ActionId.unwrap(actionId)
-        );
+        return $actionPolicies[lockTag].enabledActionIds[permissionId].contains({
+            account: account, value: ActionId.unwrap(actionId)
+        });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -262,7 +262,9 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
         view
         returns (bool)
     {
-        return $claimPolicies[lockTag].policyList[permissionId].contains(account, policy);
+        return $claimPolicies[lockTag].policyList[permissionId].contains({
+            account: account, value: policy
+        });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -298,7 +300,8 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
         view
         returns (bool)
     {
-        return $erc1271Policies.policyList[permissionId].contains(account, policy);
+        return
+            $erc1271Policies.policyList[permissionId].contains({ account: account, value: policy });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -346,9 +349,9 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
         view
         returns (bool)
     {
-        return $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains(
-            account, content.hashERC7739Content()
-        );
+        return $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].contains({
+            account: account, value: content.hashERC7739Content()
+        });
     }
 
     /*//////////////////////////////////////////////////////////////
