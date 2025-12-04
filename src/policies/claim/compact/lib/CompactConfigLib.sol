@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Libraries
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // forgefmt: disable-start
@@ -47,6 +48,7 @@ library CompactConfigLib {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    using CalldataSliceLib for bytes;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
@@ -92,20 +94,19 @@ library CompactConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Decode count (1 bytes)
-        uint8 count = uint8(initData[0]);
-        // Initialize offset
-        uint256 offset = 1;
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
         // Loop through each entry
         for (uint8 i = 0; i < count; i++) {
-            // Decode chainId (32 bytes)
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            // Read Compact ID directly - [lockTag (96 high) | token (160 low)]
-            bytes32 id = bytes32(initData[offset + 32:offset + 64]);
-            // Add to storage set
+            // Slice out chainId and id
+            uint256 chainId;
+            bytes32 id;
+            (chainId, offset) = initData.sliceUint256(offset);
+            // id includes both lockTag and token packed
+            (id, offset) = initData.sliceBytes32(offset);
+            // Write directly to storage
             $.tokenInSet[chainId].add(id);
-            // Advance offset
-            offset += 64;
         }
         // Return remaining calldata
         remaining = initData[offset:];
