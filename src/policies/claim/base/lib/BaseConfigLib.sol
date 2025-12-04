@@ -905,32 +905,32 @@ library BaseConfigLib {
     }
 
     /*//////////////////////////////////////////////////////////////
-                          SUB-POLICIES INITIALIZATION
-        //////////////////////////////////////////////////////////////
+                        SUB-POLICIES INITIALIZATION
+    //////////////////////////////////////////////////////////////
 
-        Layout: [count: 1 byte][entries...]
-        Entry (variable size):
-          [fieldId: 1][policyAddress: 20][initDataLength: 32][initData: variable]
+    Layout: [count: 1 byte][entries...]
+    Entry (variable size):
+        [fieldId: 1][policyAddress: 20][initDataLength: 32][initData: variable]
 
-        ┌────────────────────────────────────────────────────────────┐
-        │  SubPolicy Config                                          │
-        │  ┌────────────────────────────────────────────────────┐    │
-        │  │  count (uint8) - 1 byte                            │    │
-        │  └────────────────────────────────────────────────────┘    │
-        │  ┌────────────────────────────────────────────────────┐    │
-        │  │  Entry (variable):                                 │    │
-        │  │  ┌─────────────────────────────────────────────┐   │    │
-        │  │  │ fieldId (1) | policyAddress (20)            │   │    │
-        │  │  ├─────────────────────────────────────────────┤   │    │
-        │  │  │ initDataLength (32)                         │   │    │
-        │  │  ├─────────────────────────────────────────────┤   │    │
-        │  │  │ initData (initDataLength bytes)             │   │    │
-        │  │  └─────────────────────────────────────────────┘   │    │
-        │  └────────────────────────────────────────────────────┘    │
-        │  ... repeat for count entries ...                          │
-        └────────────────────────────────────────────────────────────┘
+    ┌────────────────────────────────────────────────────────────┐
+    │  SubPolicy Config                                          │
+    │  ┌────────────────────────────────────────────────────┐    │
+    │  │  count (uint8) - 1 byte                            │    │
+    │  └────────────────────────────────────────────────────┘    │
+    │  ┌────────────────────────────────────────────────────┐    │
+    │  │  Entry (variable):                                 │    │
+    │  │  ┌─────────────────────────────────────────────┐   │    │
+    │  │  │ fieldId (1) | policyAddress (20)            │   │    │
+    │  │  ├─────────────────────────────────────────────┤   │    │
+    │  │  │ initDataLength (32)                         │   │    │
+    │  │  ├─────────────────────────────────────────────┤   │    │
+    │  │  │ initData (initDataLength bytes)             │   │    │
+    │  │  └─────────────────────────────────────────────┘   │    │
+    │  └────────────────────────────────────────────────────┘    │
+    │  ... repeat for count entries ...                          │
+    └────────────────────────────────────────────────────────────┘
 
-        //////////////////////////////////////////////////////////////*/
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Decodes sub-policy configs, writes addresses to storage, and initializes each
     /// @dev Reads directly from calldata and calls sub-policies in loop - no memory allocation
@@ -969,11 +969,9 @@ library BaseConfigLib {
             // Write policy address to storage
             $.subPolicies[fieldId] = policyAddress;
 
-            // Slice out init data length and data
-            uint256 initDataLength;
-            (initDataLength, offset) = initData.sliceUint256(offset);
+            // Slice out init data with length prefix
             bytes calldata policyInitData;
-            (policyInitData, offset) = initData.sliceBytes(offset, initDataLength);
+            (policyInitData, offset) = initData.sliceBytesWithLength(offset);
 
             // Initialize sub-policy directly with calldata slice
             I1271Policy(policyAddress).initializeWithMultiplexer(account, configId, policyInitData);

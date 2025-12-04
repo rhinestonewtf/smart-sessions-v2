@@ -1,0 +1,11 @@
+CalldataSliceLib::sliceBytes32
+├── given valid bytes32 at start
+│   ├── it should return correct value
+│   └── it should return offset + 32
+├── given bytes32 at offset
+│   ├── it should read from correct position
+│   └── it should return offset + 32
+├── given max value (all 0xFF)
+│   └── it should handle max value correctly
+└── given sequential reads
+    └── it should read each value correctly with advancing offset

@@ -904,35 +904,32 @@ library BaseValidationLib {
     }
 
     /*//////////////////////////////////////////////////////////////
-                      QUALIFICATION VALIDATION
-    //////////////////////////////////////////////////////////////
+                       QUALIFICATION VALIDATION
+     //////////////////////////////////////////////////////////////
 
-    Qualification is arbitrary arbiter-specific data.
-    The validation:
-    1. Evaluates parameter rules against qualification data
-    2. Computes the qualification hash
+     Qualification is arbitrary arbiter-specific data.
+     The validation:
+     1. Evaluates parameter rules against qualification data
+     2. Computes the qualification hash
 
-    Qualification data format:
-    ┌────────────────────────────────────────────────────────┐
-    │  Qualification Data                                    │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  dataLength (uint256) - 32 bytes               │    │
-    │  └────────────────────────────────────────────────┘    │
-    │  If we use sub policy mode, we need to include a flag: │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  flags (uint8) - 1 byte                        │    │
-    │  │  ┌──────────────────────────────────────────┐  │    │
-    │  │  │ bit 0: useArbiterHash                    │  │    │
-    │  │  │   0 = use keccak256(data)                │  │    │
-    │  │  │   1 = call arbiter.qualificationHash()   │  │    │
-    │  │  └──────────────────────────────────────────┘  │    │
-    │  └────────────────────────────────────────────────┘    │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  qualificationData (dataLength bytes)          │    │
-    │  └────────────────────────────────────────────────┘    │
-    └────────────────────────────────────────────────────────┘
+     Qualification data format (storage mode):
+     ┌────────────────────────────────────────────────────────┐
+     │  [dataLength: 32][qualificationData: dataLength]       │
+     └────────────────────────────────────────────────────────┘
 
-    //////////////////////////////////////////////////////////////*/
+     Qualification data format (sub-policy mode):
+     ┌────────────────────────────────────────────────────────┐
+     │  [flags: 1][dataLength: 32][qualificationData: length] │
+     │                                                        │
+     │  flags (uint8):                                        │
+     │  ┌──────────────────────────────────────────┐          │
+     │  │ bit 0: useArbiterHash                    │          │
+     │  │   0 = use keccak256(data)                │          │
+     │  │   1 = call arbiter.qualificationHash()   │          │
+     │  └──────────────────────────────────────────┘          │
+     └────────────────────────────────────────────────────────┘
+
+     //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates qualification data with mode-based routing
     /// @dev Evaluates parameter rules and computes qualification hash
@@ -1001,17 +998,13 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
-        // Slice out data length
-        uint256 dataLength;
-        (dataLength, offset) = data.sliceUint256(offset);
+        // Slice out qualification data with length prefix
+        bytes calldata qualificationData;
+        (qualificationData, offset) = data.sliceBytesWithLength(offset);
 
         // Get config for this chain+arbiter
         uint256 effectiveChainId = mode.getEffectiveChainId(chainId);
         QualificationRulesStorage storage config = $.qualificationConfig[effectiveChainId][arbiter];
-
-        // Extract qualification data
-        bytes calldata qualificationData;
-        (qualificationData, offset) = data.sliceBytes(offset, dataLength);
 
         // Evaluate parameter rules if any exist
         if (config.rules.rules.length != 0) {
@@ -1058,17 +1051,13 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
-        // Slice out data length
-        uint256 dataLength;
-        (dataLength, offset) = data.sliceUint256(offset);
-
-        // Slice out flags byte
+        // Slice out flags byte first
         uint8 flags;
         (flags, offset) = data.sliceUint8(offset);
 
-        // Slice out qualification data
+        // Slice out qualification data with length prefix
         bytes calldata qualificationData;
-        (qualificationData, offset) = data.sliceBytes(offset, dataLength);
+        (qualificationData, offset) = data.sliceBytesWithLength(offset);
 
         // Delegate to sub-policy
         address policy = $.subPolicies[FIELD_QUALIFICATION];
@@ -1179,7 +1168,7 @@ library BaseValidationLib {
         // Read minGas (not validated, just for hash computation)
         uint128 minGas = uint128(bytes16(data[offset:offset + 16]));
         offset += 16;
-        // We're not using CalldataSlice lib to avoid stack too deep x)
+        // We're not using CalldataSlice lib to avoid stack too deep :)
 
         // Validate originOps
         bytes32 originOpsHash;
@@ -1285,7 +1274,7 @@ library BaseValidationLib {
         targetChainId = uint256(bytes32(data[offset + 20:offset + 52]));
         uint256 fillExpiry = uint256(bytes32(data[offset + 52:offset + 84]));
         offset += 84;
-        // We're not using CalldataSlice lib to avoid stack too deep x)
+        // We're not using CalldataSlice lib to avoid stack too deep :)
 
         // Validate recipient if required
         if (config.hasCheckRecipientIsSponsor()) {

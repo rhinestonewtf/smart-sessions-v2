@@ -1,0 +1,11 @@
+CalldataSliceLib::sliceBool
+├── given zero byte
+│   ├── it should return false
+│   └── it should return offset + 1
+├── given 0x01 byte
+│   ├── it should return true
+│   └── it should return offset + 1
+├── given non-zero byte (0xFF)
+│   └── it should return true
+└── given sequential reads
+    └── it should read each bool correctly with advancing offset

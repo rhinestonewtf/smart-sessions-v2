@@ -245,24 +245,4 @@ library CalldataSliceLib {
         val = data[offset + 32:offset + 32 + length];
         newOffset = offset + 32 + length;
     }
-
-    /// @notice Creates a calldata slice of specified length
-    /// @dev Length is passed in, not read from calldata
-    /// @param data The calldata bytes to slice from
-    /// @param offset The offset where the slice starts
-    /// @param length The length of the slice
-    /// @return val Calldata slice
-    /// @return newOffset The offset after the slice (offset + length)
-    function sliceBytes(
-        bytes calldata data,
-        uint256 offset,
-        uint256 length
-    )
-        internal
-        pure
-        returns (bytes calldata val, uint256 newOffset)
-    {
-        val = data[offset:offset + length];
-        newOffset = offset + length;
-    }
 }
