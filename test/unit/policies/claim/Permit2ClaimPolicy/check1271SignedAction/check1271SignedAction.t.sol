@@ -1066,8 +1066,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     /// @notice Initialize policy with arbiter check
     function _initializePolicyWithArbiter(address arbiter) internal {
         uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(modeConfig, uint256(1), arbiter);
-
+        bytes memory initData = abi.encodePacked(modeConfig, uint8(1), arbiter);
         permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
@@ -1082,18 +1081,15 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     /// @notice Initialize policy with tokenIn check (Permit2 format - no lockTag)
     function _initializePolicyWithTokenIn(address token) internal {
         uint32 modeConfig = _createModeConfig(FIELD_TOKEN_IN, MODE_CHECK_STORAGE);
-
         bytes memory initData =
-            abi.encodePacked(modeConfig, uint256(1), uint256(block.chainid), token);
-
+            abi.encodePacked(modeConfig, uint8(1), uint256(block.chainid), token);
         permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
     /// @notice Initialize policy with recipient check
     function _initializePolicyWithRecipient(address recipient, uint256 targetChainId) internal {
         uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(modeConfig, uint256(1), targetChainId, recipient);
-
+        bytes memory initData = abi.encodePacked(modeConfig, uint8(1), targetChainId, recipient);
         permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
@@ -1101,8 +1097,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     function _initializePolicyWithOriginOps(bool required) internal {
         uint32 modeConfig = _createModeConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         bytes memory initData =
-            abi.encodePacked(modeConfig, uint256(1), block.chainid, uint8(required ? 1 : 0));
-
+            abi.encodePacked(modeConfig, uint8(1), block.chainid, uint8(required ? 1 : 0));
         permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
@@ -1116,17 +1111,15 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     {
         uint32 modeConfig = _createModeConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         bytes memory initData = abi.encodePacked(
-            modeConfig, uint256(1), targetChainId, uint256(min) | (uint256(max) << 128)
+            modeConfig, uint8(1), targetChainId, uint256(min) | (uint256(max) << 128)
         );
-
         permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
     /// @notice Initialize policy with tokenOut check
     function _initializePolicyWithTokenOut(address token, uint256 targetChainId) internal {
         uint32 modeConfig = _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(modeConfig, uint256(1), targetChainId, token);
-
+        bytes memory initData = abi.encodePacked(modeConfig, uint8(1), targetChainId, token);
         permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
@@ -1134,8 +1127,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
     function _initializePolicyWithDestOps(bool required, uint256 targetChainId) internal {
         uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         bytes memory initData =
-            abi.encodePacked(modeConfig, uint256(1), targetChainId, uint8(required ? 1 : 0));
-
+            abi.encodePacked(modeConfig, uint8(1), targetChainId, uint8(required ? 1 : 0));
         permit2ClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
@@ -1152,17 +1144,17 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
 
         bytes memory initData = abi.encodePacked(
             modeConfig,
-            uint256(1), // count
-            targetChainId, // chainId for lookup
-            arbiter, // arbiter for lookup (the Permit2 spender)
+            uint8(1), // count
+            targetChainId,
+            arbiter,
             uint8(0), // useArbiterHash = false
             uint8(0), // rootNodeIndex
-            uint256(1), // ruleCount
+            uint8(1), // ruleCount
             uint8(ParamCondition.EQUAL),
             uint64(offset),
             uint8(32),
             refValue,
-            uint256(1), // packedNodesCount
+            uint8(1), // packedNodesCount
             uint256(0) // node: type=RULE, ruleIndex=0
         );
 
@@ -1196,7 +1188,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(uint256(1), uint256(uint160(token)), amount);
+        return abi.encodePacked(uint8(1), uint256(uint160(token)), amount);
     }
 
     /// @notice Creates basic mandate data with default values
@@ -1281,10 +1273,10 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         returns (bytes memory)
     {
         return abi.encodePacked(
-            recipient, // 20 bytes
+            recipient,
             targetChainId,
             fillExpiry,
-            uint256(1), // tokenOut length
+            uint8(1), // tokenOut length
             uint256(uint160(tokenOut)),
             tokenOutAmount,
             SAMPLE_MIN_GAS,

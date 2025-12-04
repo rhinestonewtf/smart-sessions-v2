@@ -42,13 +42,13 @@ library Permit2ConfigLib {
                       TOKEN IN INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [chainId: 32 bytes][token: 20 bytes] = 52 bytes each
 
     ┌────────────────────────────────────────────────────────┐
     │  Permit2 TokenIn Config                                │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (52 bytes):                             │    │
@@ -61,7 +61,7 @@ library Permit2ConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 52) bytes
+    Total size: 1 + (count × 52) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -78,12 +78,12 @@ library Permit2ConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Decode count (32 bytes)
-        uint256 count = uint256(bytes32(initData[0:32]));
+        // Decode count (1 bytes)
+        uint8 count = uint8(initData[0]);
         // Start offset after count
-        uint256 offset = 32;
+        uint256 offset = 1;
         // Loop through each entry
-        for (uint256 i = 0; i < count; i++) {
+        for (uint8 i = 0; i < count; i++) {
             // Decode chainId (32 bytes)
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
             // Decode token (20 bytes)

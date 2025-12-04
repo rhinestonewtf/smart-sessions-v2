@@ -72,9 +72,6 @@ abstract contract BaseClaimPolicy is I1271Policy {
     /// @notice Thrown when policy initialization fails due to invalid configuration data
     error InvalidConfigurationData();
 
-    /// @notice Thrown when an invalid mode is provided
-    error InvalidMode();
-
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -133,40 +130,40 @@ abstract contract BaseClaimPolicy is I1271Policy {
     /// ┌─────────────────┬────────────────────────────────────────────┐
     /// │  Field          │  Encoding                                  │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  arbiter        │  [count (32)] + [addr (20)] × count        │
+    /// │  arbiter        │  [count (1)] + [addr (20)] × count         │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  expiry         │  [minExpiry (16)] + [maxExpiry (16)]       │
     /// ├─────────────────┼────────────────────────────────────────────┤
     /// │  tokenIn        │  COMPACT:                                  │
-    /// │                 │    [count (32)] + entries:                 │
+    /// │                 │    [count (1)] + entries:                  │
     /// │                 │      [chainId (32)] + [token (20)] +       │
     /// │                 │      [lockTag (12)]                        │
     /// │                 │  PERMIT2:                                  │
-    /// │                 │    [count (32)] + entries:                 │
+    /// │                 │    [count (1)] + entries:                  │
     /// │                 │      [chainId (32)] + [token (20)]         │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  recipient      │  [count (32)] + entries:                   │
+    /// │  recipient      │  [count (1)] + entries:                    │
     /// │                 │    [targetChainId (32)] + [recipient (20)] │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  fillExpiry     │  [count (32)] + entries:                   │
+    /// │  fillExpiry     │  [count (1)] + entries:                    │
     /// │                 │    [targetChainId (32)] +                  │
     /// │                 │    [minFillExpiry (16)] +                  │
     /// │                 │    [maxFillExpiry (16)]                    │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  tokenOut       │  [count (32)] + entries:                   │
+    /// │  tokenOut       │  [count (1)] + entries:                    │
     /// │                 │    [targetChainId (32)] + [token (20)]     │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  originOps      │  [count (32)] + entries:                   │
+    /// │  originOps      │  [count (1)] + entries:                    │
     /// │                 │    [chainId (32)] + [required (1)]         │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  destOps        │  [count (32)] + entries:                   │
+    /// │  destOps        │  [count (1)] + entries:                    │
     /// │                 │    [targetChainId (32)] + [required (1)]   │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  qualification  │  [count (32)] + entries:                   │
+    /// │  qualification  │  [count (1)] + entries:                    │
     /// │                 │    [chainId (32)] + [arbiter (20)] +       │
-    /// │                 │    [rulesLen (32)] + [rules (variable)]    │
+    /// │                 │    [rulesLen (1)] + [rules (variable)]     │
     /// ├─────────────────┼────────────────────────────────────────────┤
-    /// │  subPolicies    │  [count (32)] + entries:                   │
+    /// │  subPolicies    │  [count (1)] + entries:                    │
     /// │  (if any        │    [fieldId (1)] + [policyAddr (20)] +     │
     /// │   SUBPOLICY)    │    [initDataLen (32)] + [initData (...)]   │
     /// ├─────────────────┼────────────────────────────────────────────┤
@@ -178,18 +175,18 @@ abstract contract BaseClaimPolicy is I1271Policy {
     /// Example - Compact with arbiter + tokenIn + recipient:
     /// ┌────────────────────────────────────────────────────────────┐
     /// │  [0:4]      0x00000015 (AR=01, TI=01, RC=01, rest=00)      │
-    /// │  [4:36]     arbiter count = 1                              │
-    /// │  [36:56]    arbiter address                                │
-    /// │  [56:88]    tokenIn count = 2                              │
-    /// │  [88:120]   tokenIn[0].chainId                             │
-    /// │  [120:140]  tokenIn[0].token                               │
-    /// │  [140:152]  tokenIn[0].lockTag                             │
-    /// │  [152:184]  tokenIn[1].chainId                             │
-    /// │  [184:204]  tokenIn[1].token                               │
-    /// │  [204:216]  tokenIn[1].lockTag                             │
-    /// │  [216:248]  recipient count = 1                            │
-    /// │  [248:280]  recipient[0].targetChainId                     │
-    /// │  [280:300]  recipient[0].recipient                         │
+    /// │  [4:5]      arbiter count = 1                              │
+    /// │  [5:25]     arbiter address                                │
+    /// │  [25:26]    tokenIn count = 2                              │
+    /// │  [26:58]    tokenIn[0].chainId                             │
+    /// │  [58:78]    tokenIn[0].token                               │
+    /// │  [78:90]    tokenIn[0].lockTag                             │
+    /// │  [90:122]   tokenIn[1].chainId                             │
+    /// │  [122:142]  tokenIn[1].token                               │
+    /// │  [142:154]  tokenIn[1].lockTag                             │
+    /// │  [154:155]  recipient count = 1                            │
+    /// │  [155:187]  recipient[0].targetChainId                     │
+    /// │  [187:207]  recipient[0].recipient                         │
     /// └────────────────────────────────────────────────────────────┘
     // forgefmt: disable-end
     function initializeWithMultiplexer(
@@ -290,24 +287,11 @@ abstract contract BaseClaimPolicy is I1271Policy {
 
         // Decode and initialize sub-policy configs if any
         if (data.length != 0) {
-            // Initialize sub-policy config variables
-            uint256 subPolicyCount;
-            uint8[] memory fieldIds;
-            address[] memory policyAddresses;
-            bytes[] memory subPolicyInitDatas;
-            (data, subPolicyCount, fieldIds, policyAddresses, subPolicyInitDatas) =
-                $.initializeSubPolicies(data);
-            // Initialize each sub-policy
-            for (uint256 i = 0; i < subPolicyCount; i++) {
-                // Validate mode is SUBPOLICY
-                require(modeConfig.getFieldMode(fieldIds[i]) == MODE_CHECK_SUBPOLICY, InvalidMode());
-                // Initialize sub-policy
-                I1271Policy(policyAddresses[i])
-                    .initializeWithMultiplexer(account, configId, subPolicyInitDatas[i]);
-            }
-            // Make sure all data is consumed
-            require(data.length == 0, InvalidConfigurationData());
+            data = $.initializeSubPolicies(data, modeConfig, account, configId);
         }
+
+        // Make sure all data is consumed
+        require(data.length == 0, InvalidConfigurationData());
 
         // Emit initialized event
         emit PolicyInitialized(configId, account, modeConfig);

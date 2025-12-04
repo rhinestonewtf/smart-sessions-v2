@@ -26,7 +26,7 @@ import { MODE_SKIP, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTy
 /// │                                                            │
 /// │  Input (calldata):                                         │
 /// │  ┌──────────────────────────────────────────────────────┐  │
-/// │  │  length (32 bytes)                                   │  │
+/// │  │  length (1 byte)                                     │  │
 /// │  │  Lock[]: [id (32) | amount (32)] × length            │  │
 /// │  │  id = [lockTag (96 high) | token (160 low)]          │  │
 /// │  └──────────────────────────────────────────────────────┘  │
@@ -140,8 +140,8 @@ library CompactValidationLib {
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
         // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        uint8 length = uint8(data[offset]);
+        offset += 1;
 
         // Get whitelist (chainId=0 for catchall)
         uint256 effectiveChainId = mode.getEffectiveChainId(chainId);
@@ -160,7 +160,7 @@ library CompactValidationLib {
         }
 
         // Validate each entry
-        for (uint256 i = 0; i < length; i++) {
+        for (uint8 i = 0; i < length; i++) {
             // Reject if not in set
             if (!tokenSet.contains(
                     bytes32(tokenIn[i][0]) // packed token+lockTag
@@ -204,8 +204,8 @@ library CompactValidationLib {
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
         // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        uint8 length = uint8(data[offset]);
+        offset += 1;
 
         // Create calldata pointer
         uint256[2][] calldata tokenIn;

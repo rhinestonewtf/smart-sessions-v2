@@ -25,7 +25,7 @@ import { MODE_SKIP, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTy
 /// │                                                            │
 /// │  Input (calldata):                                         │
 /// │  ┌──────────────────────────────────────────────────────┐  │
-/// │  │  length (32 bytes)                                   │  │
+/// │  │  length (1 byte)                                     │  │
 /// │  │  TokenPermissions[]: [token (32) | amount (32)] each │  │
 /// │  └──────────────────────────────────────────────────────┘  │
 /// │                                                            │
@@ -149,8 +149,8 @@ library Permit2ValidationLib {
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
         // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        uint8 length = uint8(data[offset]);
+        offset += 1;
 
         // Get whitelist using block.chainid
         uint256 effectiveChainId = mode.getEffectiveChainId(block.chainid);
@@ -211,8 +211,8 @@ library Permit2ValidationLib {
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
         // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        uint8 length = uint8(data[offset]);
+        offset += 1;
 
         // Create calldata pointer
         uint256[2][] calldata tokenPermissions;

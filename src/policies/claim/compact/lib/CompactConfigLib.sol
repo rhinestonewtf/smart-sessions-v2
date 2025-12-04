@@ -53,7 +53,7 @@ library CompactConfigLib {
                       TOKEN IN INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [chainId: 32 bytes][id: 32 bytes] = 64 bytes each
 
     The id is a Compact resource lock ID: [lockTag (96 high) | token (160 low)]
@@ -61,7 +61,7 @@ library CompactConfigLib {
     ┌────────────────────────────────────────────────────────┐
     │  Compact TokenIn Config                                │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (64 bytes):                             │    │
@@ -75,7 +75,7 @@ library CompactConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 64) bytes
+    Total size: 1 + (count × 64) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -92,12 +92,12 @@ library CompactConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Decode count (32 bytes)
-        uint256 count = uint256(bytes32(initData[0:32]));
+        // Decode count (1 bytes)
+        uint8 count = uint8(initData[0]);
         // Initialize offset
-        uint256 offset = 32;
+        uint256 offset = 1;
         // Loop through each entry
-        for (uint256 i = 0; i < count; i++) {
+        for (uint8 i = 0; i < count; i++) {
             // Decode chainId (32 bytes)
             uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
             // Read Compact ID directly - [lockTag (96 high) | token (160 low)]

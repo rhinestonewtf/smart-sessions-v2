@@ -507,7 +507,7 @@ library BaseValidationLib {
     ┌────────────────────────────────────────────────────────┐
     │  TokenOut Array                                        │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  length (uint256) - 32 bytes                   │    │
+    │  │  length (uint8) - 1 byte                       │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (64 bytes = 2 slots):                   │    │
@@ -584,8 +584,8 @@ library BaseValidationLib {
         returns (bool valid, bytes32 tokenOutHash, uint256 newOffset)
     {
         // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        uint8 length = uint8(data[offset]);
+        offset += 1;
 
         // Get whitelist for this chain (or catch-all)
         uint256 effectiveChainId = mode.getEffectiveChainId(targetChainId);
@@ -604,7 +604,7 @@ library BaseValidationLib {
         }
 
         // Validate each token against whitelist
-        for (uint256 i = 0; i < length; i++) {
+        for (uint8 i = 0; i < length; i++) {
             address token = address(uint160(tokenOut[i][0]));
 
             if (!tokenSet.contains(token)) {
@@ -643,8 +643,8 @@ library BaseValidationLib {
         returns (bool, bytes32, uint256)
     {
         // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        uint8 length = uint8(data[offset]);
+        offset += 1;
 
         // Create calldata pointer to token array (2 slots per entry)
         uint256[2][] calldata tokenOut;
