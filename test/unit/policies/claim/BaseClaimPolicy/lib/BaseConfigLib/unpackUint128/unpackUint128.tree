@@ -1,0 +1,11 @@
+BaseConfigLib::unpackUint128
+├── given zero packed value
+│   └── it should return (0, 0)
+├── given only lower bits set
+│   └── it should return (lower, 0)
+├── given only upper bits set
+│   └── it should return (0, upper)
+├── given both set
+│   └── it should return both values correctly
+└── given max packed value
+    └── it should return (max, max)

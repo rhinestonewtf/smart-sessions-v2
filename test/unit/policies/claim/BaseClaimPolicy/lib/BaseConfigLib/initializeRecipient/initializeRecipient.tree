@@ -1,0 +1,11 @@
+BaseConfigLib::initializeRecipient
+├── given zero entries
+│   └── it should return remaining data unchanged
+├── given single entry
+│   ├── it should write recipient to storage for chainId
+│   └── it should return remaining calldata
+├── given multiple entries
+│   ├── it should write all recipients to storage
+│   └── it should return remaining calldata
+└── given extra data after entries
+    └── it should return extra data as remaining
