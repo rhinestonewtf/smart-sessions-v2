@@ -1,0 +1,29 @@
+BaseValidationLib::validateTarget
+├── given RECIPIENT_IS_SPONSOR is enabled
+│   ├── given recipient equals account
+│   │   └── it should return valid = true
+│   └── given recipient does not equal account
+│       └── it should return valid = false
+├── given RECIPIENT is enabled (storage mode)
+│   ├── given recipient passes validation
+│   │   └── it should return valid = true
+│   └── given recipient fails validation
+│       └── it should return valid = false
+├── given FILL_EXPIRY is enabled
+│   ├── given fillExpiry passes validation
+│   │   └── it should return valid = true
+│   └── given fillExpiry fails validation
+│       └── it should return valid = false
+├── given TOKEN_OUT is enabled
+│   ├── given tokenOut passes validation
+│   │   ├── it should return valid = true
+│   │   └── it should include tokenOutHash in targetHash
+│   └── given tokenOut fails validation
+│       └── it should return valid = false
+├── given TOKEN_OUT is not enabled
+│   └── it should read pre-computed tokenOutHash from calldata
+├── given multiple fields enabled
+│   └── it should validate all fields and compute correct targetHash
+├── given no fields enabled
+│   └── it should read pre-computed targetHash from calldata
+└── it should return correct targetChainId and newOffset

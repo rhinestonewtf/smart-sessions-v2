@@ -7,6 +7,20 @@ import { Base_Test } from "@test/Base.t.sol";
 // Libraries
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
 
+// Types
+import {
+    FIELD_ARBITER as FILED_ARBITER_CONSTANT,
+    FIELD_EXPIRY as FIELD_EXPIRY_CONSTANT,
+    FIELD_TOKEN_IN as FIELD_TOKEN_IN_CONSTANT,
+    FIELD_RECIPIENT as FIELD_RECIPIENT_CONSTANT,
+    FIELD_FILL_EXPIRY as FIELD_FILL_EXPIRY_CONSTANT,
+    FIELD_TOKEN_OUT as FIELD_TOKEN_OUT_CONSTANT,
+    FIELD_ORIGIN_OPS as FIELD_ORIGIN_OPS_CONSTANT,
+    FIELD_DEST_OPS as FIELD_DEST_OPS_CONSTANT,
+    FIELD_QUALIFICATION as FIELD_QUALIFICATION_CONSTANT,
+    FIELD_RECIPIENT_IS_SPONSOR as FIELD_RECIPIENT_IS_SPONSOR_CONSTANT
+} from "@policies/claim/base/types/BaseDataTypes.sol";
+
 /// @title BaseConfigLib Unit Test Base
 /// @notice Base contract for BaseConfigLib unit tests
 /// @dev Provides common state variables and constants used across all function tests
@@ -22,16 +36,16 @@ contract BaseConfigLib_Unit_Test is Base_Test {
     uint8 internal constant MODE_CHECK_SUBPOLICY = 3;
 
     /// @notice Field IDs
-    uint8 internal constant FIELD_ARBITER = 0;
-    uint8 internal constant FIELD_EXPIRY = 1;
-    uint8 internal constant FIELD_TOKEN_IN = 2;
-    uint8 internal constant FIELD_RECIPIENT = 3;
-    uint8 internal constant FIELD_FILL_EXPIRY = 4;
-    uint8 internal constant FIELD_TOKEN_OUT = 5;
-    uint8 internal constant FIELD_ORIGIN_OPS = 6;
-    uint8 internal constant FIELD_DEST_OPS = 7;
-    uint8 internal constant FIELD_QUALIFICATION = 8;
-    uint8 internal constant FIELD_RECIPIENT_IS_SPONSOR = 9;
+    uint8 internal constant FIELD_ARBITER = FILED_ARBITER_CONSTANT;
+    uint8 internal constant FIELD_EXPIRY = FIELD_EXPIRY_CONSTANT;
+    uint8 internal constant FIELD_TOKEN_IN = FIELD_TOKEN_IN_CONSTANT;
+    uint8 internal constant FIELD_RECIPIENT = FIELD_RECIPIENT_CONSTANT;
+    uint8 internal constant FIELD_FILL_EXPIRY = FIELD_FILL_EXPIRY_CONSTANT;
+    uint8 internal constant FIELD_TOKEN_OUT = FIELD_TOKEN_OUT_CONSTANT;
+    uint8 internal constant FIELD_ORIGIN_OPS = FIELD_ORIGIN_OPS_CONSTANT;
+    uint8 internal constant FIELD_DEST_OPS = FIELD_DEST_OPS_CONSTANT;
+    uint8 internal constant FIELD_QUALIFICATION = FIELD_QUALIFICATION_CONSTANT;
+    uint8 internal constant FIELD_RECIPIENT_IS_SPONSOR = FIELD_RECIPIENT_IS_SPONSOR_CONSTANT;
 
     /*//////////////////////////////////////////////////////////////
                                  STATE

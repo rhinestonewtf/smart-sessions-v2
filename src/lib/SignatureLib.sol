@@ -85,7 +85,7 @@ library SignatureLib {
             calldatacopy(0x40, signature.offset, 0x40) // Copy 'r' and 's'
             mstore(0x00, hash) // Store the hash
             result := mload(staticcall(gas(), 1, 0x00, 0x80, 0x01, 0x20)) // Call ecrecover
-                // `returndatasize() will be '0x20' if successful, otherwise it will be '0'.
+            // `returndatasize() will be '0x20' if successful, otherwise it will be '0'.
             if iszero(returndatasize()) {
                 mstore(0x00, 0x8baa579f) // `InvalidSignature()`.
                 revert(0x1c, 0x04)

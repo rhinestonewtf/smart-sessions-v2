@@ -1,0 +1,28 @@
+BaseValidationLib::validateQualification
+├── given mode is STORAGE
+│   ├── given rules pass
+│   │   ├── it should return valid = true
+│   │   ├── it should return correct qualificationHash
+│   │   └── it should return correct newOffset
+│   ├── given rules fail
+│   │   └── it should return valid = false
+│   ├── given no rules configured
+│   │   └── it should return valid = true
+│   ├── given useArbiterHash is true
+│   │   └── it should call arbiter.qualificationHash for hash
+│   └── given useArbiterHash is false
+│       └── it should use keccak256 for hash
+├── given mode is CATCHALL
+│   └── it should use chainId 0 for config lookup
+├── given mode is SUBPOLICY
+│   ├── given sub-policy returns true
+│   │   ├── it should return valid = true
+│   │   └── it should compute correct qualificationHash based on flags
+│   ├── given sub-policy returns false
+│   │   └── it should return valid = false
+│   ├── given flags has useArbiterHash bit set
+│   │   └── it should call arbiter.qualificationHash for hash
+│   └── given flags has useArbiterHash bit not set
+│       └── it should use keccak256 for hash
+└── given mode is unknown
+    └── it should return valid = false

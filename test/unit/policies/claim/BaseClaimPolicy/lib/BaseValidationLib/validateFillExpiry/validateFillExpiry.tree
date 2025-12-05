@@ -1,0 +1,26 @@
+BaseValidationLib::validateFillExpiry
+├── given mode is SKIP
+│   └── it should return true
+├── given mode is STORAGE
+│   ├── given fillExpiry is within bounds
+│   │   └── it should return true
+│   ├── given fillExpiry equals min bound
+│   │   └── it should return true
+│   ├── given fillExpiry equals max bound
+│   │   └── it should return true
+│   ├── given fillExpiry is below min bound
+│   │   └── it should return false
+│   └── given fillExpiry is above max bound
+│       └── it should return false
+├── given mode is CATCHALL
+│   ├── given fillExpiry is within bounds at chainId 0
+│   │   └── it should return true
+│   └── given fillExpiry is out of bounds at chainId 0
+│       └── it should return false
+├── given mode is SUBPOLICY
+│   ├── given sub-policy returns true
+│   │   └── it should return true
+│   └── given sub-policy returns false
+│       └── it should return false
+└── given mode is unknown
+    └── it should return false

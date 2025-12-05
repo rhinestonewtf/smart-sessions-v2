@@ -1,0 +1,23 @@
+BaseValidationLib::validateOriginOps
+├── given mode is SKIP
+│   ├── it should return valid = true
+│   ├── it should return the opsHash from calldata
+│   └── it should return correct newOffset
+├── given mode is STORAGE
+│   ├── given config requires ops and ops are present
+│   │   └── it should return valid = true
+│   ├── given config requires ops and ops are not present
+│   │   └── it should return valid = false
+│   ├── given config forbids ops and ops are not present
+│   │   └── it should return valid = true
+│   └── given config forbids ops and ops are present
+│       └── it should return valid = false
+├── given mode is CATCHALL
+│   └── it should use chainId 0 for requirement lookup
+├── given mode is SUBPOLICY
+│   ├── given sub-policy returns true
+│   │   └── it should return valid = true
+│   └── given sub-policy returns false
+│       └── it should return valid = false
+└── given mode is unknown
+    └── it should return valid = false

@@ -266,7 +266,7 @@ library HashLibV2 {
         digest = keccak256(
             abi.encode(
                 SIGNED_PERMISSION_DISABLE_TYPEHASH, // Typehash for the SignedPermissionDisable
-                    // struct
+                // struct
                 account, // User account address (sponsor)
                 permissionId, // Permission ID to disable
                 lockTag, // Lock tag for the session
@@ -291,8 +291,8 @@ library HashLibV2 {
                 CHAIN_SESSION_TYPEHASH,
                 chainDigest.chainId,
                 chainDigest.sessionDigest // this is the digest obtained using sessionDigest()
-                    // we just do not rebuild it here for all sessions, but receive it from
-                    // off-chain
+                // we just do not rebuild it here for all sessions, but receive it from
+                // off-chain
             )
         );
     }
