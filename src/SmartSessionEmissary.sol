@@ -265,18 +265,18 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         address lens = LENS;
         assembly {
             // Copy calldata to memory
-            calldatacopy(0, 0, calldatasize())
+            calldatacopy(0x00, 0x00, calldatasize())
 
             // Delegatecall to lens
-            let result := delegatecall(gas(), lens, 0, calldatasize(), 0, 0)
+            let result := delegatecall(gas(), lens, 0x00, calldatasize(), 0x00, 0x00)
 
             // Copy returndata to memory
-            returndatacopy(0, 0, returndatasize())
+            returndatacopy(0x00, 0x00, returndatasize())
 
             // Return or revert based on result
             switch result
-            case 0 { revert(0, returndatasize()) }
-            default { return(0, returndatasize()) }
+            case 0 { revert(0x00, returndatasize()) }
+            default { return(0x00, returndatasize()) }
         }
     }
 }

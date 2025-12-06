@@ -49,12 +49,46 @@ contract MockERC1271 is IERC1271 {
 
         // Or check if it's a valid ECDSA signature from owner
         if (signature.length == 65 && owner != address(0)) {
-            address recovered = SignatureLib.recoverECDSA(hash, signature);
+            address recovered = recoverECDSA(hash, signature);
             if (recovered == owner) {
                 return EIP1271_MAGIC_VALUE;
             }
         }
 
         return INVALID_SIGNATURE_SELECTOR;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 ECDSA
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Validates an ECDSA signature for a given hash, only supports 65-byte signatures.
+    /// @param hash The hash to validate the signature against
+    /// @param signature The ECDSA signature to validate
+    /// @return result The address that signed the hash
+    function recoverECDSA(
+        bytes32 hash,
+        bytes calldata signature
+    )
+        internal
+        view
+        returns (address result)
+    {
+        /// @solidity memory-safe-assembly
+        // solhint-disable-next-line no-inline-assembly
+        assembly {
+            let m := mload(0x40) // Cache free memory pointer
+            mstore(0x20, byte(0, calldataload(add(signature.offset, 0x40)))) // 'v'
+            calldatacopy(0x40, signature.offset, 0x40) // Copy 'r' and 's'
+            mstore(0x00, hash) // Store the hash
+            result := mload(staticcall(gas(), 1, 0x00, 0x80, 0x01, 0x20)) // Call ecrecover
+            // `returndatasize() will be '0x20' if successful, otherwise it will be '0'.
+            if iszero(returndatasize()) {
+                mstore(0x00, 0x8baa579f) // `InvalidSignature()`.
+                revert(0x1c, 0x04)
+            }
+            mstore(0x60, 0x00) // Restore the zero slot
+            mstore(0x40, m) // Restore free memory pointer
+        }
     }
 }
