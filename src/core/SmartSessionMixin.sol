@@ -20,11 +20,8 @@ import { ExecutionLibV2 } from "@lib/ExecutionLibV2.sol";
 import { ECDSA } from "solady/utils/ECDSA.sol";
 
 // Types
-import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
+import { PermissionId } from "@smartsessions/DataTypes.sol";
 import {
-    DisableSession,
-    INVALID_SIGNATURE,
-    NO_LOCKTAG,
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable
@@ -193,9 +190,9 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         /// @solidity memory-safe-assembly
         assembly {
-            // forgefmt: disable-next-line
-            // validSig ? bytes4(keccak256("verifyExecution(address,bytes32,bytes,Types.Operation,bytes12)")) : 0xffffffff`.
-            // We use `0xffffffff` for invalid signatures.
+            // validSig ?
+            // bytes4(keccak256("verifyExecution(address,bytes32,bytes,Types.Operation,bytes12)")) :
+            // 0xffffffff`. We use `0xffffffff` for invalid signatures.
             result := shl(224, or(0x88ec78fb, sub(0, iszero(validSig))))
         }
     }

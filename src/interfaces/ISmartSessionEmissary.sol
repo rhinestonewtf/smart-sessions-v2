@@ -3,14 +3,9 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IEmissary } from "@compact-utils/interfaces/IEmissary.sol";
-import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
 
 // Types
-import {
-    SmartSessionEmissaryConfig,
-    EmissaryConfig,
-    SmartSessionEmissaryEnable
-} from "@types/DataTypes.sol";
+import { SmartSessionEmissaryConfig, SmartSessionEmissaryEnable } from "@types/DataTypes.sol";
 import { PermissionId } from "@smartsessions/DataTypes.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 

@@ -16,10 +16,6 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
     PolicyConfig,
     QualificationRulesStorage,
-    MODE_SKIP,
-    MODE_CHECK_STORAGE,
-    MODE_CHECK_CATCHALL,
-    MODE_CHECK_SUBPOLICY,
     FIELD_ARBITER,
     FIELD_EXPIRY,
     FIELD_TOKEN_IN,
@@ -188,6 +184,7 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
     /// @param configId The configuration ID
     /// @param account The account being configured
     /// @param initData The initialization data to decode
+    // solhint-disable-next-line code-complexity
     function _initializeBase(
         ConfigId configId,
         address account,

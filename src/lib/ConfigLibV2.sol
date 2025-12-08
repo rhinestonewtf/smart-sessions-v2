@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
-import { ModuleType } from "@smartsessions/interfaces/IRegistry.sol";
 import { ISmartSession } from "@smartsessions/ISmartSession.sol";
 import { IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
 

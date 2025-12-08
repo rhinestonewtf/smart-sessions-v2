@@ -22,14 +22,7 @@ import { EfficiencyLib } from "@the-compact/lib/EfficiencyLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import {
-    PolicyConfig,
-    MODE_SKIP,
-    MODE_CHECK_SUBPOLICY,
-    FIELD_ARBITER,
-    FIELD_EXPIRY,
-    FIELD_TOKEN_IN
-} from "@policies/claim/base/types/BaseDataTypes.sol";
+import { PolicyConfig } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
 /// @title Compact Claim Policy

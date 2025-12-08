@@ -10,7 +10,7 @@ import { IArbiter } from "@policies/claim/base/interfaces/IArbiter.sol";
 
 // Libraries
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
-import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 import { ArgPolicyTreeLibV2 } from "@policies/claim/base/lib/ArgPolicyTreeLibV2.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
@@ -21,19 +21,14 @@ import {
     ParamRules,
     QualificationRulesStorage,
     MODE_SKIP,
-    MODE_CHECK_STORAGE,
-    MODE_CHECK_CATCHALL,
-    MODE_CHECK_SUBPOLICY,
     FIELD_ARBITER,
     FIELD_EXPIRY,
-    FIELD_TOKEN_IN,
     FIELD_RECIPIENT,
     FIELD_FILL_EXPIRY,
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
     FIELD_QUALIFICATION,
-    FIELD_RECIPIENT_IS_SPONSOR,
     ANY_ADDRESS
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
@@ -1124,6 +1119,7 @@ library BaseValidationLib {
     /// @param hash The hash for sub-policy validation
     /// @return valid True if all Mandate fields are valid
     /// @return mandateHash The computed Mandate hash
+    // solhint-disable-next-line code-complexity
     function validateMandate(
         BasePolicyStorage storage $,
         bytes calldata data,

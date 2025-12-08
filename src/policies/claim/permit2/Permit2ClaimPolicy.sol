@@ -19,7 +19,7 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { PolicyConfig, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTypes.sol";
+import { PolicyConfig } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
 /// @title Permit2 Claim Policy

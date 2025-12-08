@@ -9,7 +9,6 @@ import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfig
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
-import { CompactConfigLib } from "@policies/claim/compact/lib/CompactConfigLib.sol";
 import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 
 // Types

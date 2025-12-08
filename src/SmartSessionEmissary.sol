@@ -4,8 +4,6 @@ pragma solidity ^0.8.30;
 // Contracts
 import { Emissary as VanillaEmissary } from "@compact-utils/emissary/Emissary.sol";
 import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
-import { EIP712 } from "@solady/utils/EIP712.sol";
-import { ERC7579ValidatorBase } from "@modulekit/module-bases/ERC7579ValidatorBase.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -23,7 +21,6 @@ import {
 
 // Types
 import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
-import { PackedUserOperation } from "@modulekit/external/ERC4337.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 /// @title Smart Session Emissary
@@ -261,6 +258,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
 
     /// @notice Delegates unknown function calls to the LENS contract
     /// @dev Enables view functions and nonce management without bloating main contract bytecode
+    // solhint-disable-next-line no-complex-fallback
     fallback() external {
         address lens = LENS;
         assembly {

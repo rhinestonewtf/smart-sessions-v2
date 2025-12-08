@@ -10,7 +10,6 @@ import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { IdLibV2 } from "@lib/IdLibV2.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
-import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
@@ -22,16 +21,10 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import {
     PermissionId,
     ActionId,
-    SignerConf,
-    EnumerableActionPolicy,
     PolicyType,
-    EMPTY_PERMISSIONID,
-    Policy,
-    EnumerableERC7739Config,
-    ERC7579_MODULE_TYPE_VALIDATOR
+    EMPTY_PERMISSIONID
 } from "@smartsessions/DataTypes.sol";
 import {
-    Session,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryConfig,
     DisableSession,

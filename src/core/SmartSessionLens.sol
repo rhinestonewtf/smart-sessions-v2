@@ -327,6 +327,7 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
             enabledERC7739ContentHashes[i].appDomainSeparator = $enabledERC7739.enabledDomainSeparators[permissionId].at({
                 account: account, index: i
             });
+            // solhint-disable-next-line max-line-length
             enabledERC7739ContentHashes[i].contentNameHashes = $enabledERC7739.enabledContentNames[permissionId][enabledERC7739ContentHashes[i].appDomainSeparator].values(
                 account
             );

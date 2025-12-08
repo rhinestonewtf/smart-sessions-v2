@@ -48,7 +48,7 @@ abstract contract SmartSessionStorage {
     mapping(bytes12 lockTag => Policy claimPolicies) internal $claimPolicies;
 
     /// @notice Mapping of lockTag to enabled action policies
-    mapping(bytes12 lockTag => EnumerableActionPolicy) internal $actionPolicies;
+    mapping(bytes12 lockTag => EnumerableActionPolicy actionPolicies) internal $actionPolicies;
 
     /*//////////////////////////////////////////////////////////////
                                VALIDATORS
