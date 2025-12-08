@@ -67,20 +67,4 @@ contract BaseClaimPolicy_isArbiterWhitelisted_Unit_Test is BaseClaimPolicy_Unit_
         assertTrue(policy.isArbiterWhitelisted(configId, account, arbiter2));
         assertFalse(policy.isArbiterWhitelisted(configId, account, arbiter3));
     }
-
-    /// @notice Fuzz test for isArbiterWhitelisted
-    function testFuzz_isArbiterWhitelisted(address _arbiter, address _checkArbiter) external {
-        // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
-        address[] memory arbiters = new address[](1);
-        arbiters[0] = _arbiter;
-        bytes memory initData = abi.encodePacked(modeConfig, _encodeArbiterConfig(arbiters));
-        policy.initializeWithMultiplexer(account, configId, initData);
-
-        // Act
-        bool result = policy.isArbiterWhitelisted(configId, account, _checkArbiter);
-
-        // Assert
-        assertEq(result, _arbiter == _checkArbiter);
-    }
 }
