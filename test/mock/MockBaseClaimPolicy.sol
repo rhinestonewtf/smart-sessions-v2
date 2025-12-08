@@ -66,4 +66,9 @@ contract MockBaseClaimPolicy is BaseClaimPolicy {
     {
         return validateClaimReturnValue;
     }
+
+    /// @inheritdoc BaseClaimPolicy
+    function supportsInterface(bytes4 interfaceId) public pure virtual override returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
 }

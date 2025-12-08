@@ -584,7 +584,7 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
     /// @notice Checks if this contract implements the given interface
     /// @param interfaceID The interface identifier to check
     /// @return True if the interface is supported
-    function supportsInterface(bytes4 interfaceID) external pure override returns (bool) {
+    function supportsInterface(bytes4 interfaceID) public pure virtual override returns (bool) {
         return (interfaceID == type(IERC165).interfaceId
                 || interfaceID == type(I1271Policy).interfaceId
                 || interfaceID == type(IBaseClaimPolicy).interfaceId);

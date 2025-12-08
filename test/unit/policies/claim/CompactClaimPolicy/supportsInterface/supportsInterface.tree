@@ -1,0 +1,11 @@
+CompactClaimPolicy::supportsInterface
+├── given IERC165 interface
+│   └── it should return true
+├── given I1271Policy interface
+│   └── it should return true
+├── given IBaseClaimPolicy interface
+│   └── it should return true
+├── given ICompactClaimPolicy interface
+│   └── it should return true
+└── given unsupported interface
+    └── it should return false

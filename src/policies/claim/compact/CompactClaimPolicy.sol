@@ -5,6 +5,9 @@ pragma solidity ^0.8.28;
 import { BaseClaimPolicy } from "@policies/claim/base/BaseClaimPolicy.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 
+// Interfaces
+import { ICompactClaimPolicy } from "@policies/claim/compact/interfaces/ICompactClaimPolicy.sol";
+
 // Libraries
 import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
@@ -474,5 +477,13 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         bytes32 packed = bytes32(lockTag.asUint256() | token.asUint256());
         // Check if whitelisted
         return $.tokenInSet[chainId].contains(packed);
+    }
+
+    /// @notice Checks if this contract implements the given interface
+    /// @param interfaceID The interface identifier to check
+    /// @return True if the interface is supported
+    function supportsInterface(bytes4 interfaceID) public pure override returns (bool) {
+        return super.supportsInterface(interfaceID)
+            || interfaceID == type(ICompactClaimPolicy).interfaceId;
     }
 }

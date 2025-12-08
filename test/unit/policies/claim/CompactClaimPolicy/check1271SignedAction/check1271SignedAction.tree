@@ -1,0 +1,136 @@
+CompactClaimPolicy::check1271SignedAction
+├── given policy is not initialized
+│   └── it should return true (all fields SKIP by default)
+├── given FIELD_ARBITER
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any arbiter
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when arbiter matches whitelist
+│   │   ├── it should return false when arbiter not in whitelist
+│   │   └── it should return true when multiple arbiters whitelisted
+│   ├── given mode is MODE_CHECK_CATCHALL
+│   │   ├── it should return true when arbiter in catchall whitelist
+│   │   └── it should return false when arbiter not in catchall whitelist
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_EXPIRY (claimExpires)
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any expiry
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when expiry within bounds
+│   │   ├── it should return true when expiry equals min
+│   │   ├── it should return true when expiry equals max
+│   │   ├── it should return false when expiry below min
+│   │   └── it should return false when expiry above max
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_TOKEN_IN
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any tokenIn
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when token+lockTag whitelisted
+│   │   ├── it should return false when token whitelisted but lockTag differs
+│   │   ├── it should return false when token not whitelisted
+│   │   └── it should return true when multiple tokens whitelisted
+│   ├── given mode is MODE_CHECK_CATCHALL
+│   │   ├── it should return true when token+lockTag in catchall whitelist
+│   │   └── it should return false when token+lockTag not in catchall whitelist
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_RECIPIENT
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any recipient
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when recipient matches stored config
+│   │   ├── it should return false when recipient does not match
+│   │   └── it should return true when stored recipient is ANY_ADDRESS
+│   ├── given mode is MODE_CHECK_CATCHALL
+│   │   ├── it should return true when recipient matches catchall config
+│   │   └── it should return false when recipient not in catchall config
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_RECIPIENT_IS_SPONSOR
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true when recipient differs from sponsor
+│   └── given mode is not MODE_SKIP
+│       ├── it should return true when recipient equals sponsor
+│       └── it should return false when recipient does not equal sponsor
+├── given FIELD_FILL_EXPIRY
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any fillExpiry
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when fillExpiry within bounds
+│   │   ├── it should return true when fillExpiry equals min
+│   │   ├── it should return true when fillExpiry equals max
+│   │   ├── it should return false when fillExpiry below min
+│   │   └── it should return false when fillExpiry above max
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_TOKEN_OUT
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any tokenOut
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when all tokens whitelisted
+│   │   ├── it should return false when any token not whitelisted
+│   │   └── it should return true when multiple tokens whitelisted
+│   ├── given mode is MODE_CHECK_CATCHALL
+│   │   ├── it should return true when all tokens in catchall whitelist
+│   │   └── it should return false when any token not in catchall whitelist
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_ORIGIN_OPS
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any originOps hash
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when required and ops present
+│   │   ├── it should return false when required but ops missing
+│   │   ├── it should return true when not required and ops missing
+│   │   └── it should return false when not required but ops present
+│   ├── given mode is MODE_CHECK_CATCHALL
+│   │   ├── it should return true when catchall config satisfied
+│   │   └── it should return false when catchall config not satisfied
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_DEST_OPS
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any destOps hash
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when required and ops present
+│   │   ├── it should return false when required but ops missing
+│   │   ├── it should return true when not required and ops missing
+│   │   └── it should return false when not required but ops present
+│   ├── given mode is MODE_CHECK_CATCHALL
+│   │   ├── it should return true when catchall config satisfied
+│   │   └── it should return false when catchall config not satisfied
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given FIELD_QUALIFICATION
+│   ├── given mode is MODE_SKIP
+│   │   └── it should return true for any qualification
+│   ├── given mode is MODE_CHECK_STORAGE
+│   │   ├── it should return true when qualification passes rules
+│   │   ├── it should return false when qualification fails rules
+│   │   ├── it should use keccak256 when useArbiterHash is false
+│   │   └── it should call arbiter when useArbiterHash is true
+│   ├── given mode is MODE_CHECK_CATCHALL
+│   │   ├── it should return true when catchall rules pass
+│   │   └── it should return false when catchall rules fail
+│   └── given mode is MODE_CHECK_SUBPOLICY
+│       ├── it should return true when subpolicy approves
+│       └── it should return false when subpolicy rejects
+├── given multiple fields enabled
+│   ├── it should return true when all fields pass
+│   ├── it should return false when first field fails
+│   ├── it should return false when middle field fails
+│   └── it should return false when last field fails
+└── given hash verification
+    ├── it should return true when computed hash matches expected
+    └── it should return false when computed hash does not match expected
