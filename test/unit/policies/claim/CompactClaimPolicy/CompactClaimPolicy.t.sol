@@ -8,7 +8,7 @@ import { Base_Test } from "@test/Base.t.sol";
 import { CompactClaimPolicy } from "@policies/claim/compact/CompactClaimPolicy.sol";
 
 // Mocks
-import { MockBaseClaimPolicy } from "@mocks/MockBaseClaimPolicy.sol";
+import { MockSubPolicy } from "@mocks/MockSubPolicy.sol";
 
 // Libraries
 import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
@@ -38,7 +38,7 @@ contract CompactClaimPolicy_Unit_Test is Base_Test {
     //////////////////////////////////////////////////////////////*/
 
     CompactClaimPolicy internal compactClaimPolicy;
-    MockBaseClaimPolicy internal mockSubPolicy;
+    MockSubPolicy internal mockSubPolicy;
     ConfigId internal configId;
     address internal account;
 
@@ -66,7 +66,7 @@ contract CompactClaimPolicy_Unit_Test is Base_Test {
     function setUp() public virtual override {
         super.setUp();
         compactClaimPolicy = new CompactClaimPolicy();
-        mockSubPolicy = new MockBaseClaimPolicy();
+        mockSubPolicy = new MockSubPolicy();
         configId = ConfigId.wrap(bytes32(uint256(1)));
         account = makeAddr("account");
         token1 = makeAddr("token1");
@@ -82,6 +82,11 @@ contract CompactClaimPolicy_Unit_Test is Base_Test {
     function _buildConfig(uint8 fieldId, uint8 mode) internal pure returns (PolicyConfig) {
         uint32 modeConfig = uint32(0).setFieldMode(fieldId, mode);
         return PolicyConfig.wrap(modeConfig);
+    }
+
+    /// @notice Helper to create mode config with specific field mode
+    function _createModeConfig(uint8 fieldId, uint8 mode) internal pure returns (uint32) {
+        return uint32(mode) << (fieldId * 2);
     }
 
     /// @notice Packs token and lockTag into a Compact ID

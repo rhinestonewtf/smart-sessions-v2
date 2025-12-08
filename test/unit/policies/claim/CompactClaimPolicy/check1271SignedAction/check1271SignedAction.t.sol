@@ -14,12 +14,13 @@ import { Bytes32ArrayLib } from "@rhinestone/compact-utils/src/common/Bytes32Arr
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { ParamRules, ParamRule } from "@policies/claim/base/types/BaseDataTypes.sol";
+import { ParamRules, ParamRule, ANY_ADDRESS } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 import {
     MODE_SKIP,
     MODE_CHECK_STORAGE,
     MODE_CHECK_CATCHALL,
+    MODE_CHECK_SUBPOLICY,
     FIELD_ARBITER,
     FIELD_EXPIRY,
     FIELD_TOKEN_IN,
@@ -33,9 +34,6 @@ import {
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
 
-// Utils
-import { console2 } from "forge-std/console2.sol";
-
 contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                                 LIBRARIES
@@ -48,7 +46,7 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Test account
+    /// @notice Test account (sponsor)
     address internal testAccount;
 
     /// @notice Test config ID
@@ -57,6 +55,9 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Test domain separator
     bytes32 internal testDomainSeparator =
         0x1234567890123456789012345678901234567890123456789012345678901234;
+
+    /// @notice Sample minGas value
+    uint128 internal constant SAMPLE_MIN_GAS = 100_000;
 
     /*//////////////////////////////////////////////////////////////
                                    SETUP
@@ -70,27 +71,15 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     }
 
     /*//////////////////////////////////////////////////////////////
-                                 TESTS
+                        UNINITIALIZED POLICY
     //////////////////////////////////////////////////////////////*/
 
-    //-------------------------------------
-    // 1) ARBITER
-    //-------------------------------------
-
-    /// @notice Test check1271SignedAction with arbiter check - should pass when arbiter matches
-    function test_check1271SignedAction_arbiter_valid_shouldPass() public {
-        address testArbiter = makeAddr("testArbiter");
-
-        // Initialize policy with arbiter check
-        _initializePolicyWithArbiter(testArbiter);
-
-        // Create Compact data with matching arbiter
-        bytes memory compactData = _createCompactDataWithArbiter(testArbiter);
-
-        // Compute expected hash
+    /// @notice Test that uninitialized policy returns true (all fields SKIP)
+    function test_check1271SignedAction_uninitialized_shouldReturnTrue() public {
+        // Don't initialize - all modes default to SKIP
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
         bytes32 expectedHash = this.computeExpectedHash(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -99,25 +88,66 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with valid arbiter should be allowed");
+        assertTrue(result, "Uninitialized policy should return true");
     }
 
-    /// @notice Test check1271SignedAction with arbiter check - should fail when arbiter doesn't
-    /// match
-    function test_check1271SignedAction_arbiter_invalid_shouldFail() public {
+    /*//////////////////////////////////////////////////////////////
+                            FIELD_ARBITER
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test arbiter SKIP mode returns true for any arbiter
+    function test_check1271SignedAction_arbiter_skip_shouldReturnTrue() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any arbiter");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test arbiter storage mode - valid arbiter
+    function test_check1271SignedAction_arbiter_storage_valid_shouldPass() public {
+        address testArbiter = makeAddr("testArbiter");
+        _initializePolicyWithArbiter(testArbiter, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithArbiter(testArbiter);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Valid arbiter should pass");
+    }
+
+    /// @notice Test arbiter storage mode - invalid arbiter
+    function test_check1271SignedAction_arbiter_storage_invalid_shouldFail() public {
         address expectedArbiter = makeAddr("expectedArbiter");
         address wrongArbiter = makeAddr("wrongArbiter");
 
-        // Initialize policy with expected arbiter
-        _initializePolicyWithArbiter(expectedArbiter);
+        _initializePolicyWithArbiter(expectedArbiter, MODE_CHECK_STORAGE);
 
-        // Create Compact data with wrong arbiter
         bytes memory compactData = _createCompactDataWithArbiter(wrongArbiter);
-
-        // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHash(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -126,29 +156,23 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with wrong arbiter should be rejected");
+        assertFalse(result, "Invalid arbiter should fail");
     }
 
-    //-------------------------------------
-    // 2) CLAIM EXPIRES
-    //-------------------------------------
+    /// @notice Test arbiter storage mode - multiple arbiters whitelisted
+    function test_check1271SignedAction_arbiter_storage_multipleWhitelisted_shouldPass() public {
+        address arbiter1 = makeAddr("arbiter1");
+        address arbiter2 = makeAddr("arbiter2");
 
-    /// @notice Test check1271SignedAction with claim expires check - should pass when in range
-    function test_check1271SignedAction_claimExpires_valid_shouldPass() public {
-        uint128 minExpires = uint128(block.timestamp + 1000);
-        uint128 maxExpires = uint128(block.timestamp + 10_000);
-        uint256 testExpires = block.timestamp + 5000; // Within range
+        // Initialize with multiple arbiters
+        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
+        bytes memory initData = abi.encodePacked(modeConfig, uint8(2), arbiter1, arbiter2);
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
 
-        // Initialize policy with claim expires check
-        _initializePolicyWithClaimExpires(minExpires, maxExpires);
-
-        // Create Compact data with valid expires
-        bytes memory compactData = _createCompactDataWithExpires(testExpires);
-
-        // Compute expected hash
+        // Use second arbiter
+        bytes memory compactData = _createCompactDataWithArbiter(arbiter2);
         bytes32 expectedHash = this.computeExpectedHash(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -157,25 +181,21 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with valid claim expires should be allowed");
+        assertTrue(result, "Arbiter in whitelist should pass");
     }
 
-    /// @notice Test check1271SignedAction with claim expires check - should fail when below min
-    function test_check1271SignedAction_claimExpires_belowMin_shouldFail() public {
-        uint128 minExpires = uint128(block.timestamp + 5000);
-        uint128 maxExpires = uint128(block.timestamp + 10_000);
-        uint256 testExpires = block.timestamp + 1000; // Below min
+    //--------------------------------------------
+    // MODE_CHECK_CATCHALL
+    //--------------------------------------------
 
-        // Initialize policy with claim expires check
-        _initializePolicyWithClaimExpires(minExpires, maxExpires);
+    /// @notice Test arbiter catchall mode - arbiter in catchall whitelist
+    function test_check1271SignedAction_arbiter_catchall_valid_shouldPass() public {
+        address testArbiter = makeAddr("testArbiter");
+        _initializePolicyWithArbiter(testArbiter, MODE_CHECK_CATCHALL);
 
-        // Create Compact data with expires below min
-        bytes memory compactData = _createCompactDataWithExpires(testExpires);
-
-        // Compute expected hash
+        bytes memory compactData = _createCompactDataWithArbiter(testArbiter);
         bytes32 expectedHash = this.computeExpectedHash(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -184,30 +204,297 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with expires below min should be rejected");
+        assertTrue(result, "Arbiter in catchall whitelist should pass");
     }
 
-    //-------------------------------------
-    // 3) TOKEN IN
-    //-------------------------------------
+    /// @notice Test arbiter catchall mode - arbiter not in catchall whitelist
+    function test_check1271SignedAction_arbiter_catchall_invalid_shouldFail() public {
+        address expectedArbiter = makeAddr("expectedArbiter");
+        address wrongArbiter = makeAddr("wrongArbiter");
 
-    /// @notice Test check1271SignedAction with tokenIn check - should pass when valid
-    function test_check1271SignedAction_tokenIn_valid_shouldPass() public {
+        _initializePolicyWithArbiter(expectedArbiter, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithArbiter(wrongArbiter);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Arbiter not in catchall whitelist should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
+
+    /// @notice Test arbiter subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_arbiter_subpolicy_approves_shouldPass() public {
+        address testArbiter = makeAddr("testArbiter");
+
+        // Configure mock to approve
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithArbiterSubpolicy(address(mockSubPolicy));
+
+        bytes memory compactData = _createCompactDataWithArbiter(testArbiter);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test arbiter subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_arbiter_subpolicy_rejects_shouldFail() public {
+        address testArbiter = makeAddr("testArbiter");
+
+        // Configure mock to reject
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithArbiterSubpolicy(address(mockSubPolicy));
+
+        bytes memory compactData = _createCompactDataWithArbiter(testArbiter);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            FIELD_EXPIRY
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test expiry SKIP mode returns true for any expiry
+    function test_check1271SignedAction_expiry_skip_shouldReturnTrue() public {
+        uint256 anyExpiry = block.timestamp + 999_999;
+        bytes memory compactData = _createCompactDataWithExpires(anyExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any expiry");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test expiry storage mode - expiry within bounds
+    function test_check1271SignedAction_expiry_storage_withinBounds_shouldPass() public {
+        uint128 minExpiry = uint128(block.timestamp + 1000);
+        uint128 maxExpiry = uint128(block.timestamp + 10_000);
+        uint256 testExpiry = block.timestamp + 5000;
+
+        _initializePolicyWithExpiry(minExpiry, maxExpiry);
+
+        bytes memory compactData = _createCompactDataWithExpires(testExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Expiry within bounds should pass");
+    }
+
+    /// @notice Test expiry storage mode - expiry equals min exactly
+    function test_check1271SignedAction_expiry_storage_equalsMin_shouldPass() public {
+        uint128 minExpiry = uint128(block.timestamp + 1000);
+        uint128 maxExpiry = uint128(block.timestamp + 10_000);
+
+        _initializePolicyWithExpiry(minExpiry, maxExpiry);
+
+        bytes memory compactData = _createCompactDataWithExpires(minExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Expiry equals min should pass");
+    }
+
+    /// @notice Test expiry storage mode - expiry equals max exactly
+    function test_check1271SignedAction_expiry_storage_equalsMax_shouldPass() public {
+        uint128 minExpiry = uint128(block.timestamp + 1000);
+        uint128 maxExpiry = uint128(block.timestamp + 10_000);
+
+        _initializePolicyWithExpiry(minExpiry, maxExpiry);
+
+        bytes memory compactData = _createCompactDataWithExpires(maxExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Expiry equals max should pass");
+    }
+
+    /// @notice Test expiry storage mode - expiry below min
+    function test_check1271SignedAction_expiry_storage_belowMin_shouldFail() public {
+        uint128 minExpiry = uint128(block.timestamp + 5000);
+        uint128 maxExpiry = uint128(block.timestamp + 10_000);
+        uint256 testExpiry = block.timestamp + 1000;
+
+        _initializePolicyWithExpiry(minExpiry, maxExpiry);
+
+        bytes memory compactData = _createCompactDataWithExpires(testExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Expiry below min should fail");
+    }
+
+    /// @notice Test expiry storage mode - expiry above max
+    function test_check1271SignedAction_expiry_storage_aboveMax_shouldFail() public {
+        uint128 minExpiry = uint128(block.timestamp + 1000);
+        uint128 maxExpiry = uint128(block.timestamp + 5000);
+        uint256 testExpiry = block.timestamp + 10_000;
+
+        _initializePolicyWithExpiry(minExpiry, maxExpiry);
+
+        bytes memory compactData = _createCompactDataWithExpires(testExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Expiry above max should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
+
+    /// @notice Test expiry subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_expiry_subpolicy_approves_shouldPass() public {
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithExpirySubpolicy(address(mockSubPolicy));
+
+        uint256 testExpiry = block.timestamp + 5000;
+        bytes memory compactData = _createCompactDataWithExpires(testExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test expiry subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_expiry_subpolicy_rejects_shouldFail() public {
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithExpirySubpolicy(address(mockSubPolicy));
+
+        uint256 testExpiry = block.timestamp + 5000;
+        bytes memory compactData = _createCompactDataWithExpires(testExpiry);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            FIELD_TOKEN_IN
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test tokenIn SKIP mode returns true for any tokenIn
+    function test_check1271SignedAction_tokenIn_skip_shouldReturnTrue() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any tokenIn");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test tokenIn storage mode - token and lockTag whitelisted
+    function test_check1271SignedAction_tokenIn_storage_valid_shouldPass() public {
         address testToken = makeAddr("testToken");
         bytes12 testLockTag = bytes12("test_lock");
-        uint256 elementIndex = 0;
 
-        // Initialize policy with tokenIn check
-        _initializePolicyWithTokenIn(testToken, testLockTag, block.chainid);
+        _initializePolicyWithTokenIn(testToken, testLockTag, block.chainid, MODE_CHECK_STORAGE);
 
-        // Create Compact data with valid tokenIn
-        bytes memory compactData =
-            _createCompactDataWithTokenIn(testToken, testLockTag, 1000, elementIndex);
-
-        // Compute expected hash
+        bytes memory compactData = _createCompactDataWithTokenIn(testToken, testLockTag, 1000, 0);
         bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -216,58 +503,224 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with valid tokenIn should be allowed");
+        assertTrue(result, "Valid token+lockTag should pass");
     }
 
-    //-------------------------------------
-    // 4) RECIPIENT
-    //-------------------------------------
+    /// @notice Test tokenIn storage mode - token not whitelisted
+    function test_check1271SignedAction_tokenIn_storage_tokenNotWhitelisted_shouldFail() public {
+        address allowedToken = makeAddr("allowedToken");
+        address wrongToken = makeAddr("wrongToken");
+        bytes12 testLockTag = bytes12("test_lock");
 
-    /// @notice Test check1271SignedAction with recipient check - should pass when valid
-    function test_check1271SignedAction_recipient_valid_shouldPass() public {
+        _initializePolicyWithTokenIn(allowedToken, testLockTag, block.chainid, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithTokenIn(wrongToken, testLockTag, 1000, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Token not whitelisted should fail");
+    }
+
+    /// @notice Test tokenIn storage mode - token whitelisted but lockTag differs
+    function test_check1271SignedAction_tokenIn_storage_wrongLockTag_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        bytes12 allowedLockTag = bytes12("allowed_tag");
+        bytes12 wrongLockTag = bytes12("wrong_tag");
+
+        _initializePolicyWithTokenIn(testToken, allowedLockTag, block.chainid, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithTokenIn(testToken, wrongLockTag, 1000, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Wrong lockTag should fail");
+    }
+
+    /// @notice Test tokenIn storage mode - multiple tokens whitelisted
+    function test_check1271SignedAction_tokenIn_storage_multipleWhitelisted_shouldPass() public {
+        address token1 = makeAddr("token1");
+        address token2 = makeAddr("token2");
+        bytes12 lockTag1 = bytes12("lock1");
+        bytes12 lockTag2 = bytes12("lock2");
+
+        // Initialize with multiple tokens
+        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_IN, MODE_CHECK_STORAGE);
+        bytes32 id1 = _packTokenId(token1, lockTag1);
+        bytes32 id2 = _packTokenId(token2, lockTag2);
+        bytes memory initData = abi.encodePacked(
+            modeConfig,
+            uint8(2), // count
+            block.chainid,
+            id1,
+            block.chainid,
+            id2
+        );
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+
+        // Use second token
+        bytes memory compactData = _createCompactDataWithTokenIn(token2, lockTag2, 1000, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Token in whitelist should pass");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_CATCHALL
+    //--------------------------------------------
+
+    /// @notice Test tokenIn catchall mode - token in catchall whitelist
+    function test_check1271SignedAction_tokenIn_catchall_valid_shouldPass() public {
+        address testToken = makeAddr("testToken");
+        bytes12 testLockTag = bytes12("test_lock");
+
+        // Initialize with catchall (chainId 0)
+        _initializePolicyWithTokenIn(testToken, testLockTag, 0, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithTokenIn(testToken, testLockTag, 1000, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Token in catchall whitelist should pass");
+    }
+
+    /// @notice Test tokenIn catchall mode - token not in catchall whitelist
+    function test_check1271SignedAction_tokenIn_catchall_invalid_shouldFail() public {
+        address allowedToken = makeAddr("allowedToken");
+        address wrongToken = makeAddr("wrongToken");
+        bytes12 testLockTag = bytes12("test_lock");
+
+        // Initialize with catchall (chainId 0)
+        _initializePolicyWithTokenIn(allowedToken, testLockTag, 0, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithTokenIn(wrongToken, testLockTag, 1000, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Token not in catchall whitelist should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
+
+    /// @notice Test tokenIn subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_tokenIn_subpolicy_approves_shouldPass() public {
+        address testToken = makeAddr("testToken");
+        bytes12 testLockTag = bytes12("test_lock");
+
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithTokenInSubpolicy(address(mockSubPolicy));
+
+        bytes memory compactData = _createCompactDataWithTokenIn(testToken, testLockTag, 1000, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test tokenIn subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_tokenIn_subpolicy_rejects_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        bytes12 testLockTag = bytes12("test_lock");
+
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithTokenInSubpolicy(address(mockSubPolicy));
+
+        bytes memory compactData = _createCompactDataWithTokenIn(testToken, testLockTag, 1000, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenIn(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            FIELD_RECIPIENT
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test recipient SKIP mode returns true for any recipient
+    function test_check1271SignedAction_recipient_skip_shouldReturnTrue() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any recipient");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test recipient storage mode - valid recipient
+    function test_check1271SignedAction_recipient_storage_valid_shouldPass() public {
         address testRecipient = makeAddr("testRecipient");
-        uint256 targetChainId = 137; // Polygon
-
-        // Initialize policy with recipient check
-        _initializePolicyWithRecipient(testRecipient, targetChainId);
-
-        // Create Compact data with valid recipient
-        bytes memory compactData = _createCompactDataWithRecipient(testRecipient, targetChainId);
-
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
-
-        // Check the action
-        bool result = compactClaimPolicy.check1271SignedAction(
-            testConfigId,
-            admin.addr,
-            testAccount,
-            DomainLib.withDomain(expectedHash, testDomainSeparator),
-            abi.encodePacked(testDomainSeparator, compactData)
-        );
-
-        assertTrue(result, "Action with valid recipient should be allowed");
-    }
-
-    //-------------------------------------
-    // 4b) RECIPIENT IS SPONSOR
-    //-------------------------------------
-
-    /// @notice Test check1271SignedAction with recipientIsSponsor check - should pass when
-    /// recipient == sponsor
-    function test_check1271SignedAction_recipientIsSponsor_valid_shouldPass() public {
         uint256 targetChainId = 137;
 
-        // Initialize policy with recipientIsSponsor check (no init data needed, just the mode flag)
-        _initializePolicyWithRecipientIsSponsor();
+        _initializePolicyWithRecipient(testRecipient, targetChainId, MODE_CHECK_STORAGE);
 
-        // Create Compact data with recipient = testAccount (the sponsor)
-        bytes memory compactData = _createCompactDataWithRecipient(testAccount, targetChainId);
-
-        // Compute expected hash
+        bytes memory compactData = _createCompactDataWithRecipient(testRecipient, targetChainId);
         bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -276,25 +729,188 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with recipient == sponsor should be allowed");
+        assertTrue(result, "Valid recipient should pass");
     }
 
-    /// @notice Test check1271SignedAction with recipientIsSponsor check - should fail when
-    /// recipient != sponsor
-    function test_check1271SignedAction_recipientIsSponsor_invalid_shouldFail() public {
+    /// @notice Test recipient storage mode - invalid recipient
+    function test_check1271SignedAction_recipient_storage_invalid_shouldFail() public {
+        address allowedRecipient = makeAddr("allowedRecipient");
         address wrongRecipient = makeAddr("wrongRecipient");
         uint256 targetChainId = 137;
 
-        // Initialize policy with recipientIsSponsor check
+        _initializePolicyWithRecipient(allowedRecipient, targetChainId, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithRecipient(wrongRecipient, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Invalid recipient should fail");
+    }
+
+    /// @notice Test recipient storage mode - ANY_ADDRESS allows any recipient
+    function test_check1271SignedAction_recipient_storage_anyAddress_shouldPass() public {
+        uint256 targetChainId = 137;
+
+        // Initialize with ANY_ADDRESS
+        _initializePolicyWithRecipient(ANY_ADDRESS, targetChainId, MODE_CHECK_STORAGE);
+
+        address anyRecipient = makeAddr("anyRecipient");
+        bytes memory compactData = _createCompactDataWithRecipient(anyRecipient, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "ANY_ADDRESS should allow any recipient");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_CATCHALL
+    //--------------------------------------------
+
+    /// @notice Test recipient catchall mode - valid
+    function test_check1271SignedAction_recipient_catchall_valid_shouldPass() public {
+        address testRecipient = makeAddr("testRecipient");
+        uint256 targetChainId = 137;
+
+        // Initialize with catchall (chainId 0)
+        _initializePolicyWithRecipient(testRecipient, 0, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithRecipient(testRecipient, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Recipient in catchall config should pass");
+    }
+
+    /// @notice Test recipient catchall mode - invalid
+    function test_check1271SignedAction_recipient_catchall_invalid_shouldFail() public {
+        address allowedRecipient = makeAddr("allowedRecipient");
+        address wrongRecipient = makeAddr("wrongRecipient");
+        uint256 targetChainId = 137;
+
+        // Initialize with catchall (chainId 0)
+        _initializePolicyWithRecipient(allowedRecipient, 0, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithRecipient(wrongRecipient, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Recipient not in catchall config should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
+
+    /// @notice Test recipient subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_recipient_subpolicy_approves_shouldPass() public {
+        address testRecipient = makeAddr("testRecipient");
+        uint256 targetChainId = 137;
+
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithRecipientSubpolicy(address(mockSubPolicy));
+
+        bytes memory compactData = _createCompactDataWithRecipient(testRecipient, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test recipient subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_recipient_subpolicy_rejects_shouldFail() public {
+        address testRecipient = makeAddr("testRecipient");
+        uint256 targetChainId = 137;
+
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithRecipientSubpolicy(address(mockSubPolicy));
+
+        bytes memory compactData = _createCompactDataWithRecipient(testRecipient, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                       FIELD_RECIPIENT_IS_SPONSOR
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test recipientIsSponsor SKIP mode - allows any recipient
+    function test_check1271SignedAction_recipientIsSponsor_skip_shouldPass() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should allow any recipient");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE (enabled)
+    //--------------------------------------------
+
+    /// @notice Test recipientIsSponsor enabled - recipient equals sponsor
+    function test_check1271SignedAction_recipientIsSponsor_enabled_valid_shouldPass() public {
+        uint256 targetChainId = 137;
+
         _initializePolicyWithRecipientIsSponsor();
 
-        // Create Compact data with recipient != testAccount
-        bytes memory compactData = _createCompactDataWithRecipient(wrongRecipient, targetChainId);
-
-        // Compute expected hash
+        // Use testAccount (sponsor) as recipient
+        bytes memory compactData = _createCompactDataWithRecipient(testAccount, targetChainId);
         bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -303,89 +919,19 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with recipient != sponsor should be rejected");
+        assertTrue(result, "Recipient == sponsor should pass");
     }
 
-    //-------------------------------------
-    // 5) ORIGIN OPS
-    //-------------------------------------
-
-    /// @notice Test check1271SignedAction with originOps check - should pass when required and
-    /// present
-    function test_check1271SignedAction_originOps_requiredAndPresent_shouldPass() public {
-        uint256 elementIndex = 0;
-        bool requireOriginOps = true;
-
-        // Initialize policy requiring originOps
-        _initializePolicyWithOriginOps(requireOriginOps, block.chainid);
-
-        // Create Compact data with originOps present
-        bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, elementIndex);
-
-        // Compute expected hash - use expanded mandate hash function
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
-
-        // Check the action
-        bool result = compactClaimPolicy.check1271SignedAction(
-            testConfigId,
-            admin.addr,
-            testAccount,
-            DomainLib.withDomain(expectedHash, testDomainSeparator),
-            abi.encodePacked(testDomainSeparator, compactData)
-        );
-
-        assertTrue(result, "Action with required originOps present should be allowed");
-    }
-
-    /// @notice Test check1271SignedAction with originOps check - should fail when required but
-    /// missing
-    function test_check1271SignedAction_originOps_requiredButMissing_shouldFail() public {
-        uint256 elementIndex = 0;
-        bool requireOriginOps = true;
-
-        // Initialize policy requiring originOps
-        _initializePolicyWithOriginOps(requireOriginOps, block.chainid);
-
-        // Create Compact data with NO_OPS
-        bytes memory compactData = _createCompactDataWithOriginOps(Constants.NO_OPS, elementIndex);
-
-        // Compute expected hash - use expanded mandate hash function
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
-
-        // Check the action
-        bool result = compactClaimPolicy.check1271SignedAction(
-            testConfigId,
-            admin.addr,
-            testAccount,
-            DomainLib.withDomain(expectedHash, testDomainSeparator),
-            abi.encodePacked(testDomainSeparator, compactData)
-        );
-
-        assertFalse(result, "Action with required but missing originOps should be rejected");
-    }
-
-    //-------------------------------------
-    // 6) FILL EXPIRY
-    //-------------------------------------
-
-    /// @notice Test check1271SignedAction with fillExpiry check - should pass when in range
-    function test_check1271SignedAction_fillExpiry_valid_shouldPass() public {
-        uint128 minExpiry = uint128(block.timestamp + 1000);
-        uint128 maxExpiry = uint128(block.timestamp + 10_000);
-        uint256 testExpiry = block.timestamp + 5000; // Within range
+    /// @notice Test recipientIsSponsor enabled - recipient not equal sponsor
+    function test_check1271SignedAction_recipientIsSponsor_enabled_invalid_shouldFail() public {
+        address wrongRecipient = makeAddr("wrongRecipient");
         uint256 targetChainId = 137;
 
-        // Initialize policy with fillExpiry check
-        _initializePolicyWithFillExpiry(minExpiry, maxExpiry, targetChainId);
+        _initializePolicyWithRecipientIsSponsor();
 
-        // Create Compact data with valid fillExpiry
-        bytes memory compactData = _createCompactDataWithFillExpiry(testExpiry, targetChainId);
-
-        // Compute expected hash
+        bytes memory compactData = _createCompactDataWithRecipient(wrongRecipient, targetChainId);
         bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -394,26 +940,116 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with valid fillExpiry should be allowed");
+        assertFalse(result, "Recipient != sponsor should fail");
     }
 
-    /// @notice Test check1271SignedAction with fillExpiry check - should fail when below min
-    function test_check1271SignedAction_fillExpiry_belowMin_shouldFail() public {
+    /*//////////////////////////////////////////////////////////////
+                           FIELD_FILL_EXPIRY
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test fillExpiry SKIP mode returns true for any fillExpiry
+    function test_check1271SignedAction_fillExpiry_skip_shouldReturnTrue() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any fillExpiry");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test fillExpiry storage mode - within bounds
+    function test_check1271SignedAction_fillExpiry_storage_withinBounds_shouldPass() public {
+        uint128 minExpiry = uint128(block.timestamp + 1000);
+        uint128 maxExpiry = uint128(block.timestamp + 10_000);
+        uint256 testExpiry = block.timestamp + 5000;
+        uint256 targetChainId = 137;
+
+        _initializePolicyWithFillExpiry(minExpiry, maxExpiry, targetChainId);
+
+        bytes memory compactData = _createCompactDataWithFillExpiry(testExpiry, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "FillExpiry within bounds should pass");
+    }
+
+    /// @notice Test fillExpiry storage mode - equals min
+    function test_check1271SignedAction_fillExpiry_storage_equalsMin_shouldPass() public {
+        uint128 minExpiry = uint128(block.timestamp + 1000);
+        uint128 maxExpiry = uint128(block.timestamp + 10_000);
+        uint256 targetChainId = 137;
+
+        _initializePolicyWithFillExpiry(minExpiry, maxExpiry, targetChainId);
+
+        bytes memory compactData = _createCompactDataWithFillExpiry(minExpiry, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "FillExpiry equals min should pass");
+    }
+
+    /// @notice Test fillExpiry storage mode - equals max
+    function test_check1271SignedAction_fillExpiry_storage_equalsMax_shouldPass() public {
+        uint128 minExpiry = uint128(block.timestamp + 1000);
+        uint128 maxExpiry = uint128(block.timestamp + 10_000);
+        uint256 targetChainId = 137;
+
+        _initializePolicyWithFillExpiry(minExpiry, maxExpiry, targetChainId);
+
+        bytes memory compactData = _createCompactDataWithFillExpiry(maxExpiry, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "FillExpiry equals max should pass");
+    }
+
+    /// @notice Test fillExpiry storage mode - below min
+    function test_check1271SignedAction_fillExpiry_storage_belowMin_shouldFail() public {
         uint128 minExpiry = uint128(block.timestamp + 5000);
         uint128 maxExpiry = uint128(block.timestamp + 10_000);
-        uint256 testExpiry = block.timestamp + 1000; // Below min
+        uint256 testExpiry = block.timestamp + 1000;
         uint256 targetChainId = 137;
 
-        // Initialize policy with fillExpiry check
         _initializePolicyWithFillExpiry(minExpiry, maxExpiry, targetChainId);
 
-        // Create Compact data with fillExpiry below min
         bytes memory compactData = _createCompactDataWithFillExpiry(testExpiry, targetChainId);
-
-        // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -422,26 +1058,21 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with fillExpiry below min should be rejected");
+        assertFalse(result, "FillExpiry below min should fail");
     }
 
-    /// @notice Test check1271SignedAction with fillExpiry check - should fail when above max
-    function test_check1271SignedAction_fillExpiry_aboveMax_shouldFail() public {
+    /// @notice Test fillExpiry storage mode - above max
+    function test_check1271SignedAction_fillExpiry_storage_aboveMax_shouldFail() public {
         uint128 minExpiry = uint128(block.timestamp + 1000);
         uint128 maxExpiry = uint128(block.timestamp + 5000);
-        uint256 testExpiry = block.timestamp + 10_000; // Above max
+        uint256 testExpiry = block.timestamp + 10_000;
         uint256 targetChainId = 137;
 
-        // Initialize policy with fillExpiry check
         _initializePolicyWithFillExpiry(minExpiry, maxExpiry, targetChainId);
 
-        // Create Compact data with fillExpiry above max
         bytes memory compactData = _createCompactDataWithFillExpiry(testExpiry, targetChainId);
-
-        // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -450,28 +1081,95 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with fillExpiry above max should be rejected");
+        assertFalse(result, "FillExpiry above max should fail");
     }
 
-    //-------------------------------------
-    // 7) TOKEN OUT
-    //-------------------------------------
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
 
-    /// @notice Test check1271SignedAction with tokenOut check - should pass when valid
-    function test_check1271SignedAction_tokenOut_valid_shouldPass() public {
+    /// @notice Test fillExpiry subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_fillExpiry_subpolicy_approves_shouldPass() public {
+        uint256 targetChainId = 137;
+
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithFillExpirySubpolicy(address(mockSubPolicy));
+
+        uint256 testExpiry = block.timestamp + 5000;
+        bytes memory compactData = _createCompactDataWithFillExpiry(testExpiry, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test fillExpiry subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_fillExpiry_subpolicy_rejects_shouldFail() public {
+        uint256 targetChainId = 137;
+
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithFillExpirySubpolicy(address(mockSubPolicy));
+
+        uint256 testExpiry = block.timestamp + 5000;
+        bytes memory compactData = _createCompactDataWithFillExpiry(testExpiry, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           FIELD_TOKEN_OUT
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test tokenOut SKIP mode returns true for any tokenOut
+    function test_check1271SignedAction_tokenOut_skip_shouldReturnTrue() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any tokenOut");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test tokenOut storage mode - valid token
+    function test_check1271SignedAction_tokenOut_storage_valid_shouldPass() public {
         address testToken = makeAddr("testToken");
         uint256 targetChainId = 137;
 
-        // Initialize policy with tokenOut check
-        _initializePolicyWithTokenOut(testToken, targetChainId);
+        _initializePolicyWithTokenOut(testToken, targetChainId, MODE_CHECK_STORAGE);
 
-        // Create Compact data with valid tokenOut
         bytes memory compactData = _createCompactDataWithTokenOut(testToken, 1000, targetChainId);
-
-        // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -480,25 +1178,20 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with valid tokenOut should be allowed");
+        assertTrue(result, "Valid tokenOut should pass");
     }
 
-    /// @notice Test check1271SignedAction with tokenOut check - should fail when token invalid
-    function test_check1271SignedAction_tokenOut_invalidToken_shouldFail() public {
+    /// @notice Test tokenOut storage mode - invalid token
+    function test_check1271SignedAction_tokenOut_storage_invalid_shouldFail() public {
         address expectedToken = makeAddr("expectedToken");
         address wrongToken = makeAddr("wrongToken");
         uint256 targetChainId = 137;
 
-        // Initialize policy with tokenOut check for expectedToken
-        _initializePolicyWithTokenOut(expectedToken, targetChainId);
+        _initializePolicyWithTokenOut(expectedToken, targetChainId, MODE_CHECK_STORAGE);
 
-        // Create Compact data with wrong token
         bytes memory compactData = _createCompactDataWithTokenOut(wrongToken, 1000, targetChainId);
-
-        // Compute expected hash
         bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
 
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -507,30 +1200,25 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with invalid tokenOut should be rejected");
+        assertFalse(result, "Invalid tokenOut should fail");
     }
 
-    //-------------------------------------
-    // 8) DEST OPS
-    //-------------------------------------
-
-    /// @notice Test check1271SignedAction with destOps check - should pass when required and
-    /// present
-    function test_check1271SignedAction_destOps_requiredAndPresent_shouldPass() public {
+    /// @notice Test tokenOut storage mode - multiple tokens whitelisted
+    function test_check1271SignedAction_tokenOut_storage_multipleWhitelisted_shouldPass() public {
+        address token1 = makeAddr("token1");
+        address token2 = makeAddr("token2");
         uint256 targetChainId = 137;
-        bool requireDestOps = true;
 
-        // Initialize policy requiring destOps
-        _initializePolicyWithDestOps(requireDestOps, targetChainId);
+        // Initialize with multiple tokens
+        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(2), targetChainId, token1, targetChainId, token2);
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
 
-        // Create Compact data with destOps present
-        bytes32 nonEmptyOpsHash = keccak256("some dest ops");
-        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
+        // Use second token
+        bytes memory compactData = _createCompactDataWithTokenOut(token2, 1000, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
 
-        // Compute expected hash - use expanded mandate hash function
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
-
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -539,25 +1227,24 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with required destOps present should be allowed");
+        assertTrue(result, "Token in whitelist should pass");
     }
 
-    /// @notice Test check1271SignedAction with destOps check - should fail when required but
-    /// missing
-    function test_check1271SignedAction_destOps_requiredButMissing_shouldFail() public {
+    //--------------------------------------------
+    // MODE_CHECK_CATCHALL
+    //--------------------------------------------
+
+    /// @notice Test tokenOut catchall mode - valid
+    function test_check1271SignedAction_tokenOut_catchall_valid_shouldPass() public {
+        address testToken = makeAddr("testToken");
         uint256 targetChainId = 137;
-        bool requireDestOps = true;
 
-        // Initialize policy requiring destOps
-        _initializePolicyWithDestOps(requireDestOps, targetChainId);
+        // Initialize with catchall (chainId 0)
+        _initializePolicyWithTokenOut(testToken, 0, MODE_CHECK_CATCHALL);
 
-        // Create Compact data with NO_OPS
-        bytes memory compactData = _createCompactDataWithDestOps(Constants.NO_OPS, targetChainId);
+        bytes memory compactData = _createCompactDataWithTokenOut(testToken, 1000, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
 
-        // Compute expected hash - use expanded mandate hash function
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
-
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -566,47 +1253,21 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with required but missing destOps should be rejected");
+        assertTrue(result, "Token in catchall whitelist should pass");
     }
 
-    //-------------------------------------
-    // 9) QUALIFICATION
-    //-------------------------------------
+    /// @notice Test tokenOut catchall mode - invalid
+    function test_check1271SignedAction_tokenOut_catchall_invalid_shouldFail() public {
+        address expectedToken = makeAddr("expectedToken");
+        address wrongToken = makeAddr("wrongToken");
+        uint256 targetChainId = 137;
 
-    /// @notice Test check1271SignedAction with qualification check - should pass when valid
-    function test_check1271SignedAction_qualification_valid_shouldPass() public {
-        uint256 elementIndex = 0;
-        address arbiter = makeAddr("qualificationArbiter");
+        // Initialize with catchall (chainId 0)
+        _initializePolicyWithTokenOut(expectedToken, 0, MODE_CHECK_CATCHALL);
 
-        // Create simple rule: bytes[0:32] EQUAL to 0x123...
-        bytes32 expectedValue = bytes32(uint256(0x123));
-        ParamRule[] memory rules = new ParamRule[](1);
-        rules[0] = ParamRule({
-            condition: ParamCondition.EQUAL, offset: 0, length: 32, ref: expectedValue
-        });
+        bytes memory compactData = _createCompactDataWithTokenOut(wrongToken, 1000, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
 
-        // Create simple expression tree: just check rule 0
-        uint256[] memory packedNodes = new uint256[](1);
-        packedNodes[0] = uint256(0) | (uint256(0) << 8); // NODE_TYPE_RULE, ruleIndex=0
-
-        ParamRules memory paramRules =
-            ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
-
-        // Initialize policy with qualification check
-        _initializePolicyWithQualification(arbiter, paramRules, block.chainid);
-
-        // Create qualification data that matches the rule
-        bytes memory qualData = abi.encodePacked(expectedValue);
-        bytes memory compactData = _createCompactDataWithQualification(
-            arbiter,
-            qualData,
-            elementIndex // element index
-        );
-
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHashWithQualification(compactData);
-
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -615,41 +1276,24 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertTrue(result, "Action with valid qualification should be allowed");
+        assertFalse(result, "Token not in catchall whitelist should fail");
     }
 
-    /// @notice Test check1271SignedAction with qualification check - should fail when invalid
-    function test_check1271SignedAction_qualification_invalid_shouldFail() public {
-        uint256 elementIndex = 0;
-        address arbiter = makeAddr("qualificationArbiter");
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
 
-        // Create simple rule: bytes[0:32] EQUAL to 0x123...
-        bytes32 expectedValue = bytes32(uint256(0x123));
-        ParamRule[] memory rules = new ParamRule[](1);
-        rules[0] = ParamRule({
-            condition: ParamCondition.EQUAL, offset: 0, length: 32, ref: expectedValue
-        });
+    /// @notice Test tokenOut subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_tokenOut_subpolicy_approves_shouldPass() public {
+        address testToken = makeAddr("testToken");
+        uint256 targetChainId = 137;
 
-        // Create simple expression tree: just check rule 0
-        uint256[] memory packedNodes = new uint256[](1);
-        packedNodes[0] = uint256(0) | (uint256(0) << 8); // NODE_TYPE_RULE, ruleIndex=0
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithTokenOutSubpolicy(address(mockSubPolicy));
 
-        ParamRules memory paramRules =
-            ParamRules({ rootNodeIndex: 0, rules: rules, packedNodes: packedNodes });
+        bytes memory compactData = _createCompactDataWithTokenOut(testToken, 1000, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
 
-        // Initialize policy with qualification check
-        _initializePolicyWithQualification(arbiter, paramRules, block.chainid);
-
-        // Create qualification data that DOESN'T match the rule
-        bytes32 wrongValue = bytes32(uint256(0x456));
-        bytes memory qualData = abi.encodePacked(wrongValue);
-        bytes memory compactData =
-            _createCompactDataWithQualification(arbiter, qualData, elementIndex);
-
-        // Compute expected hash
-        bytes32 expectedHash = this.computeExpectedHashWithQualification(compactData);
-
-        // Check the action
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
             admin.addr,
@@ -658,103 +1302,1089 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             abi.encodePacked(testDomainSeparator, compactData)
         );
 
-        assertFalse(result, "Action with invalid qualification should be rejected");
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test tokenOut subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_tokenOut_subpolicy_rejects_shouldFail() public {
+        address testToken = makeAddr("testToken");
+        uint256 targetChainId = 137;
+
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithTokenOutSubpolicy(address(mockSubPolicy));
+
+        bytes memory compactData = _createCompactDataWithTokenOut(testToken, 1000, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
     }
 
     /*//////////////////////////////////////////////////////////////
-                                 HELPERS
+                          FIELD_ORIGIN_OPS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Helper to create mode config with specific field mode
-    function _createModeConfig(uint8 fieldId, uint8 mode) internal pure returns (uint32) {
-        return uint32(mode) << (fieldId * 2);
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test originOps SKIP mode returns true for any ops
+    function test_check1271SignedAction_originOps_skip_shouldReturnTrue() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any originOps");
     }
 
-    /// @notice Initialize policy with arbiter check
-    function _initializePolicyWithArbiter(address arbiter) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test originOps storage mode - required and present
+    function test_check1271SignedAction_originOps_storage_requiredAndPresent_shouldPass() public {
+        _initializePolicyWithOriginOps(true, block.chainid, MODE_CHECK_STORAGE);
+
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Required originOps present should pass");
+    }
+
+    /// @notice Test originOps storage mode - required but missing
+    function test_check1271SignedAction_originOps_storage_requiredButMissing_shouldFail() public {
+        _initializePolicyWithOriginOps(true, block.chainid, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithOriginOps(Constants.NO_OPS, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Required originOps missing should fail");
+    }
+
+    /// @notice Test originOps storage mode - not required and missing
+    function test_check1271SignedAction_originOps_storage_notRequiredAndMissing_shouldPass()
+        public
+    {
+        _initializePolicyWithOriginOps(false, block.chainid, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithOriginOps(Constants.NO_OPS, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Not required originOps missing should pass");
+    }
+
+    /// @notice Test originOps storage mode - not required but present
+    function test_check1271SignedAction_originOps_storage_notRequiredButPresent_shouldFail()
+        public
+    {
+        _initializePolicyWithOriginOps(false, block.chainid, MODE_CHECK_STORAGE);
+
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Not required originOps present should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_CATCHALL
+    //--------------------------------------------
+
+    /// @notice Test originOps catchall mode - config satisfied
+    function test_check1271SignedAction_originOps_catchall_satisfied_shouldPass() public {
+        // Initialize with catchall (chainId 0), required=true
+        _initializePolicyWithOriginOps(true, 0, MODE_CHECK_CATCHALL);
+
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Catchall config satisfied should pass");
+    }
+
+    /// @notice Test originOps catchall mode - config not satisfied
+    function test_check1271SignedAction_originOps_catchall_notSatisfied_shouldFail() public {
+        // Initialize with catchall (chainId 0), required=true
+        _initializePolicyWithOriginOps(true, 0, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithOriginOps(Constants.NO_OPS, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Catchall config not satisfied should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
+
+    /// @notice Test originOps subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_originOps_subpolicy_approves_shouldPass() public {
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithOriginOpsSubpolicy(address(mockSubPolicy));
+
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test originOps subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_originOps_subpolicy_rejects_shouldFail() public {
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithOriginOpsSubpolicy(address(mockSubPolicy));
+
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithOriginOps(nonEmptyOpsHash, 0);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            FIELD_DEST_OPS
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test destOps SKIP mode returns true for any ops
+    function test_check1271SignedAction_destOps_skip_shouldReturnTrue() public {
+        // Use basic compact data - destOps is in mandate which gets hashed
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any destOps");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test destOps storage mode - required and present
+    function test_check1271SignedAction_destOps_storage_requiredAndPresent_shouldPass() public {
+        uint256 targetChainId = 137;
+        _initializePolicyWithDestOps(true, targetChainId, MODE_CHECK_STORAGE);
+
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Required destOps present should pass");
+    }
+
+    /// @notice Test destOps storage mode - required but missing
+    function test_check1271SignedAction_destOps_storage_requiredButMissing_shouldFail() public {
+        uint256 targetChainId = 137;
+        _initializePolicyWithDestOps(true, targetChainId, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithDestOps(Constants.NO_OPS, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Required destOps missing should fail");
+    }
+
+    /// @notice Test destOps storage mode - not required and missing
+    function test_check1271SignedAction_destOps_storage_notRequiredAndMissing_shouldPass() public {
+        uint256 targetChainId = 137;
+        _initializePolicyWithDestOps(false, targetChainId, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithDestOps(Constants.NO_OPS, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Not required destOps missing should pass");
+    }
+
+    /// @notice Test destOps storage mode - not required but present
+    function test_check1271SignedAction_destOps_storage_notRequiredButPresent_shouldFail() public {
+        uint256 targetChainId = 137;
+        _initializePolicyWithDestOps(false, targetChainId, MODE_CHECK_STORAGE);
+
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Not required destOps present should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_CATCHALL
+    //--------------------------------------------
+
+    /// @notice Test destOps catchall mode - config satisfied
+    function test_check1271SignedAction_destOps_catchall_satisfied_shouldPass() public {
+        _initializePolicyWithDestOps(true, 0, MODE_CHECK_CATCHALL);
+
+        uint256 targetChainId = 137;
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Catchall config satisfied should pass");
+    }
+
+    /// @notice Test destOps catchall mode - config not satisfied
+    function test_check1271SignedAction_destOps_catchall_notSatisfied_shouldFail() public {
+        _initializePolicyWithDestOps(true, 0, MODE_CHECK_CATCHALL);
+
+        uint256 targetChainId = 137;
+        bytes memory compactData = _createCompactDataWithDestOps(Constants.NO_OPS, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Catchall config not satisfied should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
+
+    /// @notice Test destOps subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_destOps_subpolicy_approves_shouldPass() public {
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithDestOpsSubpolicy(address(mockSubPolicy));
+
+        uint256 targetChainId = 137;
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test destOps subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_destOps_subpolicy_rejects_shouldFail() public {
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithDestOpsSubpolicy(address(mockSubPolicy));
+
+        uint256 targetChainId = 137;
+        bytes32 nonEmptyOpsHash = keccak256("some ops");
+        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                         FIELD_QUALIFICATION
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // MODE_SKIP
+    //--------------------------------------------
+
+    /// @notice Test qualification SKIP mode returns true for any qualification
+    function test_check1271SignedAction_qualification_skip_shouldReturnTrue() public {
+        bytes memory compactData = _createCompactDataWithArbiter(makeAddr("anyArbiter"));
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "SKIP mode should return true for any qualification");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_STORAGE
+    //--------------------------------------------
+
+    /// @notice Test qualification storage mode - valid qualification
+    function test_check1271SignedAction_qualification_storage_valid_shouldPass() public {
+        bytes32 qualData = keccak256("valid qualification");
+        _initializePolicyWithQualification(qualData, false, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithQualificationStorage(qualData);
+        bytes32 expectedHash = this.computeExpectedHashWithQualificationExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Valid qualification should pass");
+    }
+
+    /// @notice Test qualification storage mode - invalid qualification
+    function test_check1271SignedAction_qualification_storage_invalid_shouldFail() public {
+        bytes32 expectedQualHash = keccak256("expected qualification");
+        bytes32 wrongHash = keccak256("wrong qualification");
+        _initializePolicyWithQualification(expectedQualHash, false, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithQualificationStorage(wrongHash);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Invalid qualification should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_CATCHALL
+    //--------------------------------------------
+
+    /// @notice Test qualification catchall mode - valid
+    function test_check1271SignedAction_qualification_catchall_valid_shouldPass() public {
+        bytes32 qualData = keccak256("valid qualification");
+        _initializePolicyWithQualification(qualData, false, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithQualificationStorage(qualData);
+        bytes32 expectedHash = this.computeExpectedHashWithQualificationExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Catchall rules pass should pass");
+    }
+
+    /// @notice Test qualification catchall mode - invalid
+    function test_check1271SignedAction_qualification_catchall_invalid_shouldFail() public {
+        bytes32 expectedQualHash = keccak256("expected qualification");
+        bytes32 wrongHash = keccak256("wrong qualification");
+        _initializePolicyWithQualification(expectedQualHash, false, MODE_CHECK_CATCHALL);
+
+        bytes memory compactData = _createCompactDataWithQualificationStorage(wrongHash);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Catchall rules fail should fail");
+    }
+
+    //--------------------------------------------
+    // MODE_CHECK_SUBPOLICY
+    //--------------------------------------------
+
+    /// @notice Test qualification subpolicy mode - subpolicy approves
+    function test_check1271SignedAction_qualification_subpolicy_approves_shouldPass() public {
+        mockSubPolicy.setReturnValue(true);
+        _initializePolicyWithQualificationSubpolicy(address(mockSubPolicy));
+
+        bytes32 qualData = keccak256("any qualification");
+        bytes memory compactData = _createCompactDataWithQualificationSubpolicy(qualData);
+        bytes32 expectedHash = this.computeExpectedHashWithQualificationSubpolicy(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Subpolicy approval should pass");
+    }
+
+    /// @notice Test qualification subpolicy mode - subpolicy rejects
+    function test_check1271SignedAction_qualification_subpolicy_rejects_shouldFail() public {
+        mockSubPolicy.setReturnValue(false);
+        _initializePolicyWithQualificationSubpolicy(address(mockSubPolicy));
+
+        bytes32 qualHash = keccak256("any qualification");
+        bytes memory compactData = _createCompactDataWithQualificationSubpolicy(qualHash);
+        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Subpolicy rejection should fail");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        MULTIPLE FIELDS ENABLED
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test all fields pass - should return true
+    function test_check1271SignedAction_multipleFields_allPass_shouldReturnTrue() public {
+        address testArbiter = makeAddr("testArbiter");
+        address testRecipient = makeAddr("testRecipient");
+        address testTokenOut = makeAddr("testTokenOut");
+        uint256 targetChainId = 137;
+
+        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
+
+        bytes memory initData = abi.encodePacked(
+            modeConfig,
+            uint8(1),
+            testArbiter,
+            uint8(1),
+            targetChainId,
+            testRecipient,
+            uint8(1),
+            targetChainId,
+            testTokenOut
+        );
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+
+        bytes memory compactData = _createCompactDataWithMultipleFields(
+            testArbiter, testRecipient, testTokenOut, targetChainId
+        );
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "All fields pass should return true");
+    }
+
+    /// @notice Test first field fails - should return false
+    function test_check1271SignedAction_multipleFields_firstFails_shouldReturnFalse() public {
+        address expectedArbiter = makeAddr("expectedArbiter");
+        address wrongArbiter = makeAddr("wrongArbiter");
+        address testRecipient = makeAddr("testRecipient");
+        address testTokenOut = makeAddr("testTokenOut");
+        uint256 targetChainId = 137;
+
+        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
+
+        bytes memory initData = abi.encodePacked(
+            modeConfig,
+            uint8(1),
+            expectedArbiter,
+            uint8(1),
+            targetChainId,
+            testRecipient,
+            uint8(1),
+            targetChainId,
+            testTokenOut
+        );
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+
+        bytes memory compactData = _createCompactDataWithMultipleFields(
+            wrongArbiter, testRecipient, testTokenOut, targetChainId
+        );
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "First field fails should return false");
+    }
+
+    /// @notice Test middle field fails - should return false
+    function test_check1271SignedAction_multipleFields_middleFails_shouldReturnFalse() public {
+        address testArbiter = makeAddr("testArbiter");
+        address expectedRecipient = makeAddr("expectedRecipient");
+        address wrongRecipient = makeAddr("wrongRecipient");
+        address testTokenOut = makeAddr("testTokenOut");
+        uint256 targetChainId = 137;
+
+        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
+
+        bytes memory initData = abi.encodePacked(
+            modeConfig,
+            uint8(1),
+            testArbiter,
+            uint8(1),
+            targetChainId,
+            expectedRecipient,
+            uint8(1),
+            targetChainId,
+            testTokenOut
+        );
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+
+        bytes memory compactData = _createCompactDataWithMultipleFields(
+            testArbiter, wrongRecipient, testTokenOut, targetChainId
+        );
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Middle field fails should return false");
+    }
+
+    /// @notice Test last field fails - should return false
+    function test_check1271SignedAction_multipleFields_lastFails_shouldReturnFalse() public {
+        address testArbiter = makeAddr("testArbiter");
+        address testRecipient = makeAddr("testRecipient");
+        address expectedTokenOut = makeAddr("expectedTokenOut");
+        address wrongTokenOut = makeAddr("wrongTokenOut");
+        uint256 targetChainId = 137;
+
+        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
+
+        bytes memory initData = abi.encodePacked(
+            modeConfig,
+            uint8(1),
+            testArbiter,
+            uint8(1),
+            targetChainId,
+            testRecipient,
+            uint8(1),
+            targetChainId,
+            expectedTokenOut
+        );
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+
+        bytes memory compactData = _createCompactDataWithMultipleFields(
+            testArbiter, testRecipient, wrongTokenOut, targetChainId
+        );
+        bytes32 expectedHash = this.computeExpectedHashWithTokenOut(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Last field fails should return false");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          HASH VERIFICATION
+    //////////////////////////////////////////////////////////////*/
+
+    function test_check1271SignedAction_hash_matches_shouldReturnTrue() public {
+        // Initialize with arbiter (need at least one field enabled)
+        address testArbiter = makeAddr("testArbiter");
+        _initializePolicyWithArbiter(testArbiter, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithArbiter(testArbiter);
+        bytes32 expectedHash = this.computeExpectedHash(compactData);
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(expectedHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertTrue(result, "Matching hash should return true");
+    }
+
+    function test_check1271SignedAction_hash_mismatch_shouldReturnFalse() public {
+        // Initialize with arbiter
+        address testArbiter = makeAddr("testArbiter");
+        _initializePolicyWithArbiter(testArbiter, MODE_CHECK_STORAGE);
+
+        bytes memory compactData = _createCompactDataWithArbiter(testArbiter);
+        bytes32 wrongHash = keccak256("wrong hash");
+
+        bool result = compactClaimPolicy.check1271SignedAction(
+            testConfigId,
+            admin.addr,
+            testAccount,
+            DomainLib.withDomain(wrongHash, testDomainSeparator),
+            abi.encodePacked(testDomainSeparator, compactData)
+        );
+
+        assertFalse(result, "Mismatching hash should return false");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    //--------------------------------------------
+    // ARBITER HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with arbiter check (STORAGE or CATCHALL mode)
+    function _initializePolicyWithArbiter(address arbiter, uint8 mode) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, mode);
         bytes memory initData = abi.encodePacked(modeConfig, uint8(1), arbiter);
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Initialize policy with claim expires check
-    function _initializePolicyWithClaimExpires(uint128 min, uint128 max) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(
-            modeConfig,
-            uint256(min) | (uint256(max) << 128) // packed uint128
-        );
+    //--------------------------------------------
+    // EXPIRY HELPERS
+    //--------------------------------------------
 
+    /// @notice Initialize policy with expiry bounds
+    function _initializePolicyWithExpiry(uint128 minExpiry, uint128 maxExpiry) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint256(minExpiry) | (uint256(maxExpiry) << 128));
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Initialize policy with tokenIn check
+    //--------------------------------------------
+    // TOKEN_IN HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with tokenIn (STORAGE or CATCHALL mode)
     function _initializePolicyWithTokenIn(
         address token,
         bytes12 lockTag,
+        uint256 chainId,
+        uint8 mode
+    )
+        internal
+    {
+        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_IN, mode);
+        uint256 compactId = (uint256(uint96(lockTag)) << 160) | uint256(uint160(token));
+        bytes memory initData = abi.encodePacked(modeConfig, uint8(1), uint256(chainId), compactId);
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    //--------------------------------------------
+    // RECIPIENT HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with recipient (STORAGE or CATCHALL mode)
+    function _initializePolicyWithRecipient(
+        address recipient,
+        uint256 chainId,
+        uint8 mode
+    )
+        internal
+    {
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, mode);
+        bytes memory initData = abi.encodePacked(modeConfig, uint8(1), chainId, recipient);
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Initialize policy with recipientIsSponsor enabled
+    function _initializePolicyWithRecipientIsSponsor() internal {
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+        bytes memory initData = abi.encodePacked(modeConfig);
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    //--------------------------------------------
+    // FILL_EXPIRY HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with fillExpiry bounds
+    function _initializePolicyWithFillExpiry(
+        uint128 minExpiry,
+        uint128 maxExpiry,
         uint256 chainId
     )
         internal
     {
-        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_IN, MODE_CHECK_STORAGE);
-        uint256 compactId = (uint256(uint96(lockTag)) << 160) | uint256(uint160(token));
+        uint32 modeConfig = _createModeConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         bytes memory initData = abi.encodePacked(
-            modeConfig,
-            uint8(1), // count
-            uint256(chainId),
-            compactId
+            modeConfig, uint8(1), chainId, uint256(minExpiry) | (uint256(maxExpiry) << 128)
         );
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Initialize policy with recipient check
-    function _initializePolicyWithRecipient(address recipient, uint256 targetChainId) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
+    //--------------------------------------------
+    // TOKEN_OUT HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with tokenOut (STORAGE or CATCHALL mode)
+    function _initializePolicyWithTokenOut(address token, uint256 chainId, uint8 mode) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_OUT, mode);
+        bytes memory initData = abi.encodePacked(modeConfig, uint8(1), chainId, token);
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    //--------------------------------------------
+    // ORIGIN_OPS HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with originOps (STORAGE or CATCHALL mode)
+    function _initializePolicyWithOriginOps(bool required, uint256 chainId, uint8 mode) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_ORIGIN_OPS, mode);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), chainId, uint8(required ? 1 : 0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    //--------------------------------------------
+    // DEST_OPS HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with destOps (STORAGE or CATCHALL mode)
+    function _initializePolicyWithDestOps(bool required, uint256 chainId, uint8 mode) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, mode);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), chainId, uint8(required ? 1 : 0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    //--------------------------------------------
+    // QUALIFICATION HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with qualification (uses ParamRules)
+    function _initializePolicyWithQualification(
+        bytes32 qualData,
+        bool useArbiterHash,
+        uint8 mode
+    )
+        internal
+    {
+        uint32 modeConfig = _createModeConfig(FIELD_QUALIFICATION, mode);
+
+        address arbiter = makeAddr("arbiter");
+
+        // For CATCHALL mode, use chainId=0; for STORAGE mode, use actual chainId
+        uint256 chainId = (mode == MODE_CHECK_CATCHALL) ? 0 : block.chainid;
+
+        bytes memory qualConfig = abi.encodePacked(
+            uint8(1), // count
+            uint256(chainId), // chainId (0 for catchall)
+            arbiter, // arbiter
+            uint8(useArbiterHash ? 1 : 0), // useArbiterHash
+            uint8(0), // rootNodeIndex
+            uint8(1), // ruleCount
+            uint8(ParamCondition.EQUAL), // condition
+            uint64(0), // offset
+            uint8(32), // length
+            qualData, // ref (the data we're checking against)
+            uint8(1), // packedNodesCount
+            uint256(0) // packedNode[0]
+        );
+
+        bytes memory initData = abi.encodePacked(modeConfig, qualConfig);
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    //--------------------------------------------
+    // SUBPOLICY HELPERS
+    //--------------------------------------------
+
+    /// @notice Initialize policy with arbiter subpolicy
+    function _initializePolicyWithArbiterSubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_ARBITER, MODE_CHECK_SUBPOLICY);
         bytes memory initData = abi.encodePacked(
             modeConfig,
-            uint8(1), // count
-            targetChainId,
-            recipient
+            uint8(1), // count (1 byte)
+            uint8(FIELD_ARBITER), // fieldId (1 byte)
+            subPolicy, // policyAddress (20 bytes)
+            uint256(0) // initDataLength (32 bytes)
         );
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Initialize policy with originOps check
-    function _initializePolicyWithOriginOps(bool required, uint256 chainId) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
+    /// @notice Initialize policy with expiry subpolicy
+    function _initializePolicyWithExpirySubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_EXPIRY, MODE_CHECK_SUBPOLICY);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), uint8(FIELD_EXPIRY), subPolicy, uint256(0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Initialize policy with tokenIn subpolicy
+    function _initializePolicyWithTokenInSubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_IN, MODE_CHECK_SUBPOLICY);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), uint8(FIELD_TOKEN_IN), subPolicy, uint256(0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Initialize policy with recipient subpolicy
+    function _initializePolicyWithRecipientSubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_SUBPOLICY);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), uint8(FIELD_RECIPIENT), subPolicy, uint256(0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Initialize policy with fillExpiry subpolicy
+    function _initializePolicyWithFillExpirySubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_FILL_EXPIRY, MODE_CHECK_SUBPOLICY);
         bytes memory initData = abi.encodePacked(
-            modeConfig,
-            uint8(1), // count
-            chainId,
-            uint8(required ? 1 : 0)
+            modeConfig, uint8(1), uint8(FIELD_FILL_EXPIRY), subPolicy, uint256(0)
         );
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
-    /// @notice Create Compact data with specific arbiter (fast path - mandateHash only)
+    /// @notice Initialize policy with tokenOut subpolicy
+    function _initializePolicyWithTokenOutSubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_SUBPOLICY);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), uint8(FIELD_TOKEN_OUT), subPolicy, uint256(0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Initialize policy with originOps subpolicy
+    function _initializePolicyWithOriginOpsSubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_ORIGIN_OPS, MODE_CHECK_SUBPOLICY);
+        bytes memory initData = abi.encodePacked(
+            modeConfig, uint8(1), uint8(FIELD_ORIGIN_OPS), subPolicy, uint256(0)
+        );
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Initialize policy with destOps subpolicy
+    function _initializePolicyWithDestOpsSubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), uint8(FIELD_DEST_OPS), subPolicy, uint256(0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /// @notice Initialize policy with qualification subpolicy
+    function _initializePolicyWithQualificationSubpolicy(address subPolicy) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_QUALIFICATION, MODE_CHECK_SUBPOLICY);
+        bytes memory initData = abi.encodePacked(
+            modeConfig, uint8(1), uint8(FIELD_QUALIFICATION), subPolicy, uint256(0)
+        );
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                         DATA CREATION HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Create basic compact header
+    function _createCompactHeader() private view returns (bytes memory) {
+        return abi.encodePacked(
+            uint256(1), // nonce
+            uint256(block.timestamp + 3600), // expires
+            uint256(0) // otherElements length
+        );
+    }
+
+    /// @notice Create element header
+    function _createElementHeader(
+        address arbiter,
+        uint256 elementIndex
+    )
+        private
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodePacked(arbiter, elementIndex);
+    }
+
+    /// @notice Compute basic mandate hash
+    function _computeBasicMandateHash() private pure returns (bytes32) {
+        return EIP712TypeHashLib.hashMandateRaw(
+            keccak256("target"),
+            uint128(0),
+            Constants.NO_OPS,
+            Constants.NO_OPS,
+            keccak256("qualification")
+        );
+    }
+
+    /// @notice Create mandate footer
+    function _createMandateFooter() private pure returns (bytes memory) {
+        return abi.encodePacked(
+            uint128(0), Constants.NO_OPS, Constants.NO_OPS, keccak256("qualification")
+        );
+    }
+
+    /// @notice Create Compact data with specific arbiter
     function _createCompactDataWithArbiter(address arbiter) internal view returns (bytes memory) {
         bytes memory header = _createCompactHeader();
         bytes memory elementHeader = _createElementHeader(arbiter, 0);
         bytes32 mandateHash = _computeBasicMandateHash();
-
         return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateHash);
     }
 
-    /// @notice Create Compact data with specific expires (fast path - mandateHash only)
+    /// @notice Create Compact data with specific expires
     function _createCompactDataWithExpires(uint256 expires) internal returns (bytes memory) {
-        bytes memory header = abi.encodePacked(
-            uint256(1), // nonce
-            expires,
-            uint256(0) // otherElements length
-        );
-
+        bytes memory header = abi.encodePacked(uint256(1), expires, uint256(0));
         bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
         bytes32 mandateHash = _computeBasicMandateHash();
-
         return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateHash);
     }
 
-    /// @notice Create Compact data with tokenIn (fast path - mandateHash only)
+    /// @notice Create Compact data with tokenIn
     function _createCompactDataWithTokenIn(
         address token,
         bytes12 lockTag,
@@ -766,27 +2396,10 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     {
         bytes memory header = _createCompactHeader();
         bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), elementIndex);
-
         uint256 tokenData = (uint256(uint96(lockTag)) << 160) | uint256(uint160(token));
-        bytes memory tokenInData = abi.encodePacked(
-            uint8(1), // length
-            tokenData,
-            amount
-        );
-
+        bytes memory tokenInData = abi.encodePacked(uint8(1), tokenData, amount);
         bytes32 mandateHash = _computeBasicMandateHash();
         return abi.encodePacked(header, elementHeader, tokenInData, mandateHash);
-    }
-
-    /// @notice Compute basic mandate hash
-    function _computeBasicMandateHash() private pure returns (bytes32) {
-        return EIP712TypeHashLib.hashMandateRaw(
-            keccak256("target"),
-            uint128(0), // minGas
-            Constants.NO_OPS,
-            Constants.NO_OPS,
-            keccak256("qualification")
-        );
     }
 
     /// @notice Create Compact data with recipient
@@ -799,370 +2412,16 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     {
         bytes memory header = _createCompactHeader();
         bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
-
-        // Create target data WITHOUT tokenOut validation (so use hash, not length)
         bytes memory targetData = abi.encodePacked(
             recipient,
             targetChainId,
-            uint256(block.timestamp + 7200), // fillExpiry
-            Constants.EMPTY_TOKEN_OUT_HASH // tokenOutHash
+            uint256(block.timestamp + 7200),
+            Constants.EMPTY_TOKEN_OUT_HASH
         );
-
         bytes memory mandateFooter = _createMandateFooter();
-
         return abi.encodePacked(
             header, elementHeader, keccak256("commitments"), targetData, mandateFooter
         );
-    }
-
-    /// @notice Create basic compact header
-    function _createCompactHeader() private view returns (bytes memory) {
-        return abi.encodePacked(
-            uint256(1), // nonce
-            uint256(block.timestamp + 3600), // expires
-            uint256(0) // otherElements length
-        );
-    }
-
-    /// @notice Create element header with arbiter and chainId
-    function _createElementHeader(
-        address arbiter,
-        uint256 elementIndex
-    )
-        private
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodePacked(arbiter, elementIndex);
-    }
-
-    /// @notice Create basic mandate data
-    function _createMandateData() private pure returns (bytes memory) {
-        return abi.encodePacked(
-            keccak256("target"), // targetHash (32 bytes)
-            uint256(1), // targetChainId (32 bytes)
-            uint128(0), // minGas (16 bytes)
-            Constants.NO_OPS, // originOpsHash (32 bytes)
-            Constants.NO_OPS, // destOpsHash (32 bytes)
-            keccak256("qualification") // qualificationHash (32 bytes)
-        );
-    }
-
-    /// @notice Create mandate footer (for when target is expanded)
-    function _createMandateFooter() private pure returns (bytes memory) {
-        return abi.encodePacked(
-            // NO targetChainId here! It's inside the target data
-            uint128(0), // minGas (16 bytes)
-            Constants.NO_OPS, // originOpsHash (32 bytes)
-            Constants.NO_OPS, // destOpsHash (32 bytes)
-            keccak256("qualification") // qualificationHash (32 bytes)
-        );
-    }
-
-    /// @notice Compute expected hash for Compact (fast path - mandateHash directly in calldata)
-    function computeExpectedHash(bytes calldata compactData) external view returns (bytes32) {
-        // Parse compact data
-        uint256 nonce = uint256(bytes32(compactData[0:32]));
-        uint256 expires = uint256(bytes32(compactData[32:64]));
-
-        // Parse otherElements as calldata
-        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
-        bytes32[] calldata otherElements;
-        assembly {
-            otherElements.offset := add(compactData.offset, 96)
-            otherElements.length := otherElementsLength
-        }
-        uint256 offset = 96 + otherElementsLength * 32;
-
-        // Parse element
-        address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20;
-        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-
-        // Fast path: mandateHash is directly in calldata (32 bytes)
-        bytes32 mandateHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash element
-        bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
-
-        // Insert at index and hash
-        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
-
-        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
-    }
-
-    /// @notice Compute expected hash when target is expanded (for recipient test)
-    function computeExpectedHashWithTarget(bytes calldata compactData)
-        external
-        view
-        returns (bytes32)
-    {
-        // Parse compact data
-        uint256 nonce = uint256(bytes32(compactData[0:32]));
-        uint256 expires = uint256(bytes32(compactData[32:64]));
-
-        // Parse otherElements as calldata
-        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
-        bytes32[] calldata otherElements;
-        assembly {
-            otherElements.offset := add(compactData.offset, 96)
-            otherElements.length := otherElementsLength
-        }
-        uint256 offset = 96 + otherElementsLength * 32;
-
-        // Parse element
-        address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20; // arbiter + reserved
-        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-
-        // Parse TARGET (expanded!)
-        address recipient = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20; // recipient + reserved
-        uint256 targetChainId = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-        uint256 fillExpiry = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-
-        // Read tokenOut hash directly
-        bytes32 tokenOutHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-
-        // Hash target
-        bytes32 targetHash = EIP712TypeHashLib.hashTargetAttributesRaw(
-            recipient, tokenOutHash, targetChainId, fillExpiry
-        );
-
-        // Parse mandate footer
-        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
-        offset += 16;
-        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash mandate
-        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
-            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
-        );
-
-        // Hash element
-        bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
-
-        // Insert at index and hash
-        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
-
-        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
-    }
-
-    /// @notice Compute expected hash when tokenIn is expanded
-    /// @notice Compute expected hash when tokenIn is expanded (but mandate is fast path)
-    function computeExpectedHashWithTokenIn(bytes calldata compactData)
-        external
-        view
-        returns (bytes32)
-    {
-        // Parse compact data
-        uint256 nonce = uint256(bytes32(compactData[0:32]));
-        uint256 expires = uint256(bytes32(compactData[32:64]));
-
-        // Parse otherElements as calldata
-        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
-        bytes32[] calldata otherElements;
-        assembly {
-            otherElements.offset := add(compactData.offset, 96)
-            otherElements.length := otherElementsLength
-        }
-        uint256 offset = 96 + otherElementsLength * 32;
-
-        // Parse element
-        address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20;
-        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-
-        // Parse tokenIn (expanded!)
-        uint8 tokenInLength = uint8(compactData[offset]);
-        offset += 1;
-
-        uint256[2][] calldata tokenIn;
-        assembly {
-            tokenIn.offset := add(compactData.offset, offset)
-            tokenIn.length := tokenInLength
-        }
-
-        bytes32 commitmentsHash = EIP712TypeHashLib.hashTokenIn(tokenIn);
-        offset += uint256(tokenInLength) * 64;
-
-        // Fast path: mandateHash directly (32 bytes)
-        bytes32 mandateHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash element
-        bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
-
-        // Insert at index and hash
-        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
-
-        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
-    }
-
-    /// @notice Initialize policy with fillExpiry check
-    function _initializePolicyWithFillExpiry(
-        uint128 min,
-        uint128 max,
-        uint256 targetChainId
-    )
-        internal
-    {
-        uint32 modeConfig = _createModeConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(
-            modeConfig,
-            uint8(1), // count
-            targetChainId,
-            uint256(min) | (uint256(max) << 128)
-        );
-        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
-    }
-
-    /// @notice Initialize policy with tokenOut check
-    function _initializePolicyWithTokenOut(address token, uint256 targetChainId) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(
-            modeConfig,
-            uint8(1), // count
-            targetChainId,
-            token
-        );
-        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
-    }
-
-    /// @notice Initialize policy with destOps check
-    function _initializePolicyWithDestOps(bool required, uint256 targetChainId) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(
-            modeConfig,
-            uint8(1), // count
-            targetChainId,
-            uint8(required ? 1 : 0)
-        );
-        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
-    }
-
-    /// @notice Create Compact data with originOps (expanded mandate format)
-    function _createCompactDataWithOriginOps(
-        bytes32 originOpsHash,
-        uint256 elementIndex
-    )
-        internal
-        returns (bytes memory)
-    {
-        bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), elementIndex);
-
-        // Use pre-computed targetHash since no target checks
-        bytes32 targetHash = keccak256("target");
-        uint256 targetChainId = block.chainid;
-
-        bytes memory mandateData = abi.encodePacked(
-            targetHash, // targetHash (32 bytes)
-            targetChainId, // targetChainId (32 bytes)
-            uint128(0), // minGas (16 bytes)
-            originOpsHash, // originOpsHash (32 bytes)
-            Constants.NO_OPS, // destOpsHash (32 bytes)
-            keccak256("qualification") // qualificationHash (32 bytes)
-        );
-
-        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
-    }
-
-    /// @notice Create Compact data with destOps (expanded mandate format)
-    function _createCompactDataWithDestOps(
-        bytes32 destOpsHash,
-        uint256 targetChainId
-    )
-        internal
-        returns (bytes memory)
-    {
-        bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
-
-        // Use pre-computed targetHash since no target checks
-        bytes32 targetHash = keccak256("target");
-
-        bytes memory mandateData = abi.encodePacked(
-            targetHash, // targetHash (32 bytes)
-            targetChainId, // targetChainId (32 bytes)
-            uint128(0), // minGas (16 bytes)
-            Constants.NO_OPS, // originOpsHash (32 bytes)
-            destOpsHash, // destOpsHash (32 bytes)
-            keccak256("qualification") // qualificationHash (32 bytes)
-        );
-
-        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
-    }
-
-    /// @notice Compute expected hash when mandate is expanded (no target expansion)
-    /// @dev Used for originOps, destOps tests where mandate fields are checked but target is not
-    function computeExpectedHashWithMandateExpanded(bytes calldata compactData)
-        external
-        view
-        returns (bytes32)
-    {
-        // Parse compact data
-        uint256 nonce = uint256(bytes32(compactData[0:32]));
-        uint256 expires = uint256(bytes32(compactData[32:64]));
-
-        // Parse otherElements as calldata
-        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
-        bytes32[] calldata otherElements;
-        assembly {
-            otherElements.offset := add(compactData.offset, 96)
-            otherElements.length := otherElementsLength
-        }
-        uint256 offset = 96 + otherElementsLength * 32;
-
-        // Parse element
-        address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20;
-        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
-        offset += 32;
-        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-
-        // Parse expanded mandate (no target expansion)
-        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        offset += 32; // skip targetChainId (not needed for hash)
-        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
-        offset += 16;
-        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
-        offset += 32;
-        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash mandate
-        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
-            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
-        );
-
-        // Hash element
-        bytes32 elementHash =
-            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
-
-        // Insert at index and hash
-        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
-
-        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
 
     /// @notice Create Compact data with fillExpiry
@@ -1175,17 +2434,10 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     {
         bytes memory header = _createCompactHeader();
         bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
-
-        // Create target data with specific fillExpiry
         bytes memory targetData = abi.encodePacked(
-            makeAddr("recipient"),
-            targetChainId,
-            fillExpiry,
-            Constants.EMPTY_TOKEN_OUT_HASH // tokenOutHash
+            makeAddr("recipient"), targetChainId, fillExpiry, Constants.EMPTY_TOKEN_OUT_HASH
         );
-
         bytes memory mandateFooter = _createMandateFooter();
-
         return abi.encodePacked(
             header, elementHeader, keccak256("commitments"), targetData, mandateFooter
         );
@@ -1202,21 +2454,264 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     {
         bytes memory header = _createCompactHeader();
         bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
-
         uint256 tokenData = uint256(uint160(token));
         bytes memory targetData = abi.encodePacked(
             makeAddr("recipient"),
             targetChainId,
             uint256(block.timestamp + 7200),
-            uint8(1), // tokenOut length
+            uint8(1),
             tokenData,
             amount
         );
-
         bytes memory mandateFooter = _createMandateFooter();
         return abi.encodePacked(
             header, elementHeader, keccak256("commitments"), targetData, mandateFooter
         );
+    }
+
+    /// @notice Create Compact data with originOps
+    function _createCompactDataWithOriginOps(
+        bytes32 originOpsHash,
+        uint256 elementIndex
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), elementIndex);
+        bytes32 targetHash = keccak256("target");
+        bytes memory mandateData = abi.encodePacked(
+            targetHash,
+            block.chainid,
+            uint128(0),
+            originOpsHash,
+            Constants.NO_OPS,
+            keccak256("qualification")
+        );
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Create Compact data with destOps
+    function _createCompactDataWithDestOps(
+        bytes32 destOpsHash,
+        uint256 targetChainId
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
+        bytes32 targetHash = keccak256("target");
+        bytes memory mandateData = abi.encodePacked(
+            targetHash,
+            targetChainId,
+            uint128(0),
+            Constants.NO_OPS,
+            destOpsHash,
+            keccak256("qualification")
+        );
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Create Compact data with qualification
+    /// @notice Create Compact data with qualification for STORAGE/CATCHALL mode
+    function _createCompactDataWithQualificationStorage(bytes32 qualHash)
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
+
+        // Create qualification data that hashes to qualHash
+        // For testing, we use qualHash as the data itself (32 bytes)
+        // The rule checks bytes[0:32] == qualHash, so data must BE qualHash
+        bytes memory qualificationData = abi.encodePacked(qualHash);
+
+        // Storage format: [dataLength: 32][data: dataLength]
+        bytes memory qualificationEncoded = abi.encodePacked(
+            uint256(qualificationData.length), // 32 bytes length prefix
+            qualificationData // the actual data
+        );
+
+        bytes memory mandateData = abi.encodePacked(
+            keccak256("target"), // targetHash
+            uint256(block.chainid), // targetChainId
+            uint128(0), // minGas
+            Constants.NO_OPS, // originOpsHash
+            Constants.NO_OPS, // destOpsHash
+            qualificationEncoded // qualification (expanded)
+        );
+
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Create Compact data with qualification for SUBPOLICY mode
+    function _createCompactDataWithQualificationSubpolicy(bytes32 qualHash)
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
+
+        // Create qualification data
+        bytes memory qualificationData = abi.encodePacked(qualHash);
+
+        // Subpolicy format: [flags: 1][dataLength: 32][data: dataLength]
+        bytes memory qualificationEncoded = abi.encodePacked(
+            uint8(0), // flags (0 = use keccak256)
+            uint256(qualificationData.length), // 32 bytes length prefix
+            qualificationData // the actual data
+        );
+
+        bytes memory mandateData = abi.encodePacked(
+            keccak256("target"), // targetHash
+            uint256(block.chainid), // targetChainId
+            uint128(0), // minGas
+            Constants.NO_OPS, // originOpsHash
+            Constants.NO_OPS, // destOpsHash
+            qualificationEncoded // qualification (expanded with flags)
+        );
+
+        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Create Compact data with multiple fields
+    function _createCompactDataWithMultipleFields(
+        address arbiter,
+        address recipient,
+        address tokenOut,
+        uint256 targetChainId
+    )
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(arbiter, 0);
+        uint256 tokenData = uint256(uint160(tokenOut));
+        bytes memory targetData = abi.encodePacked(
+            recipient,
+            targetChainId,
+            uint256(block.timestamp + 7200),
+            uint8(1),
+            tokenData,
+            uint256(1000)
+        );
+        bytes memory mandateFooter = _createMandateFooter();
+        return abi.encodePacked(
+            header, elementHeader, keccak256("commitments"), targetData, mandateFooter
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                         HASH COMPUTATION HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Compute expected hash for Compact (fast path)
+    function computeExpectedHash(bytes calldata compactData) external view returns (bytes32) {
+        uint256 nonce = uint256(bytes32(compactData[0:32]));
+        uint256 expires = uint256(bytes32(compactData[32:64]));
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 mandateHash = bytes32(compactData[offset:offset + 32]);
+        bytes32 elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
+        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
+    }
+
+    /// @notice Compute expected hash when target is expanded
+    function computeExpectedHashWithTarget(bytes calldata compactData)
+        external
+        view
+        returns (bytes32)
+    {
+        uint256 nonce = uint256(bytes32(compactData[0:32]));
+        uint256 expires = uint256(bytes32(compactData[32:64]));
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        address recipient = address(bytes20(compactData[offset:offset + 20]));
+        offset += 20;
+        uint256 targetChainId = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        uint256 fillExpiry = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 tokenOutHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 targetHash = EIP712TypeHashLib.hashTargetAttributesRaw(
+            recipient, tokenOutHash, targetChainId, fillExpiry
+        );
+        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
+        offset += 16;
+        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
+        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
+            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
+        );
+        bytes32 elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
+        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
+    }
+
+    /// @notice Compute expected hash when tokenIn is expanded
+    function computeExpectedHashWithTokenIn(bytes calldata compactData)
+        external
+        view
+        returns (bytes32)
+    {
+        uint256 nonce = uint256(bytes32(compactData[0:32]));
+        uint256 expires = uint256(bytes32(compactData[32:64]));
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        uint8 tokenInLength = uint8(compactData[offset]);
+        offset += 1;
+        uint256[2][] calldata tokenIn;
+        assembly {
+            tokenIn.offset := add(compactData.offset, offset)
+            tokenIn.length := tokenInLength
+        }
+        bytes32 commitmentsHash = EIP712TypeHashLib.hashTokenIn(tokenIn);
+        offset += uint256(tokenInLength) * 64;
+        bytes32 mandateHash = bytes32(compactData[offset:offset + 32]);
+        bytes32 elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
+        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
 
     /// @notice Compute expected hash when tokenOut is expanded
@@ -1225,11 +2720,8 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         view
         returns (bytes32)
     {
-        // Parse compact data
         uint256 nonce = uint256(bytes32(compactData[0:32]));
         uint256 expires = uint256(bytes32(compactData[32:64]));
-
-        // Parse otherElements as calldata
         uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
         bytes32[] calldata otherElements;
         assembly {
@@ -1237,42 +2729,30 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             otherElements.length := otherElementsLength
         }
         uint256 offset = 96 + otherElementsLength * 32;
-
-        // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20; // arbiter + reserved
+        offset += 20;
         uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
-
-        // Parse TARGET (expanded!)
         address recipient = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20; // recipient + reserved
+        offset += 20;
         uint256 targetChainId = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         uint256 fillExpiry = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
-
-        // Parse tokenOut (expanded!) - now uint8 length
         uint8 tokenOutLength = uint8(compactData[offset]);
         offset += 1;
-
         uint256[2][] calldata tokenOut;
         assembly {
             tokenOut.offset := add(compactData.offset, offset)
             tokenOut.length := tokenOutLength
         }
-
         bytes32 tokenOutHash = EIP712TypeHashLib.hashTokenOut(tokenOut);
         offset += uint256(tokenOutLength) * 64;
-
-        // Hash target
         bytes32 targetHash = EIP712TypeHashLib.hashTargetAttributesRaw(
             recipient, tokenOutHash, targetChainId, fillExpiry
         );
-
-        // Parse mandate footer
         uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
         offset += 16;
         bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
@@ -1280,104 +2760,23 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
         bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
-
-        // Hash mandate
         bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
             targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
         );
-
-        // Hash element
         bytes32 elementHash =
             EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
-
-        // Insert at index and hash
         bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
-
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
 
-    /// @notice Initialize policy with qualification check
-    function _initializePolicyWithQualification(
-        address arbiter,
-        ParamRules memory paramRules,
-        uint256 chainId
-    )
-        internal
-    {
-        uint32 modeConfig = _createModeConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
-
-        bytes memory qualConfig = abi.encodePacked(
-            uint8(1), // count
-            chainId,
-            arbiter,
-            uint8(0),
-            paramRules.rootNodeIndex
-        );
-
-        qualConfig = abi.encodePacked(qualConfig, uint8(paramRules.rules.length));
-
-        for (uint256 i = 0; i < paramRules.rules.length; i++) {
-            qualConfig = abi.encodePacked(
-                qualConfig,
-                uint8(paramRules.rules[i].condition),
-                paramRules.rules[i].offset,
-                paramRules.rules[i].length,
-                paramRules.rules[i].ref
-            );
-        }
-
-        qualConfig = abi.encodePacked(qualConfig, uint8(paramRules.packedNodes.length));
-
-        for (uint256 i = 0; i < paramRules.packedNodes.length; i++) {
-            qualConfig = abi.encodePacked(qualConfig, paramRules.packedNodes[i]);
-        }
-
-        bytes memory initData = abi.encodePacked(modeConfig, qualConfig);
-        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
-    }
-
-    /// @notice Create Compact data with qualification
-    function _createCompactDataWithQualification(
-        address arbiter,
-        bytes memory qualificationData,
-        uint256 elementIndex
-    )
-        internal
-        view
-        returns (bytes memory)
-    {
-        bytes memory header = _createCompactHeader();
-        bytes memory elementHeader = _createElementHeader(arbiter, elementIndex);
-
-        // Create qualification section
-        bytes memory qualificationSection = abi.encodePacked(
-            uint256(qualificationData.length), // dataLength
-            qualificationData // actual qualification data
-        );
-
-        bytes memory mandateData = abi.encodePacked(
-            keccak256("target"), // targetHash (32 bytes)
-            uint256(1), // targetChainId (32 bytes)
-            uint128(0), // minGas (16 bytes)
-            Constants.NO_OPS, // originOpsHash (32 bytes)
-            Constants.NO_OPS, // destOpsHash (32 bytes)
-            qualificationSection // qualification with header
-        );
-
-        return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
-    }
-
-    /// @notice Compute expected hash when qualification is expanded
-    function computeExpectedHashWithQualification(bytes calldata compactData)
+    /// @notice Compute expected hash when mandate is expanded
+    function computeExpectedHashWithMandateExpanded(bytes calldata compactData)
         external
         view
         returns (bytes32)
     {
-        // Parse compact data
         uint256 nonce = uint256(bytes32(compactData[0:32]));
         uint256 expires = uint256(bytes32(compactData[32:64]));
-
-        // Parse otherElements as calldata
         uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
         bytes32[] calldata otherElements;
         assembly {
@@ -1385,19 +2784,55 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             otherElements.length := otherElementsLength
         }
         uint256 offset = 96 + otherElementsLength * 32;
-
-        // Parse element
         address arbiter = address(bytes20(compactData[offset:offset + 20]));
-        offset += 20; // arbiter + reserved
+        offset += 20;
         uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
         bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
-
-        // Parse mandate (non-expanded fields)
         bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
-        offset += 32; // Skip targetChainId
+        offset += 32; // skip targetChainId
+        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
+        offset += 16;
+        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 qualificationHash = bytes32(compactData[offset:offset + 32]);
+        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
+            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
+        );
+        bytes32 elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
+        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
+    }
+
+    /// @notice Compute expected hash when mandate is expanded with qualification data
+    function computeExpectedHashWithQualificationExpanded(bytes calldata compactData)
+        external
+        view
+        returns (bytes32)
+    {
+        uint256 nonce = uint256(bytes32(compactData[0:32]));
+        uint256 expires = uint256(bytes32(compactData[32:64]));
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        offset += 32; // skip targetChainId
         uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
         offset += 16;
         bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
@@ -1405,36 +2840,64 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
         offset += 32;
 
-        // Parse qualification (expanded!)
+        // For storage/catchall: [dataLength: 32][data: dataLength]
         uint256 dataLength = uint256(bytes32(compactData[offset:offset + 32]));
         offset += 32;
+        bytes32 qualificationHash = keccak256(compactData[offset:offset + dataLength]);
 
-        // Get qualification data
-        bytes calldata qualData = compactData[offset:offset + dataLength];
-
-        bytes32 qualificationHash = keccak256(qualData);
-
-        // Hash mandate
         bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
             targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
         );
-
-        // Hash element
         bytes32 elementHash =
             EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
-
-        // Insert at index and hash
         bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
-
         return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
 
-    /// @notice Initialize policy with recipientIsSponsor check (no storage data needed)
-    function _initializePolicyWithRecipientIsSponsor() internal {
-        // Just set the mode bit - no config data required
-        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
-        bytes memory initData = abi.encodePacked(modeConfig);
+    /// @notice Compute expected hash when mandate is expanded with qualification data (subpolicy
+    /// format)
+    function computeExpectedHashWithQualificationSubpolicy(bytes calldata compactData)
+        external
+        view
+        returns (bytes32)
+    {
+        uint256 nonce = uint256(bytes32(compactData[0:32]));
+        uint256 expires = uint256(bytes32(compactData[32:64]));
+        uint256 otherElementsLength = uint256(bytes32(compactData[64:96]));
+        bytes32[] calldata otherElements;
+        assembly {
+            otherElements.offset := add(compactData.offset, 96)
+            otherElements.length := otherElementsLength
+        }
+        uint256 offset = 96 + otherElementsLength * 32;
+        address arbiter = address(bytes20(compactData[offset:offset + 20]));
+        offset += 20;
+        uint256 elementIndex = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 commitmentsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 targetHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        offset += 32; // skip targetChainId
+        uint128 minGas = uint128(bytes16(compactData[offset:offset + 16]));
+        offset += 16;
+        bytes32 originOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
+        bytes32 destOpsHash = bytes32(compactData[offset:offset + 32]);
+        offset += 32;
 
-        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+        // For subpolicy: [flags: 1][dataLength: 32][data: dataLength]
+        offset += 1; // skip flags
+        uint256 dataLength = uint256(bytes32(compactData[offset:offset + 32]));
+        offset += 32;
+        bytes32 qualificationHash = keccak256(compactData[offset:offset + dataLength]);
+
+        bytes32 mandateHash = EIP712TypeHashLib.hashMandateRaw(
+            targetHash, minGas, originOpsHash, destOpsHash, qualificationHash
+        );
+        bytes32 elementHash =
+            EIP712TypeHashLib.hashElementRaw(arbiter, block.chainid, commitmentsHash, mandateHash);
+        bytes32 allElementsHash = otherElements.insertAtAndHash(elementIndex, elementHash);
+        return EIP712TypeHashLib.hashCompact(testAccount, nonce, expires, allElementsHash);
     }
 }

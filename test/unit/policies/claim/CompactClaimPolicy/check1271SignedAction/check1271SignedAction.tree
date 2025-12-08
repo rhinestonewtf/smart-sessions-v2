@@ -30,13 +30,13 @@ CompactClaimPolicy::check1271SignedAction
 │   ├── given mode is MODE_SKIP
 │   │   └── it should return true for any tokenIn
 │   ├── given mode is MODE_CHECK_STORAGE
-│   │   ├── it should return true when token+lockTag whitelisted
-│   │   ├── it should return false when token whitelisted but lockTag differs
+│   │   ├── it should return true when token and lockTag whitelisted
 │   │   ├── it should return false when token not whitelisted
+│   │   ├── it should return false when token whitelisted but lockTag differs
 │   │   └── it should return true when multiple tokens whitelisted
 │   ├── given mode is MODE_CHECK_CATCHALL
-│   │   ├── it should return true when token+lockTag in catchall whitelist
-│   │   └── it should return false when token+lockTag not in catchall whitelist
+│   │   ├── it should return true when token and lockTag in catchall whitelist
+│   │   └── it should return false when token and lockTag not in catchall whitelist
 │   └── given mode is MODE_CHECK_SUBPOLICY
 │       ├── it should return true when subpolicy approves
 │       └── it should return false when subpolicy rejects

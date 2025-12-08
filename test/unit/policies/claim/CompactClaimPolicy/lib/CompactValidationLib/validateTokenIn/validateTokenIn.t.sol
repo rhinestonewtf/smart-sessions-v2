@@ -22,7 +22,7 @@ contract CompactValidationLib_validateTokenIn_Unit_Test is CompactValidationLib_
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test SKIP mode returns pre-computed hash
-    function test_validateTokenIn_skipMode_returnsHash() external {
+    function test_validateTokenIn_skipMode_returnsHash() external view {
         // Arrange
         PolicyConfig config = _buildConfig(FIELD_TOKEN_IN, MODE_SKIP);
         bytes32 precomputedHash = keccak256("tokenInHash");
@@ -90,7 +90,7 @@ contract CompactValidationLib_validateTokenIn_Unit_Test is CompactValidationLib_
     }
 
     /// @notice Test STORAGE mode with empty whitelist
-    function test_validateTokenIn_storageMode_emptyWhitelist() external {
+    function test_validateTokenIn_storageMode_emptyWhitelist() external view {
         // Arrange
         PolicyConfig config = _buildConfig(FIELD_TOKEN_IN, MODE_CHECK_STORAGE);
         bytes32 id = _packTokenId(token1, LOCK_TAG_1);
@@ -223,7 +223,7 @@ contract CompactValidationLib_validateTokenIn_Unit_Test is CompactValidationLib_
         // Arrange
         PolicyConfig config = _buildConfig(FIELD_TOKEN_IN, MODE_CHECK_SUBPOLICY);
         this.setSubPolicy(FIELD_TOKEN_IN, address(mockSubPolicy));
-        mockSubPolicy.setValidateClaimReturnValue(true);
+        mockSubPolicy.setReturnValue(true);
 
         bytes32 id = _packTokenId(token1, LOCK_TAG_1);
         bytes32[] memory ids = new bytes32[](1);
@@ -247,7 +247,7 @@ contract CompactValidationLib_validateTokenIn_Unit_Test is CompactValidationLib_
         // Arrange
         PolicyConfig config = _buildConfig(FIELD_TOKEN_IN, MODE_CHECK_SUBPOLICY);
         this.setSubPolicy(FIELD_TOKEN_IN, address(mockSubPolicy));
-        mockSubPolicy.setValidateClaimReturnValue(false);
+        mockSubPolicy.setReturnValue(false);
 
         bytes32 id = _packTokenId(token1, LOCK_TAG_1);
         bytes32[] memory ids = new bytes32[](1);
