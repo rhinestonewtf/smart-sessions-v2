@@ -1,0 +1,9 @@
+BaseClaimPolicy::supportsInterface
+├── given IERC165 interfaceId
+│   └── it should return true
+├── given I1271Policy interfaceId
+│   └── it should return true
+├── given IBaseClaimPolicy interfaceId
+│   └── it should return true
+└── given unknown interfaceId
+    └── it should return false

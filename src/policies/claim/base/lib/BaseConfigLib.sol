@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
+import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 // Libraries
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
@@ -187,6 +188,12 @@ library BaseConfigLib {
 
     /// @notice Thrown when an invalid mode is provided
     error InvalidMode();
+
+    /// @notice Thrown when min bound exceeds max bound
+    error InvalidBounds();
+
+    /// @notice Thrown when subpolicy address doesn't implement I1271Policy
+    error InvalidSubPolicy();
 
     /*//////////////////////////////////////////////////////////////
                              MODE EXTRACTION
@@ -504,6 +511,11 @@ library BaseConfigLib {
     {
         // Slice out packed expiry (32 bytes containing min and max)
         (uint256 packed, uint256 offset) = initData.sliceUint256(0);
+
+        // Validate min <= max
+        (uint128 min, uint128 max) = unpackUint128(packed);
+        require(min <= max, InvalidBounds());
+
         // Write directly to storage
         $.expiryConfig = packed;
         // Return remaining calldata
@@ -622,6 +634,11 @@ library BaseConfigLib {
             uint256 packed;
             (chainId, offset) = initData.sliceUint256(offset);
             (packed, offset) = initData.sliceUint256(offset);
+
+            // Validate min <= max
+            (uint128 min, uint128 max) = unpackUint128(packed);
+            require(min <= max, InvalidBounds());
+
             // Write directly to storage
             $.fillExpiryConfig[chainId] = packed;
         }
@@ -965,6 +982,12 @@ library BaseConfigLib {
             // Slice out policy address
             address policyAddress;
             (policyAddress, offset) = initData.sliceAddress(offset);
+
+            // Validate subpolicy implements I1271Policy
+            require(
+                IERC165(policyAddress).supportsInterface(type(I1271Policy).interfaceId),
+                InvalidSubPolicy()
+            );
 
             // Write policy address to storage
             $.subPolicies[fieldId] = policyAddress;

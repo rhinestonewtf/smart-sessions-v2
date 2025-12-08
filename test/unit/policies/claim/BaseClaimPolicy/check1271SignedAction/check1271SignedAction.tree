@@ -1,0 +1,11 @@
+BaseClaimPolicy::check1271SignedAction
+├── given policy is initialized
+│   ├── it should load storage for configId/account
+│   ├── it should call _validateClaim with correct params
+│   └── it should return _validateClaim result
+├── given _validateClaim returns true
+│   └── it should return true
+├── given _validateClaim returns false
+│   └── it should return false
+└── given policy is not initialized
+    └── it should use default modeConfig (all SKIP)

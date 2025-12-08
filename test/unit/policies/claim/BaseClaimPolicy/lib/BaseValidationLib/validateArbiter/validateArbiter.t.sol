@@ -73,7 +73,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns true when mode is SKIP
     function test_validateArbiter_withModeSkip() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_SKIP);
 
         // Act
         result = this.validateArbiterExternal(arbiter, config);
@@ -85,7 +85,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns true when mode is SKIP even with random arbiter
     function testFuzz_validateArbiter_withModeSkip(address _arbiter) external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_SKIP);
 
         // Act
         result = this.validateArbiterExternal(_arbiter, config);
@@ -95,13 +95,13 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     }
 
     /*//////////////////////////////////////////////////////////////
-                          MODE_STORAGE TESTS
+                          MODE_CHECK_STORAGE TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test returns true when arbiter is in whitelist (STORAGE mode)
     function test_validateArbiter_withModeStorage_arbiterInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
         _setupArbiter(arbiter);
 
         // Act
@@ -114,7 +114,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns false when arbiter is not in whitelist (STORAGE mode)
     function test_validateArbiter_withModeStorage_arbiterNotInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
         _setupArbiter(arbiter2); // Different arbiter in whitelist
 
         // Act
@@ -127,7 +127,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns false when whitelist is empty (STORAGE mode)
     function test_validateArbiter_withModeStorage_emptyWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
         // No arbiters added to whitelist
 
         // Act
@@ -140,7 +140,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test works with multiple arbiters in whitelist
     function test_validateArbiter_withModeStorage_multipleArbitersInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
         address[] memory arbiters = new address[](3);
         arbiters[0] = arbiter;
         arbiters[1] = arbiter2;
@@ -163,7 +163,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns true when arbiter is in whitelist (CATCHALL mode)
     function test_validateArbiter_withModeCatchall_arbiterInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_CATCHALL);
         _setupArbiter(arbiter);
 
         // Act
@@ -176,7 +176,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns false when arbiter is not in whitelist (CATCHALL mode)
     function test_validateArbiter_withModeCatchall_arbiterNotInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_CATCHALL);
         _setupArbiter(arbiter2);
 
         // Act
@@ -193,8 +193,8 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns true when sub-policy returns true
     function test_validateArbiter_withModeSubPolicy_subPolicyReturnsTrue() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_ARBITER_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_ARBITER, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
 
         // Act
@@ -207,8 +207,8 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns false when sub-policy returns false
     function test_validateArbiter_withModeSubPolicy_subPolicyReturnsFalse() external {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_ARBITER_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_ARBITER, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(false);
 
         // Act
@@ -230,7 +230,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
         external
     {
         // Arrange
-        config = _buildConfig(FIELD_ARBITER_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
         _setupArbiter(_whitelistedArbiter);
 
         // Act

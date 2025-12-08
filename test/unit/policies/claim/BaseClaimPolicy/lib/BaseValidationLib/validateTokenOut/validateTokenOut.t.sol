@@ -121,13 +121,13 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     }
 
     /*//////////////////////////////////////////////////////////////
-                          MODE_STORAGE TESTS
+                          MODE_CHECK_STORAGE TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test returns valid=true when single token is in whitelist
     function test_validateTokenOut_withModeStorage_singleTokenInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token1);
         data = _buildSingleTokenData(token1, amount1);
 
@@ -144,7 +144,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test returns valid=true when all tokens are in whitelist
     function test_validateTokenOut_withModeStorage_allTokensInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token1);
         _setupTokenOut(targetChainId, token2);
         data = _buildTwoTokenData(token1, amount1, token2, amount2);
@@ -162,7 +162,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test returns valid=false when one token is not in whitelist
     function test_validateTokenOut_withModeStorage_oneTokenNotInWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token1); // Only token1 whitelisted
         data = _buildTwoTokenData(token1, amount1, token2, amount2); // But data has token2
 
@@ -179,7 +179,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test returns valid=false when whitelist is empty
     function test_validateTokenOut_withModeStorage_emptyWhitelist() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         // No tokens added to whitelist
         data = _buildSingleTokenData(token1, amount1);
 
@@ -196,7 +196,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test handles empty token array
     function test_validateTokenOut_withModeStorage_emptyTokenArray() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token1); // Whitelist not empty
         data = _buildEmptyTokenData();
 
@@ -212,7 +212,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test with non-zero offset
     function test_validateTokenOut_withModeStorage_nonZeroOffset() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token1);
 
         // Prepend some garbage data
@@ -231,7 +231,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test different chain IDs have separate whitelists
     function test_validateTokenOut_withModeStorage_differentChainIds() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(1, token1);
         _setupTokenOut(137, token2);
 
@@ -254,7 +254,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test returns valid=false when whitelist is empty even with empty token array
     function test_validateTokenOut_withModeStorage_emptyWhitelistEmptyTokenArray() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         // No tokens added to whitelist
         data = _buildEmptyTokenData(); // empty token array
 
@@ -273,7 +273,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test CATCHALL mode uses chainId 0 for lookup
     function test_validateTokenOut_withModeCatchall_usesChainIdZero() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_CATCHALL);
         _setupTokenOut(0, token1); // Store at chainId 0 (catch-all)
         data = _buildSingleTokenData(token1, amount1);
 
@@ -287,7 +287,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test CATCHALL ignores chain-specific config
     function test_validateTokenOut_withModeCatchall_ignoresChainSpecificConfig() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_CATCHALL);
         _setupTokenOut(targetChainId, token1); // Store at specific chainId
         // Don't set up catch-all (chainId 0)
         data = _buildSingleTokenData(token1, amount1);
@@ -306,8 +306,8 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test returns valid=true when sub-policy returns true
     function test_validateTokenOut_withModeSubPolicy_subPolicyReturnsTrue() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_TOKEN_OUT_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_TOKEN_OUT, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
         data = _buildSingleTokenData(token1, amount1);
 
@@ -323,8 +323,8 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
     /// @notice Test returns valid=false when sub-policy returns false
     function test_validateTokenOut_withModeSubPolicy_subPolicyReturnsFalse() external {
         // Arrange
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_TOKEN_OUT_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_TOKEN_OUT, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(false);
         data = _buildSingleTokenData(token1, amount1);
 

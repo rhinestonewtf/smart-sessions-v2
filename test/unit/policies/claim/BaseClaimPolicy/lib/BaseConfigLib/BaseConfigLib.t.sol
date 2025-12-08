@@ -18,7 +18,11 @@ import {
     FIELD_ORIGIN_OPS as FIELD_ORIGIN_OPS_CONSTANT,
     FIELD_DEST_OPS as FIELD_DEST_OPS_CONSTANT,
     FIELD_QUALIFICATION as FIELD_QUALIFICATION_CONSTANT,
-    FIELD_RECIPIENT_IS_SPONSOR as FIELD_RECIPIENT_IS_SPONSOR_CONSTANT
+    FIELD_RECIPIENT_IS_SPONSOR as FIELD_RECIPIENT_IS_SPONSOR_CONSTANT,
+    MODE_SKIP as MODE_SKIP_CONSTANT,
+    MODE_CHECK_STORAGE as MODE_CHECK_STORAGE_CONSTANT,
+    MODE_CHECK_CATCHALL as MODE_CHECK_CATCHALL_CONSTANT,
+    MODE_CHECK_SUBPOLICY as MODE_CHECK_SUBPOLICY_CONSTANT
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 /// @title BaseConfigLib Unit Test Base
@@ -30,10 +34,10 @@ contract BaseConfigLib_Unit_Test is Base_Test {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Mode values
-    uint8 internal constant MODE_SKIP = 0;
-    uint8 internal constant MODE_CHECK_STORAGE = 1;
-    uint8 internal constant MODE_CHECK_CATCHALL = 2;
-    uint8 internal constant MODE_CHECK_SUBPOLICY = 3;
+    uint8 internal constant MODE_SKIP = MODE_SKIP_CONSTANT;
+    uint8 internal constant MODE_CHECK_STORAGE = MODE_CHECK_STORAGE_CONSTANT;
+    uint8 internal constant MODE_CHECK_CATCHALL = MODE_CHECK_CATCHALL_CONSTANT;
+    uint8 internal constant MODE_CHECK_SUBPOLICY = MODE_CHECK_SUBPOLICY_CONSTANT;
 
     /// @notice Field IDs
     uint8 internal constant FIELD_ARBITER = FILED_ARBITER_CONSTANT;

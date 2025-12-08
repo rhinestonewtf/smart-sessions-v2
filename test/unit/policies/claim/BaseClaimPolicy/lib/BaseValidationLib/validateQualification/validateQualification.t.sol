@@ -107,13 +107,13 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     }
 
     /*//////////////////////////////////////////////////////////////
-                          MODE_STORAGE TESTS
+                          MODE_CHECK_STORAGE TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test valid=true when no rules configured
     function test_validateQualification_withModeStorage_noRulesConfigured() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         _setupEmptyQualificationRules(chainId, arbiter, false);
         data = _buildQualificationData(qualificationData);
 
@@ -129,7 +129,7 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test valid=true when rules pass
     function test_validateQualification_withModeStorage_rulesPass() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         bytes memory matchingData = abi.encodePacked(bytes32(uint256(42)));
         _setupEqualRule(chainId, arbiter, false, bytes32(uint256(42)));
         data = _buildQualificationData(matchingData);
@@ -146,7 +146,7 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test valid=false when rules fail
     function test_validateQualification_withModeStorage_rulesFail() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         bytes memory nonMatchingData = abi.encodePacked(bytes32(uint256(99))); // Doesn't match 42
         _setupEqualRule(chainId, arbiter, false, bytes32(uint256(42)));
         data = _buildQualificationData(nonMatchingData);
@@ -163,7 +163,7 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test uses keccak256 when useArbiterHash is false
     function test_validateQualification_withModeStorage_usesKeccak256() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         _setupEmptyQualificationRules(chainId, arbiter, false); // useArbiterHash = false
         data = _buildQualificationData(qualificationData);
 
@@ -179,7 +179,7 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test calls arbiter.qualificationHash when useArbiterHash is true
     function test_validateQualification_withModeStorage_usesArbiterHash() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         _setupEmptyQualificationRules(chainId, arbiter, true); // useArbiterHash = true
         bytes32 expectedHash = keccak256("arbiter computed hash");
         mockArbiter.setQualificationHash(expectedHash);
@@ -197,7 +197,7 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test with non-zero offset
     function test_validateQualification_withModeStorage_nonZeroOffset() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         _setupEmptyQualificationRules(chainId, arbiter, false);
 
         bytes memory qualData = _buildQualificationData(qualificationData);
@@ -220,7 +220,7 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test CATCHALL mode uses chainId 0 for lookup
     function test_validateQualification_withModeCatchall_usesChainIdZero() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_CATCHALL);
         _setupEmptyQualificationRules(0, arbiter, false); // Store at chainId 0
         data = _buildQualificationData(qualificationData);
 
@@ -234,7 +234,7 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test CATCHALL ignores chain-specific config with failing rules
     function test_validateQualification_withModeCatchall_ignoresChainSpecificRules() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_CATCHALL);
 
         // Set up failing rules at specific chainId
         bytes memory matchingData = abi.encodePacked(bytes32(uint256(99))); // Won't match 42
@@ -259,8 +259,8 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test returns valid=true when sub-policy returns true
     function test_validateQualification_withModeSubPolicy_subPolicyReturnsTrue() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_QUALIFICATION_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_QUALIFICATION, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
         data = _buildQualificationDataWithFlags(qualificationData, 0); // flags = 0, use keccak256
 
@@ -276,8 +276,8 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test returns valid=false when sub-policy returns false
     function test_validateQualification_withModeSubPolicy_subPolicyReturnsFalse() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_QUALIFICATION_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_QUALIFICATION, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(false);
         data = _buildQualificationDataWithFlags(qualificationData, 0);
 
@@ -293,8 +293,8 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test uses keccak256 when flags bit 0 is not set
     function test_validateQualification_withModeSubPolicy_usesKeccak256() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_QUALIFICATION_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_QUALIFICATION, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
         data = _buildQualificationDataWithFlags(qualificationData, 0); // flags = 0
 
@@ -310,8 +310,8 @@ contract BaseValidationLib_validateQualification_Unit_Test is BaseValidationLib_
     /// @notice Test uses arbiter hash when flags bit 0 is set
     function test_validateQualification_withModeSubPolicy_usesArbiterHash() external {
         // Arrange
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_QUALIFICATION_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_QUALIFICATION, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
         bytes32 expectedHash = keccak256("arbiter computed hash");
         mockArbiter.setQualificationHash(expectedHash);

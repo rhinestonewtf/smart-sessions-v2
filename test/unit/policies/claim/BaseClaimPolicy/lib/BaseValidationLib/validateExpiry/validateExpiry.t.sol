@@ -77,7 +77,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns true when mode is SKIP
     function test_validateExpiry_withModeSkip() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_SKIP);
 
         // Act
         result = this.validateExpiryExternal(expiry, config);
@@ -89,7 +89,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns true when mode is SKIP regardless of expiry value
     function testFuzz_validateExpiry_withModeSkip(uint256 _expiry) external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_SKIP);
 
         // Act
         result = this.validateExpiryExternal(_expiry, config);
@@ -99,13 +99,13 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     }
 
     /*//////////////////////////////////////////////////////////////
-                          MODE_STORAGE TESTS
+                          MODE_CHECK_STORAGE TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test returns true when expiry is within bounds
     function test_validateExpiry_withModeStorage_withinBounds() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -118,7 +118,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns true when expiry equals min bound
     function test_validateExpiry_withModeStorage_equalsMinBound() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -131,7 +131,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns true when expiry equals max bound
     function test_validateExpiry_withModeStorage_equalsMaxBound() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -144,7 +144,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns false when expiry is below min bound
     function test_validateExpiry_withModeStorage_belowMinBound() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -157,7 +157,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns false when expiry is above max bound
     function test_validateExpiry_withModeStorage_aboveMaxBound() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -170,7 +170,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns false when expiry is zero and min is non-zero
     function test_validateExpiry_withModeStorage_zeroExpiry() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -183,7 +183,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test with zero bounds allows zero expiry
     function test_validateExpiry_withModeStorage_zeroBoundsZeroExpiry() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(0, 0);
 
         // Act
@@ -200,7 +200,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns true when expiry is within bounds (CATCHALL mode)
     function test_validateExpiry_withModeCatchall_withinBounds() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_CATCHALL);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -213,7 +213,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns false when expiry is out of bounds (CATCHALL mode)
     function test_validateExpiry_withModeCatchall_outOfBounds() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_CATCHALL);
         _setupExpiry(minExpiry, maxExpiry);
 
         // Act
@@ -230,8 +230,8 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns true when sub-policy returns true
     function test_validateExpiry_withModeSubPolicy_subPolicyReturnsTrue() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_EXPIRY_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_EXPIRY, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
 
         // Act
@@ -244,8 +244,8 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test returns false when sub-policy returns false
     function test_validateExpiry_withModeSubPolicy_subPolicyReturnsFalse() external {
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_EXPIRY_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_EXPIRY, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(false);
 
         // Act
@@ -271,7 +271,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
         if (_min > _max) (_min, _max) = (_max, _min);
 
         // Arrange
-        config = _buildConfig(FIELD_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         _setupExpiry(_min, _max);
 
         // Act

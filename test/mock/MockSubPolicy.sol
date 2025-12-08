@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.27;
 
+// Interfaces
+import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
+import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
+
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
@@ -66,5 +70,11 @@ contract MockSubPolicy {
         returns (bool)
     {
         return returnValue;
+    }
+
+    /// @notice ERC165 supportsInterface implementation
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return
+            interfaceId == type(IERC165).interfaceId || interfaceId == type(I1271Policy).interfaceId;
     }
 }

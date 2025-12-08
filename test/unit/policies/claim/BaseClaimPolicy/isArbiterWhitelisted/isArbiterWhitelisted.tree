@@ -1,0 +1,7 @@
+BaseClaimPolicy::isArbiterWhitelisted
+├── given arbiter is whitelisted
+│   └── it should return true
+├── given arbiter is not whitelisted
+│   └── it should return false
+└── given empty whitelist
+    └── it should return false

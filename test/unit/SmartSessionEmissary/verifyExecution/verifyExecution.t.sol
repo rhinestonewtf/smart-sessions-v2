@@ -273,7 +273,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         vm.prank(MOCK_INTENT_EXECUTOR);
 
         // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
+        smartSessionEmissary.verifyExecution(
             instance.account, TEST_HASH, "", mockExecData, testLockTag
         );
     }

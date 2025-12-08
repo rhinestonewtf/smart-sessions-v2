@@ -89,7 +89,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns valid=true when mode is SKIP
     function test_validateDestOps_withModeSkip() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_SKIP);
         data = _buildOpsData(presentOpsHash);
 
         // Act
@@ -104,7 +104,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns opsHash from calldata when mode is SKIP
     function test_validateDestOps_withModeSkip_returnsOpsHash() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_SKIP);
         data = _buildOpsData(noOpsHash);
 
         // Act
@@ -116,13 +116,13 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     }
 
     /*//////////////////////////////////////////////////////////////
-                          MODE_STORAGE TESTS
+                          MODE_CHECK_STORAGE TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test valid=true when config requires ops and ops present
     function test_validateDestOps_withModeStorage_requiresOpsAndPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(targetChainId, true); // required = true
         data = _buildOpsData(presentOpsHash); // ops present
 
@@ -138,7 +138,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test valid=false when config requires ops and ops not present
     function test_validateDestOps_withModeStorage_requiresOpsAndNotPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(targetChainId, true); // required = true
         data = _buildOpsData(noOpsHash); // ops NOT present (NO_OPS)
 
@@ -152,7 +152,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test valid=true when config forbids ops and ops not present
     function test_validateDestOps_withModeStorage_forbidsOpsAndNotPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(targetChainId, false); // required = false (forbids ops)
         data = _buildOpsData(noOpsHash); // ops NOT present (NO_OPS)
 
@@ -167,7 +167,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test valid=false when config forbids ops and ops present
     function test_validateDestOps_withModeStorage_forbidsOpsAndPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(targetChainId, false); // required = false (forbids ops)
         data = _buildOpsData(presentOpsHash); // ops present
 
@@ -181,7 +181,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test with non-zero offset
     function test_validateDestOps_withModeStorage_nonZeroOffset() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(targetChainId, true);
 
         // Prepend garbage data
@@ -199,7 +199,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test different chain IDs have separate requirements
     function test_validateDestOps_withModeStorage_differentChainIds() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(1, true); // Chain 1 requires ops
         _setupDestOps(137, false); // Chain 137 forbids ops
 
@@ -226,7 +226,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test CATCHALL mode uses chainId 0 for lookup
     function test_validateDestOps_withModeCatchall_usesChainIdZero() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_CATCHALL);
         _setupDestOps(0, true); // Store at chainId 0 (catch-all)
         data = _buildOpsData(presentOpsHash);
 
@@ -240,7 +240,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test CATCHALL ignores chain-specific config
     function test_validateDestOps_withModeCatchall_ignoresChainSpecificConfig() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_CATCHALL);
         _setupDestOps(targetChainId, true); // Store at specific chainId
         // Don't set up catch-all (chainId 0) - defaults to false
         data = _buildOpsData(presentOpsHash); // ops present
@@ -259,8 +259,8 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns valid=true when sub-policy returns true
     function test_validateDestOps_withModeSubPolicy_subPolicyReturnsTrue() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_DEST_OPS_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_DEST_OPS, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
         data = _buildOpsData(presentOpsHash);
 
@@ -275,8 +275,8 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns valid=false when sub-policy returns false
     function test_validateDestOps_withModeSubPolicy_subPolicyReturnsFalse() external {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_DEST_OPS_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_DEST_OPS, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(false);
         data = _buildOpsData(presentOpsHash);
 
@@ -300,7 +300,7 @@ contract BaseValidationLib_validateDestOps_Unit_Test is BaseValidationLib_Unit_T
         external
     {
         // Arrange
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(_chainId, _required);
         data = _buildOpsData(_opsHash);
 

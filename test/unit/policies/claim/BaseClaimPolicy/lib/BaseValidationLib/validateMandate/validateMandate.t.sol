@@ -245,7 +245,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test validates target when target check enabled
     function test_validateMandate_withTargetCheck_targetPasses() external {
         // Arrange - RECIPIENT enabled (a target check)
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         _setupRecipient(targetChainId, recipient);
 
         data = _buildMandateDataWithTargetCheck(
@@ -270,7 +270,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns false when target validation fails
     function test_validateMandate_withTargetCheck_targetFails() external {
         // Arrange - RECIPIENT enabled but wrong recipient
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         _setupRecipient(targetChainId, address(0xBEEF)); // Different recipient
 
         data = _buildMandateDataWithTargetCheck(
@@ -295,7 +295,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test reads pre-computed targetHash when no target checks
     function test_validateMandate_noTargetCheck_readsPrecomputedTargetHash() external {
         // Arrange - only ORIGIN_OPS enabled (not a target check)
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, true); // require ops
 
         data = _buildMandateDataNoTargetCheck(
@@ -321,7 +321,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test validates originOps when enabled
     function test_validateMandate_withOriginOpsCheck_originOpsPasses() external {
         // Arrange - ORIGIN_OPS enabled, requires ops
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, true);
 
         data = _buildMandateDataNoTargetCheck(
@@ -343,7 +343,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns false when originOps validation fails
     function test_validateMandate_withOriginOpsCheck_originOpsFails() external {
         // Arrange - ORIGIN_OPS enabled, requires ops, but NO_OPS provided
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, true);
 
         data = _buildMandateDataNoTargetCheck(
@@ -369,7 +369,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test validates destOps when enabled
     function test_validateMandate_withDestOpsCheck_destOpsPasses() external {
         // Arrange - DEST_OPS enabled, requires ops
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(targetChainId, true);
 
         // Need to include targetChainId in calldata for destOps to use
@@ -392,7 +392,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test returns false when destOps validation fails
     function test_validateMandate_withDestOpsCheck_destOpsFails() external {
         // Arrange - DEST_OPS enabled, requires ops, but NO_OPS provided
-        config = _buildConfig(FIELD_DEST_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         _setupDestOps(targetChainId, true);
 
         data = _buildMandateDataNoTargetCheck(
@@ -418,7 +418,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test validates qualification when enabled (no rules = passes)
     function test_validateMandate_withQualificationCheck_qualificationPasses() external {
         // Arrange - QUALIFICATION enabled with no rules
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         _setupEmptyQualificationRules(chainId, arbiter, false);
 
         bytes memory qualData = hex"deadbeef";
@@ -442,7 +442,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test qualification validation fails when rules fail
     function test_validateMandate_withQualificationCheck_qualificationFails() external {
         // Arrange - QUALIFICATION enabled with rules that will fail
-        config = _buildConfig(FIELD_QUALIFICATION_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_QUALIFICATION, MODE_CHECK_STORAGE);
         _setupEqualRule(chainId, arbiter, false, bytes32(uint256(42))); // Expects 42
 
         bytes memory qualData = abi.encodePacked(bytes32(uint256(99))); // Provides 99 (won't match)
@@ -472,14 +472,14 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     function test_validateMandate_allFieldsEnabled_allPass() external {
         // Arrange - multiple fields enabled
         uint8[] memory fieldIds = new uint8[](3);
-        fieldIds[0] = FIELD_RECIPIENT_ID;
-        fieldIds[1] = FIELD_ORIGIN_OPS_ID;
-        fieldIds[2] = FIELD_DEST_OPS_ID;
+        fieldIds[0] = FIELD_RECIPIENT;
+        fieldIds[1] = FIELD_ORIGIN_OPS;
+        fieldIds[2] = FIELD_DEST_OPS;
 
         uint8[] memory modes = new uint8[](3);
-        modes[0] = MODE_STORAGE_VAL;
-        modes[1] = MODE_STORAGE_VAL;
-        modes[2] = MODE_STORAGE_VAL;
+        modes[0] = MODE_CHECK_STORAGE;
+        modes[1] = MODE_CHECK_STORAGE;
+        modes[2] = MODE_CHECK_STORAGE;
 
         config = _buildConfigMulti(fieldIds, modes);
 
@@ -510,12 +510,12 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     function test_validateMandate_multipleFields_earlyExitOnFailure() external {
         // Arrange - RECIPIENT fails, other fields should not be checked
         uint8[] memory fieldIds = new uint8[](2);
-        fieldIds[0] = FIELD_RECIPIENT_ID;
-        fieldIds[1] = FIELD_ORIGIN_OPS_ID;
+        fieldIds[0] = FIELD_RECIPIENT;
+        fieldIds[1] = FIELD_ORIGIN_OPS;
 
         uint8[] memory modes = new uint8[](2);
-        modes[0] = MODE_STORAGE_VAL;
-        modes[1] = MODE_STORAGE_VAL;
+        modes[0] = MODE_CHECK_STORAGE;
+        modes[1] = MODE_CHECK_STORAGE;
 
         config = _buildConfigMulti(fieldIds, modes);
 
@@ -547,7 +547,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test correct mandateHash computation when validation is performed
     function test_validateMandate_computesCorrectHash() external {
         // Arrange - enable RECIPIENT check to trigger hash computation
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         _setupRecipient(targetChainId, recipient);
 
         data = _buildMandateDataWithTargetCheck(
@@ -587,7 +587,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test minGas is included in hash computation
     function test_validateMandate_minGasIncludedInHash() external {
         // Arrange - enable RECIPIENT check to trigger hash computation
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         _setupRecipient(targetChainId, recipient);
 
         // Build data with minGas = 100_000
@@ -670,7 +670,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
     /// @notice Test with non-zero offset (with checks)
     function test_validateMandate_nonZeroOffset_withChecks() external {
         // Arrange - RECIPIENT enabled to trigger validation
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         _setupRecipient(targetChainId, recipient);
 
         bytes memory mandateData = _buildMandateDataWithTargetCheck(

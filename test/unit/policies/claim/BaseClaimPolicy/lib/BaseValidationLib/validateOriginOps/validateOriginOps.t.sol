@@ -89,7 +89,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test returns valid=true when mode is SKIP
     function test_validateOriginOps_withModeSkip() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_SKIP);
         data = _buildOpsData(presentOpsHash);
 
         // Act
@@ -104,7 +104,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test returns opsHash from calldata when mode is SKIP
     function test_validateOriginOps_withModeSkip_returnsOpsHash() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_SKIP);
         data = _buildOpsData(noOpsHash);
 
         // Act
@@ -116,13 +116,13 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     }
 
     /*//////////////////////////////////////////////////////////////
-                          MODE_STORAGE TESTS
+                          MODE_CHECK_STORAGE TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test valid=true when ops required and ops present
     function test_validateOriginOps_withModeStorage_requiredAndPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, true); // required = true
         data = _buildOpsData(presentOpsHash); // ops present
 
@@ -138,7 +138,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test valid=false when ops required and ops not present
     function test_validateOriginOps_withModeStorage_requiredAndNotPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, true); // required = true
         data = _buildOpsData(noOpsHash); // ops NOT present (NO_OPS)
 
@@ -152,7 +152,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test valid=true when ops not required and ops not present
     function test_validateOriginOps_withModeStorage_forbidsOpsAndNotPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, false); // required = false
         data = _buildOpsData(noOpsHash); // ops NOT present (NO_OPS)
 
@@ -167,7 +167,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test valid=false when ops not required and ops present
     function test_validateOriginOps_withModeStorage_forbidsOpsAndPresent() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, false); // required = false
         data = _buildOpsData(presentOpsHash); // ops present
 
@@ -181,7 +181,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test with non-zero offset
     function test_validateOriginOps_withModeStorage_nonZeroOffset() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, true);
 
         // Prepend garbage data
@@ -203,7 +203,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test CATCHALL mode uses chainId 0 for lookup
     function test_validateOriginOps_withModeCatchall_usesChainIdZero() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_CATCHALL);
         _setupOriginOps(0, true); // Store at chainId 0 (catch-all)
         data = _buildOpsData(presentOpsHash);
 
@@ -217,7 +217,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test CATCHALL ignores chain-specific config
     function test_validateOriginOps_withModeCatchall_ignoresChainSpecificConfig() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_CATCHALL);
         _setupOriginOps(chainId, true); // Store at specific chainId
         // Don't set up catch-all (chainId 0) - defaults to false
         data = _buildOpsData(presentOpsHash); // ops present
@@ -236,8 +236,8 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test returns valid=true when sub-policy returns true
     function test_validateOriginOps_withModeSubPolicy_subPolicyReturnsTrue() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_ORIGIN_OPS_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_ORIGIN_OPS, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
         data = _buildOpsData(presentOpsHash);
 
@@ -252,8 +252,8 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Test returns valid=false when sub-policy returns false
     function test_validateOriginOps_withModeSubPolicy_subPolicyReturnsFalse() external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_ORIGIN_OPS_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_ORIGIN_OPS, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(false);
         data = _buildOpsData(presentOpsHash);
 
@@ -271,7 +271,7 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
     /// @notice Fuzz test for STORAGE mode requirement matching
     function testFuzz_validateOriginOps_withModeStorage(bytes32 _opsHash, bool _required) external {
         // Arrange
-        config = _buildConfig(FIELD_ORIGIN_OPS_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         _setupOriginOps(chainId, _required);
         data = _buildOpsData(_opsHash);
 

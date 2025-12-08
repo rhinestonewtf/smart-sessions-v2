@@ -1,0 +1,7 @@
+BaseClaimPolicy::getSubPolicy
+├── given subpolicy is configured for fieldId
+│   └── it should return correct address
+├── given subpolicy is not configured
+│   └── it should return address(0)
+└── given different fieldIds
+    └── it should return correct subpolicy per fieldId

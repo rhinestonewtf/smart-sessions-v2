@@ -83,22 +83,14 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
     }
 
     /// @notice Test with only min value
-    function test_initializeExpiry_withOnlyMin() external {
+    function test_initializeExpiry_revertsWhen_withOnlyMin() external {
         // Arrange - min = 1000, max = 0
         uint256 packed = uint256(1000);
         data = abi.encodePacked(packed);
 
-        // Act
-        remaining = this.initializeExpiryExternal(configId, account, data);
-
-        // Assert
-        assertEq(remaining.length, 0);
-
-        // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
-        (uint128 min, uint128 max) = BaseConfigLib.unpackUint128($.expiryConfig);
-        assertEq(min, 1000);
-        assertEq(max, 0);
+        // Act / Assert
+        vm.expectRevert(BaseConfigLib.InvalidBounds.selector);
+        this.initializeExpiryExternal(configId, account, data);
     }
 
     /// @notice Test with only max value
@@ -156,6 +148,7 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
 
     /// @notice Fuzz test for initializeExpiry
     function testFuzz_initializeExpiry(uint128 _min, uint128 _max) external {
+        vm.assume(_min <= _max);
         // Arrange
         uint256 packed = BaseConfigLib.packUint128(_min, _max);
         data = abi.encodePacked(packed);

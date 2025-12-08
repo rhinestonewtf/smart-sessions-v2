@@ -9,7 +9,7 @@ BaseConfigLib::getFieldMode
 │   └── given mode SUBPOLICY
 │       └── it should return 3
 ├── given field in middle (RECIPIENT, id 3)
-│   └── it should extract correct 2 bits at position 6-7
+│   └── it should extract correct 2 bits at position 6-7,
 ├── given field at end (RECIPIENT_IS_SPONSOR, id 9)
 │   └── it should extract correct 2 bits at position 18-19
 └── given multiple fields set

@@ -234,6 +234,9 @@ Wraps uint32 for type safety. Contains 2-bit modes for 9 fields.
 
 //////////////////////////////////////////////////////////////*/
 
+/// @dev Empty PolicyConfig constant (all modes set to SKIP)
+PolicyConfig constant EMPTY_CONFIG = PolicyConfig.wrap(0);
+
 /// @notice Wrapper type for mode configuration bitmap
 /// @dev Provides type safety for the 32-bit mode configuration
 type PolicyConfig is uint32;

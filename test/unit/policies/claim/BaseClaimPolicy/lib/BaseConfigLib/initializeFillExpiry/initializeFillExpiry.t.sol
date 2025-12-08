@@ -144,6 +144,7 @@ contract BaseConfigLib_initializeFillExpiry_Unit_Test is BaseConfigLib_Unit_Test
 
     /// @notice Fuzz test for initializeFillExpiry
     function testFuzz_initializeFillExpiry(uint256 _chainId, uint128 _min, uint128 _max) external {
+        vm.assume(_min <= _max);
         // Arrange
         uint256 packed = BaseConfigLib.packUint128(_min, _max);
         data = abi.encodePacked(uint8(1), _chainId, packed);

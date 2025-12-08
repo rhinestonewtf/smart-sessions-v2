@@ -1,0 +1,74 @@
+BaseClaimPolicy::initializeWithMultiplexer
+├── given modeConfig with all fields SKIP
+│   ├── it should store modeConfig
+│   ├── it should emit PolicyInitialized
+│   ├── it should revert when empty data
+│   ├── it should revert when extra bytes
+│   └── it should revert when short data
+├── given modeConfig with ARBITER enabled
+│   ├── it should add single arbiter
+│   ├── it should add multiple arbiters
+│   ├── it should handle zero arbiters
+│   ├── it should allow address(0) as arbiter
+│   ├── it should deduplicate duplicate arbiters
+│   ├── it should be additive on re-initialization
+│   ├── it should revert when incomplete data
+│   └── it should revert when count mismatch
+├── given modeConfig with EXPIRY enabled
+│   ├── it should store min/max expiry
+│   ├── it should handle max uint128 values
+│   ├── it should allow min == max
+│   ├── it should overwrite on re-initialization
+│   ├── it should revert when min > max
+│   └── it should revert when incomplete data
+├── given modeConfig with RECIPIENT enabled
+│   ├── it should store single recipient per chainId
+│   ├── it should store multiple recipients
+│   ├── it should allow address(0) as recipient
+│   ├── it should allow max uint256 as chainId
+│   ├── it should overwrite when same chainId twice
+│   ├── it should overwrite on re-initialization
+│   └── it should revert when incomplete data
+├── given modeConfig with FILL_EXPIRY enabled
+│   ├── it should store single fill expiry per chainId
+│   ├── it should store multiple fill expiries
+│   ├── it should allow min == max
+│   ├── it should overwrite on re-initialization
+│   └── it should revert when min > max
+├── given modeConfig with TOKEN_OUT enabled
+│   ├── it should add single token per chainId
+│   ├── it should add multiple tokens per chainId
+│   ├── it should add tokens for multiple chainIds
+│   ├── it should deduplicate duplicate tokens
+│   └── it should be additive on re-initialization
+├── given modeConfig with ORIGIN_OPS enabled
+│   ├── it should store required=true
+│   ├── it should store required=false
+│   ├── it should store for multiple chainIds
+│   └── it should overwrite on re-initialization
+├── given modeConfig with DEST_OPS enabled
+│   ├── it should store required=true
+│   ├── it should store required=false
+│   ├── it should store for multiple chainIds
+│   └── it should overwrite on re-initialization
+├── given modeConfig with QUALIFICATION enabled
+│   ├── it should store useArbiterHash=false
+│   ├── it should store useArbiterHash=true
+│   └── it should store for multiple chainId/arbiter pairs
+├── given modeConfig with SUBPOLICY enabled
+│   ├── it should store single subpolicy
+│   ├── it should store multiple subpolicies
+│   ├── it should overwrite on re-initialization
+│   ├── it should revert when address(0)
+│   ├── it should revert when EOA
+│   └── it should revert when invalid interface
+├── given multiple fields enabled
+│   ├── it should initialize fields in correct order
+│   ├── it should skip fields with mode SKIP
+│   ├── it should initialize many fields
+│   └── it should handle all fields as SUBPOLICY
+└── given storage isolation
+    ├── it should isolate per configId
+    ├── it should isolate per account
+    ├── it should work with zero configId
+    └── it should work with zero account

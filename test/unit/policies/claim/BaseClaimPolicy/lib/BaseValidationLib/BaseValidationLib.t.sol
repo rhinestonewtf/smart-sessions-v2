@@ -13,26 +13,26 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
-    MODE_SKIP,
-    MODE_CHECK_STORAGE,
-    MODE_CHECK_CATCHALL,
-    MODE_CHECK_SUBPOLICY,
-    FIELD_ARBITER,
-    FIELD_EXPIRY,
-    FIELD_TOKEN_IN,
-    FIELD_RECIPIENT,
-    FIELD_FILL_EXPIRY,
-    FIELD_TOKEN_OUT,
-    FIELD_ORIGIN_OPS,
-    FIELD_DEST_OPS,
-    FIELD_QUALIFICATION,
-    FIELD_RECIPIENT_IS_SPONSOR,
+    FIELD_ARBITER as FILED_ARBITER_CONSTANT,
+    FIELD_EXPIRY as FIELD_EXPIRY_CONSTANT,
+    FIELD_TOKEN_IN as FIELD_TOKEN_IN_CONSTANT,
+    FIELD_RECIPIENT as FIELD_RECIPIENT_CONSTANT,
+    FIELD_FILL_EXPIRY as FIELD_FILL_EXPIRY_CONSTANT,
+    FIELD_TOKEN_OUT as FIELD_TOKEN_OUT_CONSTANT,
+    FIELD_ORIGIN_OPS as FIELD_ORIGIN_OPS_CONSTANT,
+    FIELD_DEST_OPS as FIELD_DEST_OPS_CONSTANT,
+    FIELD_QUALIFICATION as FIELD_QUALIFICATION_CONSTANT,
+    FIELD_RECIPIENT_IS_SPONSOR as FIELD_RECIPIENT_IS_SPONSOR_CONSTANT,
+    MODE_SKIP as MODE_SKIP_CONSTANT,
+    MODE_CHECK_STORAGE as MODE_CHECK_STORAGE_CONSTANT,
+    MODE_CHECK_CATCHALL as MODE_CHECK_CATCHALL_CONSTANT,
+    MODE_CHECK_SUBPOLICY as MODE_CHECK_SUBPOLICY_CONSTANT,
     ANY_ADDRESS as ANY_ADDRESS_CONSTANT,
     ParamRules,
     ParamRule,
     QualificationRulesStorage
 } from "@policies/claim/base/types/BaseDataTypes.sol";
-import { Constants } from "@compact-utils/types/Constants.sol";
+
 import { ParamCondition } from "@smartsessions/external/policies/ArgPolicy/ArgPolicy.sol";
 
 /// @title BaseValidationLib Unit Test Base
@@ -52,23 +52,23 @@ contract BaseValidationLib_Unit_Test is Base_Test {
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Mode constants for readability
-    uint8 internal constant MODE_SKIP_VAL = MODE_SKIP;
-    uint8 internal constant MODE_STORAGE_VAL = MODE_CHECK_STORAGE;
-    uint8 internal constant MODE_CATCHALL_VAL = MODE_CHECK_CATCHALL;
-    uint8 internal constant MODE_SUBPOLICY_VAL = MODE_CHECK_SUBPOLICY;
+    /// @notice Mode values
+    uint8 internal constant MODE_SKIP = MODE_SKIP_CONSTANT;
+    uint8 internal constant MODE_CHECK_STORAGE = MODE_CHECK_STORAGE_CONSTANT;
+    uint8 internal constant MODE_CHECK_CATCHALL = MODE_CHECK_CATCHALL_CONSTANT;
+    uint8 internal constant MODE_CHECK_SUBPOLICY = MODE_CHECK_SUBPOLICY_CONSTANT;
 
-    /// @notice Field ID constants
-    uint8 internal constant FIELD_ARBITER_ID = FIELD_ARBITER;
-    uint8 internal constant FIELD_EXPIRY_ID = FIELD_EXPIRY;
-    uint8 internal constant FIELD_TOKEN_IN_ID = FIELD_TOKEN_IN;
-    uint8 internal constant FIELD_RECIPIENT_ID = FIELD_RECIPIENT;
-    uint8 internal constant FIELD_FILL_EXPIRY_ID = FIELD_FILL_EXPIRY;
-    uint8 internal constant FIELD_TOKEN_OUT_ID = FIELD_TOKEN_OUT;
-    uint8 internal constant FIELD_ORIGIN_OPS_ID = FIELD_ORIGIN_OPS;
-    uint8 internal constant FIELD_DEST_OPS_ID = FIELD_DEST_OPS;
-    uint8 internal constant FIELD_QUALIFICATION_ID = FIELD_QUALIFICATION;
-    uint8 internal constant FIELD_RECIPIENT_IS_SPONSOR_ID = FIELD_RECIPIENT_IS_SPONSOR;
+    /// @notice Field IDs
+    uint8 internal constant FIELD_ARBITER = FILED_ARBITER_CONSTANT;
+    uint8 internal constant FIELD_EXPIRY = FIELD_EXPIRY_CONSTANT;
+    uint8 internal constant FIELD_TOKEN_IN = FIELD_TOKEN_IN_CONSTANT;
+    uint8 internal constant FIELD_RECIPIENT = FIELD_RECIPIENT_CONSTANT;
+    uint8 internal constant FIELD_FILL_EXPIRY = FIELD_FILL_EXPIRY_CONSTANT;
+    uint8 internal constant FIELD_TOKEN_OUT = FIELD_TOKEN_OUT_CONSTANT;
+    uint8 internal constant FIELD_ORIGIN_OPS = FIELD_ORIGIN_OPS_CONSTANT;
+    uint8 internal constant FIELD_DEST_OPS = FIELD_DEST_OPS_CONSTANT;
+    uint8 internal constant FIELD_QUALIFICATION = FIELD_QUALIFICATION_CONSTANT;
+    uint8 internal constant FIELD_RECIPIENT_IS_SPONSOR = FIELD_RECIPIENT_IS_SPONSOR_CONSTANT;
 
     // Constants
     address internal constant ANY_ADDRESS = ANY_ADDRESS_CONSTANT;

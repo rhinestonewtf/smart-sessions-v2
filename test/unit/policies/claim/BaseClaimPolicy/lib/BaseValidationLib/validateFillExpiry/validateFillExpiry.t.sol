@@ -80,7 +80,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test returns true when mode is SKIP
     function test_validateFillExpiry_withModeSkip() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_SKIP);
 
         // Act
         result = this.validateFillExpiryExternal(fillExpiry, targetChainId, config);
@@ -97,7 +97,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
         external
     {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_SKIP);
 
         // Act
         result = this.validateFillExpiryExternal(_fillExpiry, _chainId, config);
@@ -107,13 +107,13 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     }
 
     /*//////////////////////////////////////////////////////////////
-                          MODE_STORAGE TESTS
+                          MODE_CHECK_STORAGE TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test returns true when fillExpiry is within bounds
     function test_validateFillExpiry_withModeStorage_withinBounds() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(targetChainId, minFillExpiry, maxFillExpiry);
 
         // Act
@@ -126,7 +126,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test returns true when fillExpiry equals min bound
     function test_validateFillExpiry_withModeStorage_equalsMinBound() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(targetChainId, minFillExpiry, maxFillExpiry);
 
         // Act
@@ -139,7 +139,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test returns true when fillExpiry equals max bound
     function test_validateFillExpiry_withModeStorage_equalsMaxBound() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(targetChainId, minFillExpiry, maxFillExpiry);
 
         // Act
@@ -152,7 +152,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test returns false when fillExpiry is below min bound
     function test_validateFillExpiry_withModeStorage_belowMinBound() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(targetChainId, minFillExpiry, maxFillExpiry);
 
         // Act
@@ -165,7 +165,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test returns false when fillExpiry is above max bound
     function test_validateFillExpiry_withModeStorage_aboveMaxBound() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(targetChainId, minFillExpiry, maxFillExpiry);
 
         // Act
@@ -178,7 +178,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test different chain IDs have separate bounds
     function test_validateFillExpiry_withModeStorage_differentChainIds() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(1, 100, 200);
         _setupFillExpiry(137, 1000, 2000);
 
@@ -197,7 +197,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test CATCHALL mode uses chainId 0 for lookup
     function test_validateFillExpiry_withModeCatchall_usesChainIdZero() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_CATCHALL);
         _setupFillExpiry(0, minFillExpiry, maxFillExpiry); // Store at chainId 0 (catch-all)
 
         // Act - should use chainId 0 regardless of passed chainId
@@ -210,7 +210,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test CATCHALL ignores chain-specific config
     function test_validateFillExpiry_withModeCatchall_ignoresChainSpecificConfig() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_CATCHALL);
         _setupFillExpiry(targetChainId, minFillExpiry, maxFillExpiry); // Store at specific chainId
         // Don't set up catch-all (chainId 0)
 
@@ -224,7 +224,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test CATCHALL works across multiple chains
     function test_validateFillExpiry_withModeCatchall_worksAcrossChains() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_CATCHALL_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_CATCHALL);
         _setupFillExpiry(0, minFillExpiry, maxFillExpiry);
 
         // Act & Assert - same bounds apply to all chains
@@ -240,8 +240,8 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test returns true when sub-policy returns true
     function test_validateFillExpiry_withModeSubPolicy_subPolicyReturnsTrue() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_FILL_EXPIRY_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_FILL_EXPIRY, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(true);
 
         // Act
@@ -254,8 +254,8 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
     /// @notice Test returns false when sub-policy returns false
     function test_validateFillExpiry_withModeSubPolicy_subPolicyReturnsFalse() external {
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_SUBPOLICY_VAL);
-        _setupSubPolicy(FIELD_FILL_EXPIRY_ID, address(mockSubPolicy));
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_SUBPOLICY);
+        _setupSubPolicy(FIELD_FILL_EXPIRY, address(mockSubPolicy));
         mockSubPolicy.setReturnValue(false);
 
         // Act
@@ -282,7 +282,7 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
         if (_min > _max) (_min, _max) = (_max, _min);
 
         // Arrange
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(_chainId, _min, _max);
 
         // Act

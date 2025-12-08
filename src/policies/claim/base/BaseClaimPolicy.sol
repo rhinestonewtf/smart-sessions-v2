@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import { IBaseClaimPolicy } from "@policies/claim/base/interfaces/IBaseClaimPolicy.sol";
 
 // Libraries
 import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
@@ -14,6 +15,7 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
     PolicyConfig,
+    QualificationRulesStorage,
     MODE_SKIP,
     MODE_CHECK_STORAGE,
     MODE_CHECK_CATCHALL,
@@ -26,7 +28,8 @@ import {
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
-    FIELD_QUALIFICATION
+    FIELD_QUALIFICATION,
+    EMPTY_CONFIG
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
@@ -53,7 +56,7 @@ import {
 /// │  └─────────────────────┘             └─────────────────────┘            │
 /// └─────────────────────────────────────────────────────────────────────────┘
 // forgefmt: disable-end
-abstract contract BaseClaimPolicy is I1271Policy {
+abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -64,25 +67,6 @@ abstract contract BaseClaimPolicy is I1271Policy {
     using BaseConfigLib for BasePolicyStorage;
     using BaseStorageLib for ConfigId;
     using EnumerableSetLib for EnumerableSetLib.AddressSet;
-
-    /*//////////////////////////////////////////////////////////////
-                                 ERRORS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Thrown when policy initialization fails due to invalid configuration data
-    error InvalidConfigurationData();
-
-    /*//////////////////////////////////////////////////////////////
-                                 EVENTS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Emitted when a policy is initialized for an account
-    /// @param configId The configuration ID
-    /// @param account The account that was initialized
-    /// @param modeConfig The mode configuration bitmap
-    event PolicyInitialized(
-        ConfigId indexed configId, address indexed account, PolicyConfig modeConfig
-    );
 
     /*//////////////////////////////////////////////////////////////
                             INITIALIZATION
@@ -219,6 +203,9 @@ abstract contract BaseClaimPolicy is I1271Policy {
 
         // Decode and initialize policy mode configuration
         (PolicyConfig modeConfig, bytes calldata data) = $.initializeModeConfig(initData);
+
+        // Make sure at least one field is enabled
+        require(modeConfig != EMPTY_CONFIG, InvalidConfigurationData());
 
         // ------------------ ARBITER ------------------ //
 
@@ -424,7 +411,7 @@ abstract contract BaseClaimPolicy is I1271Policy {
         return $.arbiterConfig.contains(arbiter);
     }
 
-    /// @notice Returns the expiry bounds for an account
+    /// @notice Returns the claim expiry bounds for an account
     /// @param configId The configuration ID
     /// @param account The account to query
     /// @return minExpiry The minimum expiry timestamp
@@ -477,12 +464,129 @@ abstract contract BaseClaimPolicy is I1271Policy {
         return $.subPolicies[fieldId];
     }
 
+    /// @notice Returns the fill expiry bounds for a chain
+    /// @param configId The configuration ID
+    /// @param account The account to query
+    /// @param chainId The target chain ID
+    /// @return minFillExpiry The minimum fill expiry timestamp
+    /// @return maxFillExpiry The maximum fill expiry timestamp
+    function getFillExpiryBounds(
+        ConfigId configId,
+        address account,
+        uint256 chainId
+    )
+        external
+        view
+        returns (uint128 minFillExpiry, uint128 maxFillExpiry)
+    {
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        (minFillExpiry, maxFillExpiry) = BaseConfigLib.unpackUint128($.fillExpiryConfig[chainId]);
+    }
+
+    /// @notice Returns the whitelisted output tokens for a chain
+    /// @param configId The configuration ID
+    /// @param account The account to query
+    /// @param chainId The target chain ID
+    /// @return tokens Array of whitelisted token addresses
+    function getTokensOut(
+        ConfigId configId,
+        address account,
+        uint256 chainId
+    )
+        external
+        view
+        returns (address[] memory tokens)
+    {
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        uint256 length = $.tokenOutSet[chainId].length();
+        tokens = new address[](length);
+        for (uint256 i = 0; i < length; i++) {
+            tokens[i] = $.tokenOutSet[chainId].at(i);
+        }
+    }
+
+    /// @notice Checks if a token is whitelisted for output on a chain
+    /// @param configId The configuration ID
+    /// @param account The account to query
+    /// @param chainId The target chain ID
+    /// @param token The token address to check
+    /// @return True if the token is whitelisted
+    function isTokenOutWhitelisted(
+        ConfigId configId,
+        address account,
+        uint256 chainId,
+        address token
+    )
+        external
+        view
+        returns (bool)
+    {
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        return $.tokenOutSet[chainId].contains(token);
+    }
+
+    /// @notice Returns whether origin operations are required for a chain
+    /// @param configId The configuration ID
+    /// @param account The account to query
+    /// @param chainId The origin chain ID
+    /// @return True if origin operations are required
+    function getOriginOpsRequired(
+        ConfigId configId,
+        address account,
+        uint256 chainId
+    )
+        external
+        view
+        returns (bool)
+    {
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        return $.originOpsConfig[chainId];
+    }
+
+    /// @notice Returns whether destination operations are required for a chain
+    /// @param configId The configuration ID
+    /// @param account The account to query
+    /// @param chainId The destination chain ID
+    /// @return True if destination operations are required
+    function getDestOpsRequired(
+        ConfigId configId,
+        address account,
+        uint256 chainId
+    )
+        external
+        view
+        returns (bool)
+    {
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        return $.destOpsConfig[chainId];
+    }
+
+    /// @notice Returns the qualification rules for a chain/arbiter pair
+    /// @param configId The configuration ID
+    /// @param account The account to query
+    /// @param chainId The chain ID
+    /// @param arbiter The arbiter address
+    /// @return rules The qualification rules
+    function getQualificationRules(
+        ConfigId configId,
+        address account,
+        uint256 chainId,
+        address arbiter
+    )
+        external
+        view
+        returns (QualificationRulesStorage memory rules)
+    {
+        BasePolicyStorage storage $ = configId.getStorage(account);
+        return $.qualificationConfig[chainId][arbiter];
+    }
+
     /// @notice Checks if this contract implements the given interface
     /// @param interfaceID The interface identifier to check
     /// @return True if the interface is supported
     function supportsInterface(bytes4 interfaceID) external pure override returns (bool) {
-        return
-            (interfaceID == type(IERC165).interfaceId
-                    || interfaceID == type(I1271Policy).interfaceId);
+        return (interfaceID == type(IERC165).interfaceId
+                || interfaceID == type(I1271Policy).interfaceId
+                || interfaceID == type(IBaseClaimPolicy).interfaceId);
     }
 }

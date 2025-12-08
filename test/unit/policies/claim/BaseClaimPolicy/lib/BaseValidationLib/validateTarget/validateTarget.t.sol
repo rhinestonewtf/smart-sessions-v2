@@ -164,7 +164,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=true when recipient equals account (sponsor)
     function test_validateTarget_withRecipientIsSponsor_recipientEqualsAccount() external {
         // Arrange - RECIPIENT_IS_SPONSOR enabled
-        config = _buildConfig(FIELD_RECIPIENT_IS_SPONSOR_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         data = _buildTargetDataWithTokenOutHash(
             account, targetChainId, fillExpiry, precomputedTokenOutHash
         );
@@ -185,7 +185,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=false when recipient does not equal account
     function test_validateTarget_withRecipientIsSponsor_recipientNotEqualsAccount() external {
         // Arrange - RECIPIENT_IS_SPONSOR enabled, but recipient != account
-        config = _buildConfig(FIELD_RECIPIENT_IS_SPONSOR_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         data = _buildTargetDataWithTokenOutHash(
             recipient, targetChainId, fillExpiry, precomputedTokenOutHash
         );
@@ -208,7 +208,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=true when recipient passes storage validation
     function test_validateTarget_withRecipient_recipientPasses() external {
         // Arrange - RECIPIENT enabled with storage mode
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         _setupRecipient(targetChainId, recipient);
         data = _buildTargetDataWithTokenOutHash(
             recipient, targetChainId, fillExpiry, precomputedTokenOutHash
@@ -226,7 +226,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=false when recipient fails storage validation
     function test_validateTarget_withRecipient_recipientFails() external {
         // Arrange - RECIPIENT enabled, but recipient not in storage
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         _setupRecipient(targetChainId, address(0xBEEF)); // Different recipient in storage
         data = _buildTargetDataWithTokenOutHash(
             recipient, targetChainId, fillExpiry, precomputedTokenOutHash
@@ -247,7 +247,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=true when fillExpiry passes validation
     function test_validateTarget_withFillExpiry_fillExpiryPasses() external {
         // Arrange - FILL_EXPIRY enabled
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(targetChainId, 500, 1500); // fillExpiry=1000 is within bounds
         data = _buildTargetDataWithTokenOutHash(
             recipient, targetChainId, fillExpiry, precomputedTokenOutHash
@@ -264,7 +264,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=false when fillExpiry fails validation
     function test_validateTarget_withFillExpiry_fillExpiryFails() external {
         // Arrange - FILL_EXPIRY enabled, but fillExpiry out of bounds
-        config = _buildConfig(FIELD_FILL_EXPIRY_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         _setupFillExpiry(targetChainId, 2000, 3000); // fillExpiry=1000 is out of bounds
         data = _buildTargetDataWithTokenOutHash(
             recipient, targetChainId, fillExpiry, precomputedTokenOutHash
@@ -285,7 +285,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=true when tokenOut passes validation
     function test_validateTarget_withTokenOut_tokenOutPasses() external {
         // Arrange - TOKEN_OUT enabled
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token1);
         data = _buildTargetDataWithTokenOut(recipient, targetChainId, fillExpiry, token1, amount1);
 
@@ -302,7 +302,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test valid=false when tokenOut fails validation
     function test_validateTarget_withTokenOut_tokenOutFails() external {
         // Arrange - TOKEN_OUT enabled, but token not whitelisted
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token2); // Different token whitelisted
         data = _buildTargetDataWithTokenOut(recipient, targetChainId, fillExpiry, token1, amount1);
 
@@ -317,7 +317,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test with empty tokenOut array when TOKEN_OUT is enabled
     function test_validateTarget_withTokenOut_emptyTokenArray() external {
         // Arrange - TOKEN_OUT enabled with whitelist
-        config = _buildConfig(FIELD_TOKEN_OUT_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         _setupTokenOut(targetChainId, token1);
         data = _buildTargetDataWithEmptyTokenOut(recipient, targetChainId, fillExpiry);
 
@@ -333,7 +333,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test reads pre-computed tokenOutHash when TOKEN_OUT not enabled
     function test_validateTarget_withoutTokenOut_readsPrecomputedHash() external {
         // Arrange - no TOKEN_OUT validation
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_SKIP_VAL); // Some other field, TOKEN_OUT is
+        config = _buildConfig(FIELD_RECIPIENT, MODE_SKIP); // Some other field, TOKEN_OUT is
         // SKIP
         data = _buildTargetDataWithTokenOutHash(
             recipient, targetChainId, fillExpiry, precomputedTokenOutHash
@@ -360,14 +360,14 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     function test_validateTarget_withMultipleFields_allPass() external {
         // Arrange - RECIPIENT, FILL_EXPIRY, TOKEN_OUT all enabled
         uint8[] memory fieldIds = new uint8[](3);
-        fieldIds[0] = FIELD_RECIPIENT_ID;
-        fieldIds[1] = FIELD_FILL_EXPIRY_ID;
-        fieldIds[2] = FIELD_TOKEN_OUT_ID;
+        fieldIds[0] = FIELD_RECIPIENT;
+        fieldIds[1] = FIELD_FILL_EXPIRY;
+        fieldIds[2] = FIELD_TOKEN_OUT;
 
         uint8[] memory modes = new uint8[](3);
-        modes[0] = MODE_STORAGE_VAL;
-        modes[1] = MODE_STORAGE_VAL;
-        modes[2] = MODE_STORAGE_VAL;
+        modes[0] = MODE_CHECK_STORAGE;
+        modes[1] = MODE_CHECK_STORAGE;
+        modes[2] = MODE_CHECK_STORAGE;
 
         config = _buildConfigMulti(fieldIds, modes);
 
@@ -390,12 +390,12 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     function test_validateTarget_withMultipleFields_oneFails() external {
         // Arrange - RECIPIENT passes, FILL_EXPIRY fails
         uint8[] memory fieldIds = new uint8[](2);
-        fieldIds[0] = FIELD_RECIPIENT_ID;
-        fieldIds[1] = FIELD_FILL_EXPIRY_ID;
+        fieldIds[0] = FIELD_RECIPIENT;
+        fieldIds[1] = FIELD_FILL_EXPIRY;
 
         uint8[] memory modes = new uint8[](2);
-        modes[0] = MODE_STORAGE_VAL;
-        modes[1] = MODE_STORAGE_VAL;
+        modes[0] = MODE_CHECK_STORAGE;
+        modes[1] = MODE_CHECK_STORAGE;
 
         config = _buildConfigMulti(fieldIds, modes);
 
@@ -418,12 +418,12 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     function test_validateTarget_recipientIsSponsorTakesPrecedence() external {
         // Arrange - both RECIPIENT_IS_SPONSOR and RECIPIENT enabled
         uint8[] memory fieldIds = new uint8[](2);
-        fieldIds[0] = FIELD_RECIPIENT_IS_SPONSOR_ID;
-        fieldIds[1] = FIELD_RECIPIENT_ID;
+        fieldIds[0] = FIELD_RECIPIENT_IS_SPONSOR;
+        fieldIds[1] = FIELD_RECIPIENT;
 
         uint8[] memory modes = new uint8[](2);
-        modes[0] = MODE_STORAGE_VAL;
-        modes[1] = MODE_STORAGE_VAL;
+        modes[0] = MODE_CHECK_STORAGE;
+        modes[1] = MODE_CHECK_STORAGE;
 
         config = _buildConfigMulti(fieldIds, modes);
 
@@ -450,7 +450,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
     /// @notice Test with non-zero offset
     function test_validateTarget_nonZeroOffset() external {
         // Arrange
-        config = _buildConfig(FIELD_RECIPIENT_ID, MODE_SKIP_VAL);
+        config = _buildConfig(FIELD_RECIPIENT, MODE_SKIP);
         bytes memory targetData = _buildTargetDataWithTokenOutHash(
             recipient, targetChainId, fillExpiry, precomputedTokenOutHash
         );
@@ -479,7 +479,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
         external
     {
         // Arrange
-        config = _buildConfig(FIELD_RECIPIENT_IS_SPONSOR_ID, MODE_STORAGE_VAL);
+        config = _buildConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         data = _buildTargetDataWithTokenOutHash(
             _recipient, _targetChainId, _fillExpiry, precomputedTokenOutHash
         );
