@@ -8,7 +8,7 @@ import { Base_Test } from "@test/Base.t.sol";
 import { Permit2ClaimPolicy } from "@policies/claim/permit2/Permit2ClaimPolicy.sol";
 
 // Mocks
-import { MockBaseClaimPolicy } from "@mocks/MockBaseClaimPolicy.sol";
+import { MockSubPolicy } from "@mocks/MockSubPolicy.sol";
 
 // Libraries
 import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
@@ -38,7 +38,7 @@ contract Permit2ClaimPolicy_Unit_Test is Base_Test {
     //////////////////////////////////////////////////////////////*/
 
     Permit2ClaimPolicy internal permit2ClaimPolicy;
-    MockBaseClaimPolicy internal mockSubPolicy;
+    MockSubPolicy internal mockSubPolicy;
     ConfigId internal configId;
     address internal account;
 
@@ -64,7 +64,7 @@ contract Permit2ClaimPolicy_Unit_Test is Base_Test {
     function setUp() public virtual override {
         super.setUp();
         permit2ClaimPolicy = new Permit2ClaimPolicy(PERMIT2_ADDRESS);
-        mockSubPolicy = new MockBaseClaimPolicy();
+        mockSubPolicy = new MockSubPolicy();
         configId = ConfigId.wrap(bytes32(uint256(1)));
         account = makeAddr("account");
         token1 = makeAddr("token1");

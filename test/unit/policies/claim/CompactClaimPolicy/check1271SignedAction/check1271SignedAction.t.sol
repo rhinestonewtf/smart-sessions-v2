@@ -4,7 +4,7 @@ pragma solidity >=0.8.27;
 // Dependencies
 import {
     CompactClaimPolicy_Unit_Test
-} from "@test/unit/policies/claim/CompactClaimPolicy/compactClaimPolicy.t.sol";
+} from "@test/unit/policies/claim/CompactClaimPolicy/CompactClaimPolicy.t.sol";
 
 // Libraries
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";

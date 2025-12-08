@@ -205,7 +205,7 @@ contract Permit2ValidationLib_validateTokenIn_Unit_Test is Permit2ValidationLib_
         // Arrange
         PolicyConfig config = _buildConfig(FIELD_TOKEN_IN, MODE_CHECK_SUBPOLICY);
         this.setSubPolicy(FIELD_TOKEN_IN, address(mockSubPolicy));
-        mockSubPolicy.setValidateClaimReturnValue(true);
+        mockSubPolicy.setReturnValue(true);
 
         address[] memory tokens = new address[](1);
         uint256[] memory amounts = new uint256[](1);
@@ -227,7 +227,7 @@ contract Permit2ValidationLib_validateTokenIn_Unit_Test is Permit2ValidationLib_
         // Arrange
         PolicyConfig config = _buildConfig(FIELD_TOKEN_IN, MODE_CHECK_SUBPOLICY);
         this.setSubPolicy(FIELD_TOKEN_IN, address(mockSubPolicy));
-        mockSubPolicy.setValidateClaimReturnValue(false);
+        mockSubPolicy.setReturnValue(false);
 
         address[] memory tokens = new address[](1);
         uint256[] memory amounts = new uint256[](1);
