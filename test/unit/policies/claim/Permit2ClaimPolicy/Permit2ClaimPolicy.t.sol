@@ -76,12 +76,6 @@ contract Permit2ClaimPolicy_Unit_Test is Base_Test {
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Builds a PolicyConfig with specified field mode
-    function _buildConfig(uint8 fieldId, uint8 mode) internal pure returns (PolicyConfig) {
-        uint32 modeConfig = uint32(0).setFieldMode(fieldId, mode);
-        return PolicyConfig.wrap(modeConfig);
-    }
-
     /// @notice Packs token address into bytes32 for Permit2
     /// @dev Left-padded address: bytes32(bytes20(token))
     function _packToken(address token) internal pure returns (bytes32) {

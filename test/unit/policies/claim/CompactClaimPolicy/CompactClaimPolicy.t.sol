@@ -78,17 +78,6 @@ contract CompactClaimPolicy_Unit_Test is Base_Test {
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Builds a PolicyConfig with specified field mode
-    function _buildConfig(uint8 fieldId, uint8 mode) internal pure returns (PolicyConfig) {
-        uint32 modeConfig = uint32(0).setFieldMode(fieldId, mode);
-        return PolicyConfig.wrap(modeConfig);
-    }
-
-    /// @notice Helper to create mode config with specific field mode
-    function _createModeConfig(uint8 fieldId, uint8 mode) internal pure returns (uint32) {
-        return uint32(mode) << (fieldId * 2);
-    }
-
     /// @notice Packs token and lockTag into a Compact ID
     /// @dev Matches Compact IdLib format: lockTag (96 high) | token (160 low)
     function _packTokenId(address token, bytes12 lockTag) internal pure returns (bytes32) {

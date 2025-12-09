@@ -128,15 +128,6 @@ contract BaseValidationLib_Unit_Test is Base_Test {
                           MODE CONFIG HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Builds a PolicyConfig with a single field mode set
-    /// @param fieldId The field ID to set
-    /// @param mode The mode value (0-3)
-    /// @return The PolicyConfig with the field mode set
-    function _buildConfig(uint8 fieldId, uint8 mode) internal pure returns (PolicyConfig) {
-        uint32 modeConfig = uint32(mode) << (fieldId * 2);
-        return PolicyConfig.wrap(modeConfig);
-    }
-
     /// @notice Builds a PolicyConfig with multiple field modes set
     /// @param fieldIds Array of field IDs
     /// @param modes Array of mode values

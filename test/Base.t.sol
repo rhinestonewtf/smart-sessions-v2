@@ -40,6 +40,7 @@ import {
     ModeLib
 } from "erc7579/lib/ModeLib.sol";
 import { MODULE_TYPE_FALLBACK } from "erc7579/interfaces/IERC7579Module.sol";
+import { PolicyConfig, BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
 
 /// @notice An abstract base test contract that provides common test logic.
 abstract contract Base_Test is Test, RhinestoneModuleKit {
@@ -48,6 +49,7 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
     //////////////////////////////////////////////////////////////*/
 
     using ModuleKitHelpers for *;
+    using BaseConfigLib for uint32;
 
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
@@ -164,5 +166,16 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
                 IERC7579Account.execute, (mode, ExecutionLib.encodeBatch(executions))
             );
         }
+    }
+
+    /// @notice Builds a PolicyConfig with specified field mode
+    function _buildConfig(uint8 fieldId, uint8 mode) internal pure returns (PolicyConfig) {
+        uint32 modeConfig = uint32(0).setFieldMode(fieldId, mode);
+        return PolicyConfig.wrap(modeConfig);
+    }
+
+    /// @notice Helper to create mode config with specific field mode
+    function _createModeConfig(uint8 fieldId, uint8 mode) internal pure returns (uint32) {
+        return uint32(mode) << (fieldId * 2);
     }
 }
