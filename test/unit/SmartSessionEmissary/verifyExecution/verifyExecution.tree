@@ -1,0 +1,21 @@
+SmartSessionEmissary::verifyExecution
+├── given single call execution
+│   ├── when signature is valid
+│   │   └── it returns verifyExecution selector
+│   └── when session validator rejects signature
+│       └── it returns INVALID_SIGNATURE
+├── given batch call execution
+│   └── when all actions are enabled and signature is valid
+│       └── it returns verifyExecution selector
+├── given digest is cached
+│   └── it returns verifyExecution selector without revalidating
+├── given caller is not intent executor
+│   └── it reverts with UnauthorizedSource
+├── given permissionId is invalid
+│   └── it reverts with InvalidPermissionId
+├── given action selector is not enabled
+│   └── it reverts
+├── given action target is not enabled
+│   └── it reverts
+└── given emissary data is empty
+    └── it reverts

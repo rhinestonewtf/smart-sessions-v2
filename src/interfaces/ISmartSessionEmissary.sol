@@ -5,7 +5,11 @@ pragma solidity ^0.8.28;
 import { IEmissary } from "@compact-utils/interfaces/IEmissary.sol";
 
 // Types
-import { SmartSessionEmissaryConfig, SmartSessionEmissaryEnable } from "@types/DataTypes.sol";
+import {
+    SmartSessionEmissaryConfig,
+    SmartSessionEmissaryEnable,
+    SmartSessionEmissaryDisable
+} from "@types/DataTypes.sol";
 import { PermissionId } from "@smartsessions/DataTypes.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
@@ -61,6 +65,18 @@ interface ISmartSessionEmissary is IEmissary {
         address account,
         SmartSessionEmissaryConfig calldata config,
         SmartSessionEmissaryEnable calldata enable
+    )
+        external;
+
+    /// @notice Removes a Smart Session Emissary configuration for a specific account
+    /// @param account The address of the account for which the configuration is being removed
+    /// @param config The Smart Session Emissary configuration to be removed
+    /// @param disableData The disable data containing the allocatorSignature, user signature,
+    ///                    disable session data, and expiration time
+    function removeConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryDisable calldata disableData
     )
         external;
 

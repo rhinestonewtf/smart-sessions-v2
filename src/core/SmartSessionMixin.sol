@@ -24,7 +24,8 @@ import { PermissionId } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
-    SmartSessionEmissaryDisable
+    SmartSessionEmissaryDisable,
+    EMPTY_CONTENT_HASH
 } from "@types/DataTypes.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
@@ -385,8 +386,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // Detect direct mode (skip ERC-7739 wrapping)
         bool directMode = appDomainSeparator == bytes32(0);
 
-        // Init contentHash to bytes32(0)
-        bytes32 contentHash;
+        // Init contentHash to EMPTY_CONTENT_HASH
+        bytes32 contentHash = EMPTY_CONTENT_HASH;
 
         // If we're not using direct mode, calculate the contents hash
         if (!directMode) {

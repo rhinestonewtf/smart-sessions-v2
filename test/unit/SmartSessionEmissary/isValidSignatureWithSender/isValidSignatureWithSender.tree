@@ -1,0 +1,28 @@
+SmartSessionEmissary::isValidSignatureWithSender
+├── given ERC-7739 mode (0x01)
+│   ├── when signature is valid
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when session validator rejects signature
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when sender is the SmartSessionEmissary itself
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when permissionId is invalid
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when signature is malformed
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when content type does not match enabled content
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when content type is not enabled for session
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when signature is wrapped with ERC6492
+│       └── it returns ERC1271_MAGIC_VALUE
+├── given direct mode (0x00)
+│   ├── when domain zero is enabled
+│   │   ├── when signature is valid
+│   │   │   └── it returns ERC1271_MAGIC_VALUE
+│   │   └── when session validator rejects signature
+│   │       └── it returns INVALID_SIGNATURE
+│   └── when domain zero is not enabled
+│       └── it returns INVALID_SIGNATURE
+└── given unknown mode (0xFF)
+    └── it returns INVALID_SIGNATURE
