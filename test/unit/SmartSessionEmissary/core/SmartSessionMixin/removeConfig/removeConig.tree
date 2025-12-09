@@ -1,0 +1,54 @@
+SmartSessionMixin::removeConfig
+├── given valid configuration and disable data
+│   ├── when caller is the account
+│   │   ├── it should emit SmartSessionEmissaryConfigUpdated event with enabled=false
+│   │   ├── it should disable the permission
+│   │   ├── it should disable the lockTag
+│   │   ├── it should increment nonce for replay protection
+│   │   └── it should require valid allocator signature
+│   └── when caller is not the account
+│       ├── given valid user signature
+│       │   └── it should disable the permission
+│       └── given invalid user signature
+│           └── it should revert with InvalidUserSignature
+├── given session with policies
+│   ├── when session has claim policies
+│   │   └── it should remove claim policies for the lockTag
+│   ├── when session has ERC7739/ERC1271 policies
+│   │   └── it should remove ERC1271 policies
+│   ├── when session has action policies
+│   │   └── it should remove action policies
+│   └── when session has multiple actions
+│       └── it should remove all enabled actions
+├── given session validator
+│   └── it should disable the session validator (set to address(0))
+├── given allocator signature validation
+│   ├── when allocator signature is valid
+│   │   └── it should succeed
+│   └── when allocator signature is invalid
+│       └── it should revert with InvalidAllocatorSignature
+├── given NO_LOCKTAG (allocator is address(0))
+│   └── it should not require allocator signature
+├── given different scope values
+│   ├── when scope is ChainSpecific
+│   │   └── it should derive lockTag with ChainSpecific scope
+│   └── when scope is Multichain
+│       └── it should derive lockTag with Multichain scope
+├── given different resetPeriod values
+│   ├── when resetPeriod is OneSecond
+│   │   └── it should derive lockTag with OneSecond resetPeriod
+│   └── when resetPeriod is OneMinute
+│       └── it should derive lockTag with OneMinute resetPeriod
+├── given nonce management
+│   └── it should track nonces independently per lockTag
+├── given multiple lockTags for same permissionId
+│   └── it should only remove the specified lockTag, leaving others intact
+└── given invalid disable data
+    ├── when expires is in the past
+    │   └── it should revert with InvalidEmissaryDisableData
+    ├── when expires equals current timestamp
+    │   └── it should revert with InvalidEmissaryDisableData
+    ├── when chainId mismatches
+    │   └── it should revert with ChainIdMismatch
+    └── when nonce has already been used (replay)
+        └── it should revert

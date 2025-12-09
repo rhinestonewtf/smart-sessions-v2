@@ -1,0 +1,16 @@
+DigestCacheLib::markAsVerified
+├── when marking a digest
+│   └── it marks digest as verified
+├── when marking multiple digests
+│   └── it marks all digests as verified
+├── when marking with multiple permissions
+│   └── it marks each permission independently
+├── when marking same digest multiple times
+│   └── it remains verified (idempotent)
+└── given edge cases
+    ├── when account is zero address
+    │   └── it works correctly
+    ├── when digest is zero
+    │   └── it works correctly
+    └── when permissionId is zero
+        └── it works correctly

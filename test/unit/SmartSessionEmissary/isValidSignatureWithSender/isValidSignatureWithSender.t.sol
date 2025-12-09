@@ -20,6 +20,7 @@ import { ModuleKitHelpers } from "@modulekit/ModuleKit.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import { EIP712 } from "solady/utils/EIP712.sol";
 import { Solarray } from "solarray/Solarray.sol";
+import { ECDSA } from "solady/utils/ECDSA.sol";
 
 // Types
 import {
@@ -45,7 +46,7 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
     using HashLib for *;
 
     /*//////////////////////////////////////////////////////////////
-                                 STRUCTS
+                                 TYPES
     //////////////////////////////////////////////////////////////*/
 
     struct TestTemps {
@@ -60,21 +61,15 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         bytes32 s;
     }
 
-    /*//////////////////////////////////////////////////////////////
-                                 VARIABLES
-    //////////////////////////////////////////////////////////////*/
-
-    PermissionId testPermissionId;
-    bytes32 testContentHash;
-    bytes32 testMessageHash;
-    bytes32 appDomainSeparator;
-    string constant TEST_CONTENT_TYPE = "TestContent(string data)";
-    string constant TEST_CONTENT_NAME = "TestContent";
-    bytes mockSignature;
-    Account sessionSigner;
+    struct EIP712Domain {
+        string name;
+        string version;
+        uint256 chainId;
+        address verifyingContract;
+    }
 
     /*//////////////////////////////////////////////////////////////
-                                 CONSTANTS
+                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
     bytes4 constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
@@ -82,6 +77,19 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
     bytes32 constant ERC7739_DETECTION_HASH =
         0x7739773977397739773977397739773977397739773977397739773977397739;
     bytes4 constant ERC7739_SUPPORT_VALUE = 0x77390001;
+    string constant TEST_CONTENT_TYPE = "TestContent(string data)";
+    string constant TEST_CONTENT_NAME = "TestContent";
+
+    /*//////////////////////////////////////////////////////////////
+                                 STATE
+    //////////////////////////////////////////////////////////////*/
+
+    PermissionId testPermissionId;
+    bytes32 testContentHash;
+    bytes32 testMessageHash;
+    bytes32 appDomainSeparator;
+    bytes mockSignature;
+    Account sessionSigner;
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
@@ -123,10 +131,10 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
     }
 
     /*//////////////////////////////////////////////////////////////
-                              SMART SESSION
+                          ERC-7739 MODE (0x01)
     //////////////////////////////////////////////////////////////*/
 
-    function test_isValidSignatureWithSender_Success() public withEnabledSession {
+    function test_isValidSignatureWithSender_7739Mode_Success() public withEnabledSession {
         // Arrange
         TestTemps memory t = _prepareTestTemps();
         bytes memory signature = _createValidSignature(t);
@@ -139,7 +147,7 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, ERC1271_MAGIC_VALUE, "Should return ERC1271 magic value");
     }
 
-    function test_isValidSignatureWithSender_InvalidSignature()
+    function test_isValidSignatureWithSender_7739Mode_InvalidSignature()
         public
         withEnabledSessionWithFailingValidator
     {
@@ -155,22 +163,10 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, INVALID_SIGNATURE, "Should return invalid signature");
     }
 
-    // function test_isValidSignatureWithSender_ERC7739Detection() public view {
-    //     // Arrange - No session needed for detection
-    //     bytes memory emptySignature = "";
-    //     bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary),
-    // emptySignature);
-
-    //     // Act
-    //     bytes4 result = smartSessionEmissary.isValidSignatureWithSender(
-    //         address(this), ERC7739_DETECTION_HASH, fullSignature
-    //     );
-
-    //     // Assert
-    //     assertEq(result, ERC7739_SUPPORT_VALUE, "Should return ERC7739 support value");
-    // }
-
-    function test_isValidSignatureWithSender_RejectsSessionAsSender() public withEnabledSession {
+    function test_isValidSignatureWithSender_7739Mode_RejectsSessionAsSender()
+        public
+        withEnabledSession
+    {
         // Arrange
         TestTemps memory t = _prepareTestTemps();
         bytes memory signature = _createValidSignature(t);
@@ -185,14 +181,17 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, INVALID_SIGNATURE, "Should reject when sender is the session itself");
     }
 
-    /*//////////////////////////////////////////////////////////////
-                                  EDGE
-    //////////////////////////////////////////////////////////////*/
-
-    function test_isValidSignatureWithSender_RevertsWhen_InvalidPermissionId() public view {
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_InvalidPermissionId()
+        public
+        view
+    {
         // Arrange
         PermissionId invalidPermissionId = PermissionId.wrap(bytes32(uint256(0xdead)));
-        bytes memory signature = abi.encodePacked(invalidPermissionId, "mockData");
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01), // 7739 mode
+            invalidPermissionId,
+            "mockData"
+        );
         bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
 
         // Act
@@ -202,9 +201,16 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, INVALID_SIGNATURE, "Should return invalid for non-existent permission");
     }
 
-    function test_isValidSignatureWithSender_MalformedSignature() public withEnabledSession {
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_MalformedSignature()
+        public
+        withEnabledSession
+    {
         // Arrange - Create malformed signature (too short)
-        bytes memory malformedSignature = abi.encodePacked(testPermissionId, "short");
+        bytes memory malformedSignature = abi.encodePacked(
+            bytes1(0x01), // 7739 mode
+            testPermissionId,
+            "short"
+        );
         bytes memory fullSignature =
             abi.encodePacked(address(smartSessionEmissary), malformedSignature);
 
@@ -215,7 +221,7 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, INVALID_SIGNATURE, "Should return invalid for malformed signature");
     }
 
-    function test_isValidSignatureWithSender_RevertsWhen_WrongContentType()
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_WrongContentType()
         public
         withEnabledSession
     {
@@ -241,7 +247,7 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
             uint16(contentsDescription.length)
         );
 
-        signature = abi.encodePacked(testPermissionId, signature);
+        signature = abi.encodePacked(bytes1(0x01), testPermissionId, uint256(64 + 65), signature);
         bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
 
         // Act
@@ -251,13 +257,12 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, INVALID_SIGNATURE, "Should fail with wrong content type");
     }
 
-    function test_isValidSignatureWithSender_RevertsWhen_DisabledContent()
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_DisabledContent()
         public
         withEnabledSession
     {
         // Arrange
         TestTemps memory t = _prepareTestTemps();
-        // Create signature with content type that isn't enabled
         string memory disabledContentType = "DisabledContent(uint256 value)";
         bytes32 disabledContentHash = keccak256(abi.encode(uint256(123), disabledContentType));
         bytes32 disabledMessageHash = _toContentsHash(disabledContentHash);
@@ -278,7 +283,7 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
             uint16(contentsDescription.length)
         );
 
-        signature = abi.encodePacked(testPermissionId, signature);
+        signature = abi.encodePacked(bytes1(0x01), testPermissionId, uint256(64 + 65), signature);
         bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
 
         // Act
@@ -289,11 +294,10 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, INVALID_SIGNATURE, "Should fail with disabled content type");
     }
 
-    /*//////////////////////////////////////////////////////////////
-                                 CACHE
-    //////////////////////////////////////////////////////////////*/
-
-    function test_isValidSignatureWithSender_WithERC6492Wrapper() public withEnabledSession {
+    function test_isValidSignatureWithSender_7739Mode_WithERC6492Wrapper()
+        public
+        withEnabledSession
+    {
         // Arrange
         TestTemps memory t = _prepareTestTemps();
         bytes memory signature = _createValidSignature(t);
@@ -311,18 +315,92 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
     }
 
     /*//////////////////////////////////////////////////////////////
+                          DIRECT MODE (0x00)
+    //////////////////////////////////////////////////////////////*/
+
+    function test_isValidSignatureWithSender_DirectMode_Success()
+        public
+        withEnabledSessionDirectMode
+    {
+        // Arrange
+        TestTemps memory t = _prepareTestTemps();
+        bytes memory signature = _createDirectModeSignature(t);
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(result, ERC1271_MAGIC_VALUE, "Should return ERC1271 magic value for direct mode");
+    }
+
+    function test_isValidSignatureWithSender_DirectMode_InvalidSignature()
+        public
+        withEnabledSessionDirectModeWithFailingValidator
+    {
+        // Arrange
+        TestTemps memory t = _prepareTestTemps();
+        bytes memory signature = _createDirectModeSignature(t);
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(
+            result, INVALID_SIGNATURE, "Should return invalid for failing validator in direct mode"
+        );
+    }
+
+    function test_isValidSignatureWithSender_DirectMode_revertsWhen_DomainZeroNotEnabled()
+        public
+        withEnabledSession
+    {
+        // Arrange
+        TestTemps memory t = _prepareTestTemps();
+        bytes memory signature = _createDirectModeSignature(t);
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should return invalid when domain 0 not enabled");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            UNKNOWN MODE
+    //////////////////////////////////////////////////////////////*/
+
+    function test_isValidSignatureWithSender_UnknownMode_ReturnsInvalid()
+        public
+        withEnabledSession
+    {
+        // Arrange - Use unknown mode byte (0xFF)
+        bytes memory signature = abi.encodePacked(
+            bytes1(0xFF), // Unknown mode
+            testPermissionId,
+            "mockData"
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should return invalid for unknown mode");
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
     modifier withEnabledSession() {
-        // Prank to account
         vm.prank(instance.account);
 
-        // Setup policies
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
 
-        // Setup ERC7739 data with enabled content
         ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
         allowedContent[0].contentNames =
             Solarray.strings(string(abi.encodePacked(TEST_CONTENT_TYPE, TEST_CONTENT_NAME)));
@@ -331,7 +409,6 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         ERC7739Data memory erc7739Data =
             ERC7739Data({ allowedERC7739Content: allowedContent, erc1271Policies: policyDatas });
 
-        // Setup session
         Session memory session = Session({
             sessionValidator: ISessionValidator(address(yesSessionValidator)),
             salt: keccak256("signatureSalt"),
@@ -341,27 +418,22 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
             claimPolicies: new PolicyData[](0)
         });
 
-        // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        bytes12 lockTag = bytes12(0); // NO_LOCKTAG for 1271 only
+        bytes12 lockTag = bytes12(0);
 
         PermissionId[] memory permissionIds = smartSessionEmissary.enableSessions(sessions, lockTag);
         testPermissionId = permissionIds[0];
 
-        // Continue with the test
         _;
     }
 
     modifier withEnabledSessionWithFailingValidator() {
-        // Prank to account
         vm.prank(instance.account);
 
-        // Setup policies
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
 
-        // Setup ERC7739 data with enabled content
         ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
         allowedContent[0].contentNames =
             Solarray.strings(string(abi.encodePacked(TEST_CONTENT_TYPE, TEST_CONTENT_NAME)));
@@ -370,7 +442,6 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         ERC7739Data memory erc7739Data =
             ERC7739Data({ allowedERC7739Content: allowedContent, erc1271Policies: policyDatas });
 
-        // Setup session with failing validator
         Session memory session = Session({
             sessionValidator: ISessionValidator(address(noSessionValidator)),
             salt: keccak256("failingSignatureSalt"),
@@ -380,15 +451,80 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
             claimPolicies: new PolicyData[](0)
         });
 
-        // Enable session
         Session[] memory sessions = new Session[](1);
         sessions[0] = session;
-        bytes12 lockTag = bytes12(0); // NO_LOCKTAG for 1271 only
+        bytes12 lockTag = bytes12(0);
 
         PermissionId[] memory permissionIds = smartSessionEmissary.enableSessions(sessions, lockTag);
         testPermissionId = permissionIds[0];
 
-        // Continue with the test
+        _;
+    }
+
+    modifier withEnabledSessionDirectMode() {
+        vm.prank(instance.account);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        // Domain 0 enabled for direct mode
+        ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
+        allowedContent[0].contentNames = new string[](1);
+        allowedContent[0].contentNames[0] = "";
+        allowedContent[0].appDomainSeparator = bytes32(0);
+
+        ERC7739Data memory erc7739Data =
+            ERC7739Data({ allowedERC7739Content: allowedContent, erc1271Policies: policyDatas });
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("directModeSalt"),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: erc7739Data,
+            actions: new ActionData[](0),
+            claimPolicies: new PolicyData[](0)
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+        bytes12 lockTag = bytes12(0);
+
+        PermissionId[] memory permissionIds = smartSessionEmissary.enableSessions(sessions, lockTag);
+        testPermissionId = permissionIds[0];
+
+        _;
+    }
+
+    modifier withEnabledSessionDirectModeWithFailingValidator() {
+        vm.prank(instance.account);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
+        allowedContent[0].contentNames = new string[](1);
+        allowedContent[0].contentNames[0] = "";
+        allowedContent[0].appDomainSeparator = bytes32(0);
+
+        ERC7739Data memory erc7739Data =
+            ERC7739Data({ allowedERC7739Content: allowedContent, erc1271Policies: policyDatas });
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(noSessionValidator)),
+            salt: keccak256("directModeFailingSalt"),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: erc7739Data,
+            actions: new ActionData[](0),
+            claimPolicies: new PolicyData[](0)
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+        bytes12 lockTag = bytes12(0);
+
+        PermissionId[] memory permissionIds = smartSessionEmissary.enableSessions(sessions, lockTag);
+        testPermissionId = permissionIds[0];
+
         _;
     }
 
@@ -406,19 +542,14 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
     }
 
     function _createValidSignature(TestTemps memory t) internal view returns (bytes memory) {
-        // Sign the message
         (t.v, t.r, t.s) = vm.sign(
             t.privateKey,
             _toERC1271Hash(t.account, testContentHash, TEST_CONTENT_TYPE, TEST_CONTENT_NAME)
         );
 
-        // Create validator signature
         bytes memory validatorSignature = abi.encodePacked(t.r, t.s, t.v);
-
-        // Create contents description
         bytes memory contentsDescription = abi.encodePacked(TEST_CONTENT_TYPE, TEST_CONTENT_NAME);
 
-        // Create signature with ERC7739 wrapper
         bytes memory signatureWithWrapper = abi.encodePacked(
             validatorSignature,
             appDomainSeparator,
@@ -427,15 +558,30 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
             uint16(contentsDescription.length)
         );
 
-        // Calculate policyDataOffset: 64 (permissionId + offset field) + validatorSig length
         uint256 policyDataOffset = 64 + validatorSignature.length;
 
-        // Return complete signature
         return abi.encodePacked(
             bytes1(0x01), // 7739 mode
             testPermissionId,
             policyDataOffset,
             signatureWithWrapper
+        );
+    }
+
+    function _createDirectModeSignature(TestTemps memory t) internal view returns (bytes memory) {
+        bytes32 accountBoundHash =
+            ECDSA.toEthSignedMessageHash(abi.encode(instance.account, testMessageHash));
+
+        (t.v, t.r, t.s) = vm.sign(t.privateKey, accountBoundHash);
+
+        bytes memory validatorSignature = abi.encodePacked(t.r, t.s, t.v);
+        uint256 policyDataOffset = 64 + validatorSignature.length;
+
+        return abi.encodePacked(
+            bytes1(0x00), // Direct mode
+            testPermissionId,
+            policyDataOffset,
+            validatorSignature
         );
     }
 
@@ -514,16 +660,5 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
                 domain.verifyingContract
             )
         );
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                 TYPES
-    //////////////////////////////////////////////////////////////*/
-
-    struct EIP712Domain {
-        string name;
-        string version;
-        uint256 chainId;
-        address verifyingContract;
     }
 }

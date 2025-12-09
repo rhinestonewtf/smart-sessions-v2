@@ -77,7 +77,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
                 account: account, nonce: nonce, expires: enableData.expires, lockTag: lockTag
             });
 
-        // Check if the permissionId is already enabled for the account
+        // Check if the lockTag is already enabled for the account
         bool isInit = $enabledLockTags.contains({ account: account, value: bytes32(lockTag) });
 
         // Verify the user and allocator signatures
