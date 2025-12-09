@@ -147,59 +147,51 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
     /// @param account The account address
     /// @param permissionId The permission ID
     /// @param actionId The action ID
-    /// @param lockTag The associated lock tag
     /// @return Array of policy addresses
     function getActionPolicies(
         address account,
         PermissionId permissionId,
-        ActionId actionId,
-        bytes12 lockTag
+        ActionId actionId
     )
         external
         view
         returns (address[] memory)
     {
-        return $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].values(
-            account
-        );
+        return $actionPolicies.actionPolicies[actionId].policyList[permissionId].values(account);
     }
 
     /// @notice Get all enabled actions for an account
     /// @param account The account address
     /// @param permissionId The permission ID
-    /// @param lockTag The associated lock tag
     /// @return Array of enabled action IDs as bytes32
     function getEnabledActions(
         address account,
-        PermissionId permissionId,
-        bytes12 lockTag
+        PermissionId permissionId
     )
         external
         view
         returns (bytes32[] memory)
     {
-        return $actionPolicies[lockTag].enabledActionIds[permissionId].values(account);
+        return $actionPolicies.enabledActionIds[permissionId].values(account);
     }
 
     /// @notice Check if a specific action policy is enabled
     /// @param account The account address
     /// @param permissionId The permission ID
     /// @param actionId The action ID
-    /// @param lockTag The associated lock tag
     /// @param policy The policy address to check
     /// @return True if the policy is enabled
     function isActionPolicyEnabled(
         address account,
         PermissionId permissionId,
         ActionId actionId,
-        bytes12 lockTag,
         address policy
     )
         external
         view
         returns (bool)
     {
-        return $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].contains({
+        return $actionPolicies.actionPolicies[actionId].policyList[permissionId].contains({
             account: account, value: policy
         });
     }
@@ -208,19 +200,17 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
     /// @param account The account address
     /// @param permissionId The permission ID
     /// @param actionId The action ID
-    /// @param lockTag The associated lock tag
     /// @return True if the action ID is enabled
     function isActionIdEnabled(
         address account,
         PermissionId permissionId,
-        ActionId actionId,
-        bytes12 lockTag
+        ActionId actionId
     )
         external
         view
         returns (bool)
     {
-        return $actionPolicies[lockTag].enabledActionIds[permissionId].contains({
+        return $actionPolicies.enabledActionIds[permissionId].contains({
             account: account, value: ActionId.unwrap(actionId)
         });
     }

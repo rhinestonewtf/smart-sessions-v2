@@ -76,14 +76,12 @@ interface ISmartSessionEmissary is IEmissary {
     /// @param hash The hash of the user operation
     /// @param data Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address account,
         bytes32 hash,
         bytes calldata data,
-        Types.Operation calldata executions,
-        bytes12 lockTag
+        Types.Operation calldata executions
     )
         external
         returns (bytes4);

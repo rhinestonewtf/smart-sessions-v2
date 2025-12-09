@@ -159,14 +159,12 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param digest The digest of claim being verified which includes executions
     /// @param emissaryData Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return result The function selector on success, or a specific failure code otherwise
     function _verifyExecutionSmartSession(
         address account,
         bytes32 digest,
         bytes calldata emissaryData,
-        Types.Operation calldata executions,
-        bytes12 lockTag
+        Types.Operation calldata executions
     )
         internal
         virtual
@@ -184,8 +182,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             digest: digest,
             executions: executions.safeToERC7579().parse(),
             decompressedSignature: packedSig,
-            account: account,
-            lockTag: lockTag
+            account: account
         });
 
         /// @solidity memory-safe-assembly
@@ -193,7 +190,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             // validSig ?
             // bytes4(keccak256("verifyExecution(address,bytes32,bytes,Types.Operation,bytes12)")) :
             // 0xffffffff`. We use `0xffffffff` for invalid signatures.
-            result := shl(224, or(0x88ec78fb, sub(0, iszero(validSig))))
+            result := shl(224, or(0x043b31ea, sub(0, iszero(validSig))))
         }
     }
 
@@ -208,15 +205,13 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param executions The execution data for the user operation
     /// @param decompressedSignature The decompressed signature for validation
     /// @param account The account for which policies are being enforced
-    /// @param lockTag The lock tag associated with the session
     /// @return validSig True if the signature is valid, false otherwise
     function _enforceActionPolicies(
         PermissionId permissionId,
         bytes32 digest,
         Execution[] calldata executions,
         bytes memory decompressedSignature,
-        address account,
-        bytes12 lockTag
+        address account
     )
         internal
         returns (bool validSig)
@@ -233,7 +228,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         //////////////////////////////////////////////////////////////*/
 
         // Check action policies for the given permissionId and batch execution
-        $actionPolicies[lockTag].actionPolicies
+        $actionPolicies.actionPolicies
             .checkBatch7579Exec({
                 executions: executions,
                 permissionId: permissionId,
@@ -246,9 +241,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         //////////////////////////////////////////////////////////////*/
 
         // Check if this digest was already validated
-        if (digest.isAlreadyVerified({
-                account: account, permissionId: permissionId, lockTag: lockTag
-            })) {
+        if (digest.isAlreadyVerified({ account: account, permissionId: permissionId })) {
             return true;
         }
 
@@ -263,9 +256,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         // Cache the result if valid
         if (validSig) {
-            digest.markAsVerified({
-                account: account, permissionId: permissionId, lockTag: lockTag
-            });
+            digest.markAsVerified({ account: account, permissionId: permissionId });
         }
     }
 
@@ -323,9 +314,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         if (!valid) return valid;
 
         // Check if this digest was already validated
-        if (digest.isAlreadyVerified({
-                account: sponsor, permissionId: permissionId, lockTag: lockTag
-            })) {
+        if (digest.isAlreadyVerified({ account: sponsor, permissionId: permissionId })) {
             return true;
         }
 

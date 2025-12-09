@@ -37,7 +37,7 @@ SmartSessionMixin::setConfig
 │   │   └── it should not require allocator signature
 │   ├── when called on subsequent calls
 │   │   └── it should not require allocator signature
-│   └── it should skip action and claim policy enablement
+│   └── it should skip claim policy enablement but still enable action policies
 ├── given multiple lockTags for same permissionId
 │   └── it should enable both lockTags independently
 ├── given different allocators

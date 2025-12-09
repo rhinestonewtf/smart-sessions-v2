@@ -121,6 +121,11 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
                 account: account
             });
 
+            // Enable action policies
+            $actionPolicies.enable({
+                permissionId: permissionId, actionPolicyDatas: session.actions, account: account
+            });
+
             // Only enable claim and action policies if lockTag is not NO_LOCKTAG
             if (lockTag != NO_LOCKTAG) {
                 // Enable claim policies
@@ -130,11 +135,6 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
                     configId: permissionId.toErc1271PolicyId().toConfigId(account),
                     policyDatas: session.claimPolicies,
                     account: account
-                });
-
-                // Enable action policies
-                $actionPolicies[lockTag].enable({
-                    permissionId: permissionId, actionPolicyDatas: session.actions, account: account
                 });
 
                 // Add the lockTag to the enabled lockTags for the account
@@ -170,13 +170,13 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         address account,
         bytes32 digest,
         PermissionId permissionId,
-        bytes12 lockTag
+        bytes12
     )
         external
         view
         returns (bool)
     {
-        return DigestCacheLib.isAlreadyVerified(digest, account, permissionId, lockTag);
+        return DigestCacheLib.isAlreadyVerified(digest, account, permissionId);
     }
 
     /// @notice Set SmartSession digest cache
@@ -184,11 +184,11 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         address account,
         bytes32 digest,
         PermissionId permissionId,
-        bytes12 lockTag
+        bytes12
     )
         external
     {
-        DigestCacheLib.markAsVerified(digest, account, permissionId, lockTag);
+        DigestCacheLib.markAsVerified(digest, account, permissionId);
     }
 
     /// @notice Clear SmartSession digest cache
@@ -196,7 +196,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         address account,
         bytes32 digest,
         PermissionId permissionId,
-        bytes12 lockTag
+        bytes12
     )
         external
     {
@@ -207,8 +207,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
             mstore(add(ptr, 0x20), account)
             mstore(add(ptr, 0x40), digest)
             mstore(add(ptr, 0x60), permissionId)
-            mstore(add(ptr, 0x80), lockTag)
-            slot := keccak256(ptr, 0xa0)
+            slot := keccak256(ptr, 0x80)
             tstore(slot, 0)
         }
     }

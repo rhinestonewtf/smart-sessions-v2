@@ -110,9 +110,8 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         vm.prank(MOCK_INTENT_EXECUTOR);
 
         // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
 
         // Assert
         assertEq(
@@ -136,9 +135,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
                 ISmartSessionEmissary.InvalidPermissionId.selector, invalidPermissionId
             )
         );
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
     }
 
     function test_verifyExecution_SmartSession_BatchCall_Success()
@@ -166,11 +163,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
 
         // Act
         bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account,
-            TEST_HASH,
-            data,
-            SmartExecutionLib.SigMode.EMISSARY.encode(executions),
-            testLockTag
+            instance.account, TEST_HASH, data, SmartExecutionLib.SigMode.EMISSARY.encode(executions)
         );
 
         // Assert
@@ -192,9 +185,8 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         vm.prank(MOCK_INTENT_EXECUTOR);
 
         // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
 
         // Assert
         assertEq(result, bytes4(0xFFFFFFFF), "Should return failure code for invalid signature");
@@ -212,9 +204,8 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         vm.prank(MOCK_INTENT_EXECUTOR);
 
         // First call - validates and caches
-        bytes4 result1 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        bytes4 result1 =
+            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
         assertEq(result1, ISmartSessionEmissary.verifyExecution.selector);
 
         // Check cache was populated
@@ -235,35 +226,14 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         vm.prank(MOCK_INTENT_EXECUTOR);
 
         // Second call - should hit cache
-        bytes4 result2 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        bytes4 result2 =
+            smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, data, mockExecData);
         assertEq(result2, ISmartSessionEmissary.verifyExecution.selector);
     }
 
     /*//////////////////////////////////////////////////////////////
                                   EDGE
     //////////////////////////////////////////////////////////////*/
-
-    function test_verifyExecution_InvalidMode() public {
-        // Arrange
-        bytes memory data = abi.encodePacked(
-            bytes1(0xFF), // Invalid mode
-            testPermissionId,
-            mockSignature
-        );
-
-        // Prank to intent executor
-        vm.prank(MOCK_INTENT_EXECUTOR);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xFFFFFFFF), "Should return failure code for invalid mode");
-    }
 
     function test_verifyExecution_EmptyData() public {
         // Expect revert
@@ -273,9 +243,7 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         vm.prank(MOCK_INTENT_EXECUTOR);
 
         // Act
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, "", mockExecData, testLockTag
-        );
+        smartSessionEmissary.verifyExecution(instance.account, TEST_HASH, "", mockExecData);
     }
 
     /*//////////////////////////////////////////////////////////////

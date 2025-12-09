@@ -262,18 +262,14 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Assert
         bytes32[] memory enabledActions = ISmartSessionLens(address(smartSessionEmissary))
-            .getEnabledActions(instance.account, testPermissionId, testLockTag);
+            .getEnabledActions(instance.account, testPermissionId);
 
         assertEq(enabledActions.length, 1);
         assertEq(enabledActions[0], ActionId.unwrap(expectedActionId));
 
         bool isActionPolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
             .isActionPolicyEnabled(
-                instance.account,
-                testPermissionId,
-                expectedActionId,
-                testLockTag,
-                address(sudoPolicy)
+                instance.account, testPermissionId, expectedActionId, address(sudoPolicy)
             );
         assertTrue(isActionPolicyEnabled);
     }
@@ -312,7 +308,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Assert
         bytes32[] memory enabledActions = ISmartSessionLens(address(smartSessionEmissary))
-            .getEnabledActions(instance.account, testPermissionId, testLockTag);
+            .getEnabledActions(instance.account, testPermissionId);
 
         assertEq(enabledActions.length, 3);
 
@@ -323,19 +319,19 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         assertTrue(
             ISmartSessionLens(address(smartSessionEmissary))
                 .isActionPolicyEnabled(
-                    instance.account, testPermissionId, actionId1, testLockTag, address(sudoPolicy)
+                    instance.account, testPermissionId, actionId1, address(sudoPolicy)
                 )
         );
         assertTrue(
             ISmartSessionLens(address(smartSessionEmissary))
                 .isActionPolicyEnabled(
-                    instance.account, testPermissionId, actionId2, testLockTag, address(sudoPolicy)
+                    instance.account, testPermissionId, actionId2, address(sudoPolicy)
                 )
         );
         assertTrue(
             ISmartSessionLens(address(smartSessionEmissary))
                 .isActionPolicyEnabled(
-                    instance.account, testPermissionId, actionId3, testLockTag, address(sudoPolicy)
+                    instance.account, testPermissionId, actionId3, address(sudoPolicy)
                 )
         );
     }
@@ -370,13 +366,13 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         assertTrue(
             ISmartSessionLens(address(smartSessionEmissary))
                 .isActionPolicyEnabled(
-                    instance.account, testPermissionId, actionId, testLockTag, address(sudoPolicy)
+                    instance.account, testPermissionId, actionId, address(sudoPolicy)
                 )
         );
         assertTrue(
             ISmartSessionLens(address(smartSessionEmissary))
                 .isActionPolicyEnabled(
-                    instance.account, testPermissionId, actionId, testLockTag, address(secondPolicy)
+                    instance.account, testPermissionId, actionId, address(secondPolicy)
                 )
         );
     }
@@ -500,8 +496,8 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         assertTrue(isEnabled);
     }
 
-    /// @notice Test setConfig with NO_LOCKTAG skips action and claim policy enablement
-    function test_setConfig_withNoLockTag_skipsLockTagSpecificPolicies() public {
+    /// @notice Test setConfig with NO_LOCKTAG skips claim policies
+    function test_setConfig_withNoLockTag_skipsClaimPoliciesOnly() public {
         // Arrange
         PolicyData[] memory claimPolicies = new PolicyData[](1);
         claimPolicies[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
@@ -518,16 +514,28 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         vm.prank(instance.account);
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
-        // Assert
+        // Assert - permission enabled
         bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
             .isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
 
+        // Assert - claim policies NOT enabled (lockTag specific)
         bool isClaimPolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
             .isClaimPolicyEnabled(
                 instance.account, testPermissionId, NO_LOCKTAG, address(sudoPolicy)
             );
         assertFalse(isClaimPolicyEnabled);
+
+        // Assert - action policies ARE enabled (not lockTag dependent)
+        bytes4 expectedSelector = bytes4(keccak256("testFunction()"));
+        ActionId expectedActionId =
+            ActionId.wrap(keccak256(abi.encodePacked(target, expectedSelector)));
+
+        bool isActionPolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
+            .isActionPolicyEnabled(
+                instance.account, testPermissionId, expectedActionId, address(sudoPolicy)
+            );
+        assertTrue(isActionPolicyEnabled);
     }
 
     /*//////////////////////////////////////////////////////////////

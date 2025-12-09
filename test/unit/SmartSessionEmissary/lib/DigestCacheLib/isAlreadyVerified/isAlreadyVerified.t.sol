@@ -36,8 +36,7 @@ contract DigestCacheLib_isAlreadyVerified_Test is DigestCacheLib_Unit_Test {
 
     function test_isAlreadyVerified_ReturnsFalse_WhenNotCached() public view {
         // Act
-        bool isVerified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1, lockTag1);
+        bool isVerified = DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1);
 
         // Assert
         assertFalse(isVerified, "Should return false for uncached digest");
@@ -49,11 +48,10 @@ contract DigestCacheLib_isAlreadyVerified_Test is DigestCacheLib_Unit_Test {
 
     function test_isAlreadyVerified_ReturnsTrue_AfterMarking() public {
         // Arrange
-        DigestCacheLib.markAsVerified(digest1, account1, permissionId1, lockTag1);
+        DigestCacheLib.markAsVerified(digest1, account1, permissionId1);
 
         // Act
-        bool isVerified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1, lockTag1);
+        bool isVerified = DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1);
 
         // Assert
         assertTrue(isVerified, "Should return true after marking as verified");
@@ -65,13 +63,11 @@ contract DigestCacheLib_isAlreadyVerified_Test is DigestCacheLib_Unit_Test {
 
     function test_isAlreadyVerified_DifferentAccounts_Isolated() public {
         // Arrange
-        DigestCacheLib.markAsVerified(digest1, account1, permissionId1, lockTag1);
+        DigestCacheLib.markAsVerified(digest1, account1, permissionId1);
 
         // Act
-        bool account1Verified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1, lockTag1);
-        bool account2Verified =
-            DigestCacheLib.isAlreadyVerified(digest1, account2, permissionId1, lockTag1);
+        bool account1Verified = DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1);
+        bool account2Verified = DigestCacheLib.isAlreadyVerified(digest1, account2, permissionId1);
 
         // Assert
         assertTrue(account1Verified, "Account1 should be verified");
@@ -80,43 +76,26 @@ contract DigestCacheLib_isAlreadyVerified_Test is DigestCacheLib_Unit_Test {
 
     function test_isAlreadyVerified_DifferentPermissions_Isolated() public {
         // Arrange
-        DigestCacheLib.markAsVerified(digest1, account1, permissionId1, lockTag1);
+        DigestCacheLib.markAsVerified(digest1, account1, permissionId1);
 
         // Act
         bool permission1Verified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1, lockTag1);
+            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1);
         bool permission2Verified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId2, lockTag1);
+            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId2);
 
         // Assert
         assertTrue(permission1Verified, "Permission1 should be verified");
         assertFalse(permission2Verified, "Permission2 should not be verified");
     }
 
-    function test_isAlreadyVerified_DifferentLockTags_Isolated() public {
-        // Arrange
-        DigestCacheLib.markAsVerified(digest1, account1, permissionId1, lockTag1);
-
-        // Act
-        bool lockTag1Verified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1, lockTag1);
-        bool lockTag2Verified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1, lockTag2);
-
-        // Assert
-        assertTrue(lockTag1Verified, "LockTag1 should be verified");
-        assertFalse(lockTag2Verified, "LockTag2 should not be verified");
-    }
-
     function test_isAlreadyVerified_DifferentDigests_Isolated() public {
         // Arrange
-        DigestCacheLib.markAsVerified(digest1, account1, permissionId1, lockTag1);
+        DigestCacheLib.markAsVerified(digest1, account1, permissionId1);
 
         // Act
-        bool digest1Verified =
-            DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1, lockTag1);
-        bool digest2Verified =
-            DigestCacheLib.isAlreadyVerified(digest2, account1, permissionId1, lockTag1);
+        bool digest1Verified = DigestCacheLib.isAlreadyVerified(digest1, account1, permissionId1);
+        bool digest2Verified = DigestCacheLib.isAlreadyVerified(digest2, account1, permissionId1);
 
         // Assert
         assertTrue(digest1Verified, "Digest1 should be verified");

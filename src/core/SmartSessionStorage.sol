@@ -41,14 +41,14 @@ abstract contract SmartSessionStorage {
     /// @notice Mapping of ERC1271 policies organized by permission IDs and smart account
     Policy internal $erc1271Policies;
 
+    /// @notice Mapping of Action policies organized by permission IDs and smart account addresses
+    EnumerableActionPolicy internal $actionPolicies;
+
     /// @notice Set of all enabled ERC7739 configurations for each smart account and permissionId
     EnumerableERC7739Config internal $enabledERC7739;
 
-    /// @notice Mapping of lockTag to claim policies
+    /// @notice Mapping of lockTag to claim policies organized by permission IDs and smart account
     mapping(bytes12 lockTag => Policy claimPolicies) internal $claimPolicies;
-
-    /// @notice Mapping of lockTag to enabled action policies
-    mapping(bytes12 lockTag => EnumerableActionPolicy actionPolicies) internal $actionPolicies;
 
     /*//////////////////////////////////////////////////////////////
                                VALIDATORS

@@ -111,15 +111,15 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             account: account
         });
 
+        // Enable action policies
+        $actionPolicies.enable({
+            permissionId: permissionId,
+            actionPolicyDatas: enableData.session.sessionToEnable.actions,
+            account: account
+        });
+
         // Enable action and claim policies only if lockTag is not NO_LOCKTAG
         if (lockTag != NO_LOCKTAG) {
-            // Enable action policies
-            $actionPolicies[lockTag].enable({
-                permissionId: permissionId,
-                actionPolicyDatas: enableData.session.sessionToEnable.actions,
-                account: account
-            });
-
             // Enable claim policies
             $claimPolicies[lockTag].enable({
                 policyType: PolicyType.ERC1271,
@@ -211,21 +211,16 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
         $erc1271Policies.policyList[permissionId].removeAll(account);
 
         // Remove all Action policies for this session
-        uint256 actionLength =
-            $actionPolicies[lockTag].enabledActionIds[permissionId].length(account);
+        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
         for (uint256 i; i < actionLength; i++) {
             ActionId actionId = ActionId.wrap(
-                $actionPolicies[lockTag].enabledActionIds[permissionId].at({
-                    account: account, index: i
-                })
+                $actionPolicies.enabledActionIds[permissionId].at({ account: account, index: i })
             );
-            $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].removeAll(
-                account
-            );
+            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(account);
         }
 
         // removing all stored actionIds
-        $actionPolicies[lockTag].enabledActionIds[permissionId].removeAll(account);
+        $actionPolicies.enabledActionIds[permissionId].removeAll(account);
 
         // Remove all claim policies for this session
         $claimPolicies[lockTag].policyList[permissionId].removeAll(account);
