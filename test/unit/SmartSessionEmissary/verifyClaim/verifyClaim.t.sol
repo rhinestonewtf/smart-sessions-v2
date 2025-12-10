@@ -174,6 +174,111 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
     }
 
     /*//////////////////////////////////////////////////////////////
+                             ISOLATION TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test verifyClaim fails when using wrong permissionId (different session)
+    function test_verifyClaim_SmartSession_Fails_WrongPermissionId()
+        public
+        withEnabledClaimSession
+    {
+        // Arrange - create a different permissionId that was never enabled
+        PermissionId wrongPermissionId = PermissionId.wrap(keccak256("wrongPermission"));
+
+        // Create signature with wrong permissionId
+        bytes memory wrongSignature = _createSignatureWithPermissionId(wrongPermissionId);
+        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, wrongSignature);
+
+        // Act
+        bytes4 result = smartSessionEmissary.verifyClaim(
+            instance.account, testDigest, testClaimHash, emissaryData, testLockTag
+        );
+
+        // Assert
+        assertEq(result, bytes4(0xffffffff), "Should return failure for wrong permissionId");
+    }
+
+    /// @notice Test verifyClaim fails when using wrong lockTag
+    function test_verifyClaim_SmartSession_Fails_WrongLockTag() public withEnabledClaimSession {
+        // Arrange
+        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockSignature);
+        bytes12 wrongLockTag = bytes12(keccak256("wrongLockTag"));
+
+        // Act - should revert with NoPoliciesSet because no claim policies exist for wrongLockTag
+        vm.expectRevert();
+        smartSessionEmissary.verifyClaim(
+            instance.account, testDigest, testClaimHash, emissaryData, wrongLockTag
+        );
+    }
+
+    /// @notice Test claim policies are isolated per lockTag - same permissionId, different lockTag
+    function test_verifyClaim_SmartSession_IsolatedPerLockTag() public {
+        // Arrange - enable session with lockTag1
+        vm.prank(instance.account);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        ERC7739Data memory erc7739Data;
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("isolationSalt"),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: erc7739Data,
+            actions: new ActionData[](0),
+            claimPolicies: policyDatas
+        });
+
+        bytes12 lockTag1 = bytes12(keccak256("lockTag1"));
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+        PermissionId[] memory permissionIds =
+            smartSessionEmissary.enableSessions(sessions, lockTag1);
+        PermissionId permissionId = permissionIds[0];
+
+        // Create signature with correct permissionId
+        testPermissionId = permissionId;
+        _createMockSignature();
+        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockSignature);
+
+        // Act - verify with correct lockTag should succeed
+        bytes4 result1 = smartSessionEmissary.verifyClaim(
+            instance.account, testDigest, testClaimHash, emissaryData, lockTag1
+        );
+
+        // Assert - correct lockTag works
+        assertEq(
+            result1,
+            ISmartSessionEmissary.verifyClaim.selector,
+            "Should succeed with correct lockTag"
+        );
+
+        // Act - verify with different lockTag should revert (no policies set)
+        bytes12 lockTag2 = bytes12(keccak256("lockTag2"));
+        vm.expectRevert(); // NoPoliciesSet
+        smartSessionEmissary.verifyClaim(
+            instance.account, testDigest, testClaimHash, emissaryData, lockTag2
+        );
+    }
+
+    /// @notice Test verifyClaim fails when using different account
+    function test_verifyClaim_SmartSession_Fails_DifferentAccount() public withEnabledClaimSession {
+        // Arrange
+        bytes memory emissaryData = packClaimData(EMISSARY_SMART_SESSION, mockSignature);
+        address differentAccount = makeAddr("differentAccount");
+
+        // Act
+        bytes4 result = smartSessionEmissary.verifyClaim(
+            differentAccount, testDigest, testClaimHash, emissaryData, testLockTag
+        );
+
+        // Assert
+        assertEq(result, bytes4(0xffffffff), "Should return failure for different account");
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
@@ -290,5 +395,21 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
         // Prepend the permissionId
         mockSignature =
             abi.encodePacked(testPermissionId, sessionSignature.length + 64, sessionSignature);
+    }
+
+    function _createSignatureWithPermissionId(PermissionId permissionId)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
+        bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
+        uint8 v = 27;
+
+        bytes32 contents = keccak256(abi.encode("testData", TEST_CONTENT));
+
+        bytes memory sessionSignature = abi.encodePacked(r, s, v, contents);
+
+        return abi.encodePacked(permissionId, sessionSignature.length + 64, sessionSignature);
     }
 }

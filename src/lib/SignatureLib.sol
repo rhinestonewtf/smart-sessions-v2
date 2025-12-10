@@ -27,14 +27,19 @@ library SignatureLib {
                                 VALIDATE
     //////////////////////////////////////////////////////////////*/
 
+    // In SignatureLib:
+
     /// @notice Validates the allocator and user signatures for a given hash,
     ///         reverts if the signatures are invalid.
+    /// @dev Signature requirements:
+    ///      - User signature: Always required (unless msg.sender == user)
+    ///      - Allocator signature: Required only when isInit=true AND allocator != address(0)
     /// @param hash The hash to validate signatures against
-    /// @param allocator The address of the allocator
+    /// @param allocator The address of the allocator (address(0) if none)
     /// @param user The address of the user
     /// @param allocatorSignature The signature of the allocator
     /// @param userSignature The signature of the user
-    /// @param isInit Whether this is an initialization call
+    /// @param isInit True if lockTag already enabled (require allocator sig), false if first enable
     function verifySignatures(
         bytes32 hash,
         address allocator,
@@ -51,9 +56,9 @@ library SignatureLib {
             require(user.isValidSignatureNowCalldata(hash, userSignature), InvalidUserSignature());
         }
 
-        // If this is not an initialization call, verify the allocator signature
-        // (allocator can be address(0) for no allocator)
-        if (!isInit && allocator != address(0)) {
+        // Verify allocator signature on subsequent enables (isInit=true)
+        // Skip if no allocator is configured (allocator == address(0))
+        if (isInit && allocator != address(0)) {
             require(
                 allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSignature),
                 InvalidAllocatorSignature()

@@ -1,0 +1,10 @@
+SmartSessionLens::getNonce
+├── when nonce has not been revoked
+│   ├── it returns zero initially
+│   └── it returns zero for different lock tags
+├── when nonce has been revoked
+│   ├── it returns 1 after single revoke
+│   └── it returns correct value after multiple revokes
+└── given isolation
+    ├── it is isolated per lock tag
+    └── it is isolated per account

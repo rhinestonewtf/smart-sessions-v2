@@ -83,9 +83,17 @@ interface ISmartSessionLens {
 
     /// @notice Check if a lockTag is enabled for an account
     /// @param account The account address
+    /// @param permissionId The permission ID associated with the lockTag
     /// @param lockTag The lock tag
     /// @return True if the lockTag is enabled
-    function isLockTagEnabled(address account, bytes12 lockTag) external view returns (bool);
+    function isLockTagEnabled(
+        address account,
+        PermissionId permissionId,
+        bytes12 lockTag
+    )
+        external
+        view
+        returns (bool);
 
     /*//////////////////////////////////////////////////////////////
                              ACTION POLICIES

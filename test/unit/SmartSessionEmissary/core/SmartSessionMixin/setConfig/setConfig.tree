@@ -42,10 +42,15 @@ SmartSessionMixin::setConfig
 │   └── it should enable both lockTags independently
 ├── given different allocators
 │   └── it should derive unique lockTags per allocator
+├── given lockTag isolation
+│   ├── when same lockTag used by different permissionIds
+│   │   └── it should isolate lockTags per permissionId
+│   └── when same permissionId and lockTag but different accounts
+│       └── it should isolate lockTags per account
 ├── given init vs subsequent calls
 │   ├── when lockTag is not yet enabled (init)
 │   │   ├── it should not require allocator signature
-│   │   └── it should add lockTag to enabledLockTags
+│   │   └── it should add lockTag to enabledLockTags for this permissionId
 │   └── when lockTag is already enabled (subsequent)
 │       ├── given valid allocator signature
 │       │   └── it should succeed
@@ -58,6 +63,17 @@ SmartSessionMixin::setConfig
 │   │   └── it should set session validator and config
 │   └── when called on subsequent calls
 │       └── it should not change existing validator
+├── given multichain enable data
+│   ├── when chainDigestIndex points to current chain
+│   │   └── it should succeed
+│   ├── when chainDigestIndex points to wrong chain
+│   │   └── it should revert with ChainIdMismatch
+│   ├── when session digest doesn't match computed digest
+│   │   └── it should revert with HashMismatch
+│   ├── when single chain in multichain array
+│   │   └── it should succeed
+│   └── when different digests per chain
+│       └── it should validate only current chain's digest
 └── given invalid enable data
     ├── when expires is in the past
     │   └── it should revert with InvalidEmissaryEnableData

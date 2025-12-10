@@ -129,8 +129,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -146,24 +145,22 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Assert
         assertEq(testLockTag, expectedLockTag);
-        bool isLockTagEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isLockTagEnabled(instance.account, testLockTag);
+        bool isLockTagEnabled =
+            _lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag);
         assertTrue(isLockTagEnabled);
     }
 
     /// @notice Test setConfig increments nonce for replay protection
     function test_setConfig_incrementsNonce() public {
         // Arrange
-        uint256 nonceBefore = ISmartSessionLens(address(smartSessionEmissary))
-            .getNonce(instance.account, testLockTag);
+        uint256 nonceBefore = _lens().getNonce(instance.account, testLockTag);
 
         // Act
         vm.prank(instance.account);
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        uint256 nonceAfter = ISmartSessionLens(address(smartSessionEmissary))
-            .getNonce(instance.account, testLockTag);
+        uint256 nonceAfter = _lens().getNonce(instance.account, testLockTag);
         assertEq(nonceAfter, nonceBefore + 1);
     }
 
@@ -178,8 +175,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -203,11 +199,10 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
 
-        bool isClaimPolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
+        bool isClaimPolicyEnabled = _lens()
             .isClaimPolicyEnabled(
                 instance.account, testPermissionId, testLockTag, address(sudoPolicy)
             );
@@ -240,12 +235,11 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
 
-        bool isERC1271PolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isERC1271PolicyEnabled(instance.account, testPermissionId, address(sudoPolicy));
+        bool isERC1271PolicyEnabled =
+            _lens().isERC1271PolicyEnabled(instance.account, testPermissionId, address(sudoPolicy));
         assertTrue(isERC1271PolicyEnabled);
     }
 
@@ -261,13 +255,13 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bytes32[] memory enabledActions = ISmartSessionLens(address(smartSessionEmissary))
-            .getEnabledActions(instance.account, testPermissionId);
+        bytes32[] memory enabledActions =
+            _lens().getEnabledActions(instance.account, testPermissionId);
 
         assertEq(enabledActions.length, 1);
         assertEq(enabledActions[0], ActionId.unwrap(expectedActionId));
 
-        bool isActionPolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
+        bool isActionPolicyEnabled = _lens()
             .isActionPolicyEnabled(
                 instance.account, testPermissionId, expectedActionId, address(sudoPolicy)
             );
@@ -307,8 +301,8 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bytes32[] memory enabledActions = ISmartSessionLens(address(smartSessionEmissary))
-            .getEnabledActions(instance.account, testPermissionId);
+        bytes32[] memory enabledActions =
+            _lens().getEnabledActions(instance.account, testPermissionId);
 
         assertEq(enabledActions.length, 3);
 
@@ -317,19 +311,19 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         ActionId actionId3 = ActionId.wrap(keccak256(abi.encodePacked(address(0xDEAD), selector3)));
 
         assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
+            _lens()
                 .isActionPolicyEnabled(
                     instance.account, testPermissionId, actionId1, address(sudoPolicy)
                 )
         );
         assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
+            _lens()
                 .isActionPolicyEnabled(
                     instance.account, testPermissionId, actionId2, address(sudoPolicy)
                 )
         );
         assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
+            _lens()
                 .isActionPolicyEnabled(
                     instance.account, testPermissionId, actionId3, address(sudoPolicy)
                 )
@@ -364,13 +358,13 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         ActionId actionId = ActionId.wrap(keccak256(abi.encodePacked(target, selector)));
 
         assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
+            _lens()
                 .isActionPolicyEnabled(
                     instance.account, testPermissionId, actionId, address(sudoPolicy)
                 )
         );
         assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
+            _lens()
                 .isActionPolicyEnabled(
                     instance.account, testPermissionId, actionId, address(secondPolicy)
                 )
@@ -391,8 +385,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -408,8 +401,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -429,8 +421,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -444,8 +435,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -466,8 +456,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -491,8 +480,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -515,12 +503,11 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert - permission enabled
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
 
         // Assert - claim policies NOT enabled (lockTag specific)
-        bool isClaimPolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
+        bool isClaimPolicyEnabled = _lens()
             .isClaimPolicyEnabled(
                 instance.account, testPermissionId, NO_LOCKTAG, address(sudoPolicy)
             );
@@ -531,7 +518,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         ActionId expectedActionId =
             ActionId.wrap(keccak256(abi.encodePacked(target, expectedSelector)));
 
-        bool isActionPolicyEnabled = ISmartSessionLens(address(smartSessionEmissary))
+        bool isActionPolicyEnabled = _lens()
             .isActionPolicyEnabled(
                 instance.account, testPermissionId, expectedActionId, address(sudoPolicy)
             );
@@ -578,15 +565,9 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         vm.prank(instance.account);
         smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
 
-        // Assert
-        assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
-                .isLockTagEnabled(instance.account, testLockTag)
-        );
-        assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
-                .isLockTagEnabled(instance.account, secondLockTag)
-        );
+        // Assert - both lockTags enabled for same permissionId
+        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
+        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
     }
 
     /// @notice Test setConfig with different allocators derives unique lockTags
@@ -633,16 +614,11 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         vm.prank(instance.account);
         smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
 
-        // Assert - both lockTags enabled independently
-        assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
-                .isLockTagEnabled(instance.account, testLockTag)
-        );
-        assertTrue(
-            ISmartSessionLens(address(smartSessionEmissary))
-                .isLockTagEnabled(instance.account, secondLockTag)
-        );
+        // Assert - both lockTags enabled independently for same permissionId
+        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
+        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
     }
+
 
     /*//////////////////////////////////////////////////////////////
                        CALLER SIGNATURE TESTS
@@ -658,8 +634,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -685,8 +660,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -727,16 +701,15 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
     /// @notice Test setConfig on init adds lockTag to enabledLockTags
     function test_setConfig_onInit_addsLockTagToEnabled() public {
         // Arrange
-        bool isEnabledBefore = ISmartSessionLens(address(smartSessionEmissary))
-            .isLockTagEnabled(instance.account, testLockTag);
+        bool isEnabledBefore =
+            _lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag);
         assertFalse(isEnabledBefore);
 
         // Act
@@ -744,8 +717,8 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabledAfter = ISmartSessionLens(address(smartSessionEmissary))
-            .isLockTagEnabled(instance.account, testLockTag);
+        bool isEnabledAfter =
+            _lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag);
         assertTrue(isEnabledAfter);
     }
 
@@ -763,8 +736,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        bool isEnabled = ISmartSessionLens(address(smartSessionEmissary))
-            .isPermissionEnabled(instance.account, testConfig.permissionId);
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
         assertTrue(isEnabled);
     }
 
@@ -795,16 +767,14 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         vm.prank(instance.account);
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
-        uint256 firstLockTagNonce = ISmartSessionLens(address(smartSessionEmissary))
-            .getNonce(instance.account, testLockTag);
+        uint256 firstLockTagNonce = _lens().getNonce(instance.account, testLockTag);
         assertEq(firstLockTagNonce, 1);
 
         // Create second config with different scope (different lockTag)
         bytes12 secondLockTag =
             address(allocatorContract).deriveLockTag(Scope.Multichain, testResetPeriod);
 
-        uint256 secondLockTagNonceBefore = ISmartSessionLens(address(smartSessionEmissary))
-            .getNonce(instance.account, secondLockTag);
+        uint256 secondLockTagNonceBefore = _lens().getNonce(instance.account, secondLockTag);
         assertEq(secondLockTagNonceBefore, 0);
 
         SmartSessionEmissaryConfig memory secondConfig = SmartSessionEmissaryConfig({
@@ -834,10 +804,8 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
 
         // Assert - each lockTag has independent nonce
-        uint256 firstLockTagNonceAfter = ISmartSessionLens(address(smartSessionEmissary))
-            .getNonce(instance.account, testLockTag);
-        uint256 secondLockTagNonceAfter = ISmartSessionLens(address(smartSessionEmissary))
-            .getNonce(instance.account, secondLockTag);
+        uint256 firstLockTagNonceAfter = _lens().getNonce(instance.account, testLockTag);
+        uint256 secondLockTagNonceAfter = _lens().getNonce(instance.account, secondLockTag);
 
         assertEq(firstLockTagNonceAfter, 1);
         assertEq(secondLockTagNonceAfter, 1);
@@ -854,8 +822,8 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        (address validator, bytes memory config) = ISmartSessionLens(address(smartSessionEmissary))
-            .getSessionValidatorAndConfig(instance.account, testPermissionId);
+        (address validator, bytes memory config) =
+            _lens().getSessionValidatorAndConfig(instance.account, testPermissionId);
 
         assertEq(validator, address(yesSessionValidator));
         assertEq(config, testSession.sessionValidatorInitData);
@@ -867,8 +835,8 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         vm.prank(instance.account);
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
-        (address validatorBefore,) = ISmartSessionLens(address(smartSessionEmissary))
-            .getSessionValidatorAndConfig(instance.account, testPermissionId);
+        (address validatorBefore,) =
+            _lens().getSessionValidatorAndConfig(instance.account, testPermissionId);
 
         // Second enable
         _rebuildEnableData();
@@ -878,9 +846,237 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
-        (address validatorAfter,) = ISmartSessionLens(address(smartSessionEmissary))
-            .getSessionValidatorAndConfig(instance.account, testPermissionId);
+        (address validatorAfter,) =
+            _lens().getSessionValidatorAndConfig(instance.account, testPermissionId);
         assertEq(validatorBefore, validatorAfter);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        LOCKTAG ISOLATION TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test lockTags are isolated per permissionId (same lockTag, different permissionId)
+    function test_setConfig_lockTagsIsolatedPerPermissionId() public {
+        // Arrange - enable first session with testLockTag
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+
+        // Create second session with DIFFERENT salt (different permissionId) but SAME lockTag
+        Session memory secondSession = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("differentSalt"),
+            sessionValidatorInitData: "differentInitData",
+            erc7739Policies: testSession.erc7739Policies,
+            claimPolicies: testSession.claimPolicies,
+            actions: testSession.actions
+        });
+
+        PermissionId secondPermissionId = secondSession.toPermissionIdMemory();
+
+        SmartSessionEmissaryConfig memory secondConfig = SmartSessionEmissaryConfig({
+            permissionId: secondPermissionId,
+            allocator: address(allocatorContract),
+            scope: testScope,
+            resetPeriod: testResetPeriod
+        });
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](1);
+        chainDigests[0] = ChainDigest({
+            chainId: uint64(block.chainid),
+            sessionDigest: _getSessionDigest(secondSession, testLockTag, testExpires)
+        });
+
+        SmartSessionEmissaryEnable memory secondEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: secondSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            userSig: ""
+        });
+
+        // Act
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
+
+        // Assert - same lockTag enabled for BOTH permissionIds independently
+        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
+        assertTrue(_lens().isLockTagEnabled(instance.account, secondPermissionId, testLockTag));
+
+        // Assert - different lockTag NOT enabled for either
+        bytes12 differentLockTag = bytes12(keccak256("different"));
+        assertFalse(_lens().isLockTagEnabled(instance.account, testPermissionId, differentLockTag));
+        assertFalse(
+            _lens().isLockTagEnabled(instance.account, secondPermissionId, differentLockTag)
+        );
+    }
+
+    /// @notice Test lockTags are isolated per account (same permissionId, same lockTag, different
+    /// account)
+    function test_setConfig_lockTagsIsolatedPerAccount() public {
+        // Arrange - enable for first account
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+
+        // Create second account
+        address secondAccount = makeAddr("secondAccount");
+
+        // Note: In real scenario, secondAccount would need to be a deployed smart account
+        // For this test, we're checking the lens returns false for different account
+
+        // Assert - lockTag enabled for first account
+        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
+
+        // Assert - lockTag NOT enabled for second account (never enabled)
+        assertFalse(_lens().isLockTagEnabled(secondAccount, testPermissionId, testLockTag));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        MULTICHAIN ENABLE TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test setConfig with valid multichain data succeeds
+    function test_setConfig_multichain_validData() public {
+        // Arrange - create multichain digest with multiple chains
+        bytes32 sessionDigest = _getSessionDigest(testSession, testLockTag, testExpires);
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](3);
+        chainDigests[0] = ChainDigest({ chainId: 1, sessionDigest: sessionDigest }); // mainnet
+        chainDigests[1] =
+            ChainDigest({ chainId: uint64(block.chainid), sessionDigest: sessionDigest }); // current
+        chainDigests[2] = ChainDigest({ chainId: 42_161, sessionDigest: sessionDigest }); // arbitrum
+
+        SmartSessionEmissaryEnable memory multichainEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: testSession,
+                hashesAndChainIds: chainDigests,
+                chainDigestIndex: 1 // points to current chain
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            userSig: ""
+        });
+
+        // Act
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+
+        // Assert
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
+        assertTrue(isEnabled);
+    }
+
+    /// @notice Test setConfig reverts when chainDigestIndex points to wrong chain
+    function test_setConfig_multichain_revertsWhen_wrongChainDigestIndex() public {
+        // Arrange - create multichain digest but point to wrong chain
+        bytes32 sessionDigest = _getSessionDigest(testSession, testLockTag, testExpires);
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](3);
+        chainDigests[0] = ChainDigest({ chainId: 1, sessionDigest: sessionDigest }); // mainnet
+        chainDigests[1] =
+            ChainDigest({ chainId: uint64(block.chainid), sessionDigest: sessionDigest }); // current
+        chainDigests[2] = ChainDigest({ chainId: 42_161, sessionDigest: sessionDigest }); // arbitrum
+
+        SmartSessionEmissaryEnable memory multichainEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: testSession,
+                hashesAndChainIds: chainDigests,
+                chainDigestIndex: 0 // points to mainnet, NOT current chain
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            userSig: ""
+        });
+
+        // Act & Assert
+        vm.expectRevert(abi.encodeWithSelector(HashLibV2.ChainIdMismatch.selector, uint64(1)));
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+    }
+
+    /// @notice Test setConfig reverts when session digest doesn't match
+    function test_setConfig_multichain_revertsWhen_hashMismatch() public {
+        // Arrange - create multichain digest with wrong session digest
+        bytes32 wrongDigest = keccak256("wrong");
+        bytes32 correctDigest = _getSessionDigest(testSession, testLockTag, testExpires);
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](1);
+        chainDigests[0] = ChainDigest({
+            chainId: uint64(block.chainid),
+            sessionDigest: wrongDigest // wrong!
+        });
+
+        SmartSessionEmissaryEnable memory multichainEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            userSig: ""
+        });
+
+        // Act & Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(HashLibV2.HashMismatch.selector, wrongDigest, correctDigest)
+        );
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+    }
+
+    /// @notice Test setConfig with single chain in multichain array
+    function test_setConfig_multichain_singleChain() public {
+        // Arrange - already the default case, but explicit test
+        bytes32 sessionDigest = _getSessionDigest(testSession, testLockTag, testExpires);
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](1);
+        chainDigests[0] =
+            ChainDigest({ chainId: uint64(block.chainid), sessionDigest: sessionDigest });
+
+        SmartSessionEmissaryEnable memory singleChainEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            userSig: ""
+        });
+
+        // Act
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, testConfig, singleChainEnableData);
+
+        // Assert
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
+        assertTrue(isEnabled);
+    }
+
+    /// @notice Test setConfig multichain with different digests per chain
+    function test_setConfig_multichain_differentDigestsPerChain() public {
+        // Arrange - each chain could have different nonces, so different digests
+        bytes32 currentChainDigest = _getSessionDigest(testSession, testLockTag, testExpires);
+        bytes32 otherChainDigest = keccak256("otherChainDigest"); // would be computed differently
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](2);
+        chainDigests[0] = ChainDigest({ chainId: 1, sessionDigest: otherChainDigest });
+        chainDigests[1] =
+            ChainDigest({ chainId: uint64(block.chainid), sessionDigest: currentChainDigest });
+
+        SmartSessionEmissaryEnable memory multichainEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 1
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            userSig: ""
+        });
+
+        // Act
+        vm.prank(instance.account);
+        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+
+        // Assert
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
+        assertTrue(isEnabled);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -959,8 +1155,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         view
         returns (bytes32)
     {
-        return ISmartSessionLens(address(smartSessionEmissary))
-            .getSessionDigest(instance.account, session, lockTag, expires);
+        return _lens().getSessionDigest(instance.account, session, lockTag, expires);
     }
 
     /// @notice Setup the base test session

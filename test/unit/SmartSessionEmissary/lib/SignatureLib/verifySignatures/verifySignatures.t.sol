@@ -33,7 +33,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             userSig,
-            true // isInit - allocator sig not checked
+            false // isInit - allocator sig not checked
         );
     }
 
@@ -52,7 +52,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet, // Must be smart account since msg.sender != user
             allocatorSig,
             userSig,
-            true // isInit
+            false // isInit
         );
     }
 
@@ -72,7 +72,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -91,7 +91,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -110,7 +110,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -130,7 +130,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -148,7 +148,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             invalidAllocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -166,7 +166,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             invalidAllocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -184,7 +184,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             invalidUserSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -202,7 +202,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -220,7 +220,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -238,7 +238,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             malformedSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -258,7 +258,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             failingWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -275,7 +275,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             emptySig,
             emptySig,
-            false // not init
+            true // not init
         );
     }
 
@@ -292,7 +292,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
     //         userWallet,
     //         sig,
     //         sig,
-    //         false // not init
+    //         true // not init
     //     );
     // }
 
@@ -311,7 +311,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             invalidAllocatorSig,
             userSig,
-            true // isInit
+            false // isInit
         );
     }
 
@@ -330,7 +330,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             invalidUserSig,
-            false // not init
+            true // not init
         );
     }
 

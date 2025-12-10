@@ -3,7 +3,7 @@ SmartSessionMixin::removeConfig
 │   ├── when caller is the account
 │   │   ├── it should emit SmartSessionEmissaryConfigUpdated event with enabled=false
 │   │   ├── it should disable the permission
-│   │   ├── it should disable the lockTag
+│   │   ├── it should disable the lockTag for this permissionId
 │   │   ├── it should increment nonce for replay protection
 │   │   └── it should require valid allocator signature
 │   └── when caller is not the account
@@ -41,8 +41,22 @@ SmartSessionMixin::removeConfig
 │       └── it should derive lockTag with OneMinute resetPeriod
 ├── given nonce management
 │   └── it should track nonces independently per lockTag
+├── given lockTag isolation
+│   ├── when removing lockTag from one permissionId
+│   │   └── it should not affect same lockTag on different permissionId
+│   └── when removing one lockTag from permissionId with multiple lockTags
+│       └── it should only remove the specified lockTag
 ├── given multiple lockTags for same permissionId
 │   └── it should only remove the specified lockTag, leaving others intact
+├── given multichain disable data
+│   ├── when chainDigestIndex points to current chain
+│   │   └── it should succeed
+│   ├── when chainDigestIndex points to wrong chain
+│   │   └── it should revert with ChainIdMismatch
+│   ├── when disable digest doesn't match computed digest
+│   │   └── it should revert with HashMismatch
+│   └── when different digests per chain
+│       └── it should validate only current chain's digest
 └── given invalid disable data
     ├── when expires is in the past
     │   └── it should revert with InvalidEmissaryDisableData

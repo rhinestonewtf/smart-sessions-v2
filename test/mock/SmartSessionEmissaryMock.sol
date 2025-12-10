@@ -136,9 +136,6 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
                     policyDatas: session.claimPolicies,
                     account: account
                 });
-
-                // Add the lockTag to the enabled lockTags for the account
-                $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
             }
 
             // Enable the ISessionValidator for this session
@@ -151,6 +148,9 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
                 });
             }
             permissionIds[i] = permissionId;
+
+            // Add the lockTag to the enabled lockTags for the account
+            $enabledLockTags[permissionId].add({ account: account, value: bytes32(lockTag) });
 
             // Add to enabled sessions
             $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });
@@ -210,5 +210,24 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
             slot := keccak256(ptr, 0x80)
             tstore(slot, 0)
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            NONCE HELPER FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Increment nonce for testing (simulates what setConfig does)
+    function incrementNonce(address account, bytes12 lockTag) external {
+        $emissaryNonce[account][lockTag]++;
+    }
+
+    /// @notice Set nonce to specific value for testing
+    function setNonce(address account, bytes12 lockTag, uint256 nonce) external {
+        $emissaryNonce[account][lockTag] = nonce;
+    }
+
+    /// @notice Get nonce directly (for testing)
+    function getNonceDirect(address account, bytes12 lockTag) external view returns (uint256) {
+        return $emissaryNonce[account][lockTag];
     }
 }

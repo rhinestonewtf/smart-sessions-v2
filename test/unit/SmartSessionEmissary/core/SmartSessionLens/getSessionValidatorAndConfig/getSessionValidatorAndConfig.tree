@@ -1,0 +1,7 @@
+SmartSessionLens::getSessionValidatorAndConfig
+├── when no session exists
+│   └── it returns zero address and empty config
+├── when session is enabled
+│   └── it returns correct validator and config
+└── when multiple sessions with different validators
+    └── it returns correct validator for each

@@ -1,0 +1,7 @@
+SmartSessionLens::getERC1271Policies
+├── when no session exists
+│   └── it returns empty array
+├── when session has only action policies
+│   └── it returns empty array
+└── when ERC1271 policy exists
+    └── it returns policy address

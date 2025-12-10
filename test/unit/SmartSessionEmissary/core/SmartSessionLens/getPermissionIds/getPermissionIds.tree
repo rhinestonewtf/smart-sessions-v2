@@ -1,0 +1,9 @@
+SmartSessionLens::getPermissionIds
+├── when no sessions enabled
+│   └── it returns empty array
+├── when checking different account
+│   └── it returns empty array
+├── when one session enabled
+│   └── it returns single permission id
+└── when multiple sessions enabled
+    └── it returns all permission ids

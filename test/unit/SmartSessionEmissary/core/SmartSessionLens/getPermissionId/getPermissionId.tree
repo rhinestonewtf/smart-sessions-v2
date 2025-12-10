@@ -1,0 +1,10 @@
+SmartSessionLens::getPermissionId
+├── when called with a session
+│   └── it returns a non-zero permission id
+├── when called with sessions having different salts
+│   └── it returns different permission ids
+├── when called with sessions having different validators
+│   └── it returns different permission ids
+├── when called with the same session multiple times
+│   └── it returns the same permission id
+└── it is a pure function (deterministic)

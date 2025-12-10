@@ -252,6 +252,186 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
     }
 
     /*//////////////////////////////////////////////////////////////
+                             ISOLATION TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test verifyExecution fails when using different account
+    function test_verifyExecution_Fails_DifferentAccount() public withEnabledSudoSession {
+        // Arrange
+        bytes memory data = _packData(testPermissionId, mockSignature);
+        address differentAccount = makeAddr("differentAccount");
+
+        // Act & Assert - should fail because session not enabled for different account
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ISmartSessionEmissary.InvalidPermissionId.selector, testPermissionId
+            )
+        );
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(differentAccount, testHash, data, mockExecData);
+    }
+
+    /// @notice Test action policies are isolated per permissionId
+    function test_verifyExecution_IsolatedPerPermissionId() public withEnabledSudoSession {
+        // Arrange - create a second session with different salt (different permissionId)
+        vm.prank(instance.account);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        // Different selector for second session
+        bytes4 differentSelector = bytes4(keccak256("differentFunction()"));
+
+        ActionData[] memory actions = new ActionData[](1);
+        actions[0] = ActionData({
+            actionTarget: target,
+            actionTargetSelector: differentSelector,
+            actionPolicies: policyDatas
+        });
+
+        ERC7739Data memory erc7739Data;
+
+        Session memory session2 = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("differentSalt"),
+            sessionValidatorInitData: "mockInitData",
+            claimPolicies: new PolicyData[](0),
+            erc7739Policies: erc7739Data,
+            actions: actions
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session2;
+        PermissionId[] memory permissionIds =
+            smartSessionEmissary.enableSessions(sessions, testLockTag);
+        PermissionId permissionId2 = permissionIds[0];
+
+        // Try to execute mockTargetSelector (from first session) using permissionId2
+        bytes memory data = _packData(permissionId2, mockSignature);
+
+        // Act & Assert - should fail because mockTargetSelector not enabled for permissionId2
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+    }
+
+    /// @notice Test action policies are isolated per actionId (target + selector combo)
+    function test_verifyExecution_IsolatedPerActionId() public withEnabledSudoSession {
+        // Arrange - create execution with same target but different selector
+        bytes memory data = _packData(testPermissionId, mockSignature);
+
+        bytes4 wrongSelector = bytes4(keccak256("wrongFunction()"));
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({
+            target: target, // same target
+            value: 0,
+            callData: abi.encodeWithSelector(wrongSelector) // different selector
+        });
+
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, testHash, data, SmartExecutionLib.SigMode.EMISSARY.encode(executions)
+        );
+    }
+
+    /// @notice Test action policies are isolated - same selector, different target
+    function test_verifyExecution_IsolatedPerTarget() public withEnabledSudoSession {
+        // Arrange - create execution with same selector but different target
+        bytes memory data = _packData(testPermissionId, mockSignature);
+
+        address wrongTarget = makeAddr("wrongTarget");
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({
+            target: wrongTarget, // different target
+            value: 0,
+            callData: abi.encodeWithSelector(mockTargetSelector) // same selector
+        });
+
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, testHash, data, SmartExecutionLib.SigMode.EMISSARY.encode(executions)
+        );
+    }
+
+    /// @notice Test batch execution fails if ANY action is not enabled
+    function test_verifyExecution_BatchCall_FailsWhen_OneActionNotEnabled()
+        public
+        withEnabledSudoSession
+    {
+        // Arrange - first action is enabled, second is not
+        bytes memory data = _packData(testPermissionId, mockSignature);
+
+        Execution[] memory executions = new Execution[](2);
+        executions[0] = Execution({
+            target: target,
+            value: value,
+            callData: abi.encodeWithSelector(mockTargetSelector) // enabled
+        });
+        executions[1] = Execution({
+            target: target,
+            value: 0,
+            callData: abi.encodeWithSelector(bytes4(keccak256("notEnabled()"))) // NOT enabled
+        });
+
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, testHash, data, SmartExecutionLib.SigMode.EMISSARY.encode(executions)
+        );
+    }
+
+    /// @notice Test cache is isolated per account
+    function test_verifyExecution_CacheIsolatedPerAccount() public withEnabledSudoSession {
+        // Arrange
+        bytes memory data = _packData(testPermissionId, mockSignature);
+
+        // First call - validates and caches for instance.account
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+
+        // Verify cache was populated for instance.account
+        bool isCachedForOriginal = smartSessionEmissary.isDigestCachedSmartSession(
+            instance.account, testHash, testPermissionId, testLockTag
+        );
+        assertTrue(isCachedForOriginal, "Should be cached for original account");
+
+        // Verify cache is NOT populated for different account
+        address differentAccount = makeAddr("differentAccount");
+        bool isCachedForDifferent = smartSessionEmissary.isDigestCachedSmartSession(
+            differentAccount, testHash, testPermissionId, testLockTag
+        );
+        assertFalse(isCachedForDifferent, "Should NOT be cached for different account");
+    }
+
+    /// @notice Test cache is isolated per permissionId
+    function test_verifyExecution_CacheIsolatedPerPermissionId() public withEnabledSudoSession {
+        // Arrange
+        bytes memory data = _packData(testPermissionId, mockSignature);
+
+        // First call - validates and caches
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+
+        // Verify cache was populated for testPermissionId
+        bool isCachedForOriginal = smartSessionEmissary.isDigestCachedSmartSession(
+            instance.account, testHash, testPermissionId, testLockTag
+        );
+        assertTrue(isCachedForOriginal, "Should be cached for original permissionId");
+
+        // Verify cache is NOT populated for different permissionId
+        PermissionId differentPermissionId = PermissionId.wrap(keccak256("different"));
+        bool isCachedForDifferent = smartSessionEmissary.isDigestCachedSmartSession(
+            instance.account, testHash, differentPermissionId, testLockTag
+        );
+        assertFalse(isCachedForDifferent, "Should NOT be cached for different permissionId");
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
