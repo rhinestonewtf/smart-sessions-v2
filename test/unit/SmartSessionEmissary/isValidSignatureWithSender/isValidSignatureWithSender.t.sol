@@ -72,8 +72,6 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
                                 CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
-    bytes4 constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
-    bytes4 constant INVALID_SIGNATURE = 0xffffffff;
     bytes32 constant ERC7739_DETECTION_HASH =
         0x7739773977397739773977397739773977397739773977397739773977397739;
     bytes4 constant ERC7739_SUPPORT_VALUE = 0x77390001;

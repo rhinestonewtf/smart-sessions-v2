@@ -20,6 +20,13 @@ import { Session, EnableSession } from "@types/DataTypes.sol";
 
 contract SmartSessionEmissary_Unit_Test is Base_Test {
     /*//////////////////////////////////////////////////////////////
+                                CONSTANTS
+    //////////////////////////////////////////////////////////////*/
+
+    bytes4 constant ERC1271_MAGIC_VALUE = 0x1626ba7e;
+    bytes4 constant INVALID_SIGNATURE = 0xffffffff;
+
+    /*//////////////////////////////////////////////////////////////
                                 VARIABLES
     //////////////////////////////////////////////////////////////*/
 
