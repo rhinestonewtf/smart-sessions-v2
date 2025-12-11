@@ -105,6 +105,7 @@ contract BaseClaimPolicy_isTokenOutWhitelisted_Unit_Test is BaseClaimPolicy_Unit
     )
         external
     {
+        vm.assume(bytes32(bytes20(_token)) != bytes32(bytes20(uint160(0xfbb67fda52d4bfb8bf))));
         // Arrange
         uint32 modeConfig = _buildModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);

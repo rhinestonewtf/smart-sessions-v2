@@ -36,7 +36,10 @@ import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 import {
     FIELD_ARBITER,
     FIELD_ORIGIN_OPS,
+    FIELD_RECIPIENT_IS_SPONSOR,
     FIELD_TOKEN_IN,
+    FIELD_RECIPIENT,
+    FIELD_TOKEN_OUT,
     MODE_CHECK_STORAGE
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 
@@ -533,6 +536,432 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
     }
 
     /*//////////////////////////////////////////////////////////////
+                               RECIPIENT
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test recipient validation on notarized chain
+    function test_integration_verifyClaim_compact_recipient_notarizedChain() public {
+        // Arrange - configure for element 0's recipient
+        address recipient = env.smartAccount1.account;
+        _setupSessionWithRecipientConfig({ chainId: chains.originChain1, recipient: recipient });
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(0);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+
+        // Act
+        uint256 gas = _claim(
+            order.notarizedChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 0
+                    }))
+            )
+        );
+
+        assertTrue(gas > 0, "Claim should succeed - recipient matches");
+    }
+
+    /// @notice Test recipient validation on exogenous chain
+    function test_integration_verifyClaim_compact_recipient_exogenousChain() public {
+        // Arrange - configure for element 1's chain and recipient
+        address recipient = env.smartAccount1.account;
+        _setupSessionWithRecipientConfig({ chainId: chains.originChain2, recipient: recipient });
+
+        Types.Order memory order = _getOrder($intent.compact, 1);
+        uint256 exogenousChainId = $intent.compact.elements[1].chainId;
+
+        vm.chainId(exogenousChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(1);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, exogenousChainId, $intent.claimHash);
+
+        (uint256 chainIndex, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(1);
+
+        // Act
+        uint256 gas = _claim(
+            exogenousChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: chainIndex
+                    }))
+            )
+        );
+
+        assertTrue(gas > 0, "Claim should succeed on exogenous chain");
+    }
+
+    /// @notice Test recipient validation fails when wrong recipient
+    function test_integration_verifyClaim_compact_recipient_revertsWhen_wrongRecipient() public {
+        // Arrange - configure for different recipient than element 0 uses
+        address wrongRecipient = makeAddr("wrongRecipient");
+        _setupSessionWithRecipientConfig({
+            chainId: chains.originChain1, recipient: wrongRecipient
+        });
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(0);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+
+        // Act & Assert
+        vm.expectRevert();
+        _claim(
+            order.notarizedChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 0
+                    }))
+            )
+        );
+    }
+
+    /// @notice Test recipient config for chain1 doesn't work on chain2
+    function test_integration_verifyClaim_compact_recipient_revertsWhen_noConfigForChain() public {
+        // Arrange - configure recipient ONLY for chain 1
+        address recipient = env.smartAccount1.account;
+        _setupSessionWithRecipientConfig({ chainId: chains.originChain1, recipient: recipient });
+
+        // Try to claim on chain 2 - should fail because no config for chain 2
+        Types.Order memory order = _getOrder($intent.compact, 1);
+        uint256 exogenousChainId = $intent.compact.elements[1].chainId;
+
+        vm.chainId(exogenousChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(1);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, exogenousChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(1);
+
+        // Act & Assert - should fail, recipient not configured for chain 2
+        vm.expectRevert();
+        _claim(
+            exogenousChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 1
+                    }))
+            )
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               TOKEN OUT
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test tokenOut validation on notarized chain
+    function test_integration_verifyClaim_compact_tokenOut_notarizedChain() public {
+        // Arrange - configure for element 0's tokenOut
+        _setupSessionWithTokenOutConfig({
+            chainId: chains.originChain1, token: address(env.token2)
+        });
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(0);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+
+        // Act
+        uint256 gas = _claim(
+            order.notarizedChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 0
+                    }))
+            )
+        );
+
+        assertTrue(gas > 0, "Claim should succeed - tokenOut matches");
+    }
+
+    /// @notice Test tokenOut validation on exogenous chain
+    function test_integration_verifyClaim_compact_tokenOut_exogenousChain() public {
+        // Arrange - configure for element 1's chain and tokenOut
+        _setupSessionWithTokenOutConfig({
+            chainId: chains.originChain2, token: address(env.token2)
+        });
+
+        Types.Order memory order = _getOrder($intent.compact, 1);
+        uint256 exogenousChainId = $intent.compact.elements[1].chainId;
+
+        vm.chainId(exogenousChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(1);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, exogenousChainId, $intent.claimHash);
+
+        (uint256 chainIndex, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(1);
+
+        // Act
+        uint256 gas = _claim(
+            exogenousChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: chainIndex
+                    }))
+            )
+        );
+
+        assertTrue(gas > 0, "Claim should succeed on exogenous chain");
+    }
+
+    /// @notice Test tokenOut validation fails when wrong token
+    function test_integration_verifyClaim_compact_tokenOut_revertsWhen_wrongToken() public {
+        // Arrange - configure for token1 but element 0 uses token2 as tokenOut
+        _setupSessionWithTokenOutConfig({
+            chainId: chains.originChain1, token: address(env.token1)
+        });
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(0);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+
+        // Act & Assert
+        vm.expectRevert();
+        _claim(
+            order.notarizedChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 0
+                    }))
+            )
+        );
+    }
+
+    /// @notice Test tokenOut config for chain1 doesn't work on chain2
+    function test_integration_verifyClaim_compact_tokenOut_revertsWhen_noConfigForChain() public {
+        // Arrange - configure tokenOut ONLY for chain 1
+        _setupSessionWithTokenOutConfig({
+            chainId: chains.originChain1, token: address(env.token2)
+        });
+
+        // Try to claim on chain 2 - should fail because no config for chain 2
+        Types.Order memory order = _getOrder($intent.compact, 1);
+        uint256 exogenousChainId = $intent.compact.elements[1].chainId;
+
+        vm.chainId(exogenousChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(1);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, exogenousChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(1);
+
+        // Act & Assert - should fail, tokenOut not configured for chain 2
+        vm.expectRevert();
+        _claim(
+            exogenousChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 1
+                    }))
+            )
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          RECIPIENT IS SPONSOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test recipientIsSponsor passes when recipient equals sponsor
+    function test_integration_verifyClaim_compact_recipientIsSponsor_notarizedChain() public {
+        // Arrange - element 0's recipient is already env.smartAccount1.account (the sponsor)
+        _setupSessionWithRecipientIsSponsorConfig();
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(0);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+
+        // Act
+        uint256 gas = _claim(
+            order.notarizedChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 0
+                    }))
+            )
+        );
+
+        assertTrue(gas > 0, "Claim should succeed - recipient is sponsor");
+    }
+
+    /// @notice Test recipientIsSponsor passes on exogenous chain
+    function test_integration_verifyClaim_compact_recipientIsSponsor_exogenousChain() public {
+        // Arrange - element 1's recipient is also env.smartAccount1.account
+        _setupSessionWithRecipientIsSponsorConfig();
+
+        Types.Order memory order = _getOrder($intent.compact, 1);
+        uint256 exogenousChainId = $intent.compact.elements[1].chainId;
+
+        vm.chainId(exogenousChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(1);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, exogenousChainId, $intent.claimHash);
+
+        (uint256 chainIndex, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(1);
+
+        // Act
+        uint256 gas = _claim(
+            exogenousChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: chainIndex
+                    }))
+            )
+        );
+
+        assertTrue(gas > 0, "Claim should succeed on exogenous chain");
+    }
+
+    /// @notice Test recipientIsSponsor fails when recipient is not sponsor
+    function test_integration_verifyClaim_compact_recipientIsSponsor_revertsWhen_notSponsor()
+        public
+    {
+        // Arrange - modify element 0 to have different recipient
+        address differentRecipient = makeAddr("differentRecipient");
+        $intent.compact.elements[0].mandate.target.recipient = differentRecipient;
+
+        // Recompute hashes after modification
+        ($intent.claimHash, $intent.elementHashes) = hashCompact(arbiter, $intent.compact);
+
+        _setupSessionWithRecipientIsSponsorConfig();
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory policyData = _createPolicyDataForElement(0);
+        $intent.userEmissarySig = _createSmartSessionSignature(policyData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+
+        // Act & Assert
+        vm.expectRevert();
+        _claim(
+            order.notarizedChainId,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_compact_handleClaim,
+                (MockAdapter.ClaimDataCompact({
+                        order: order,
+                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        otherElements: otherElements,
+                        allocatorData: allocatorSig,
+                        elementIndex: 0
+                    }))
+            )
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
                          SESSION SETUP HELPERS
     //////////////////////////////////////////////////////////////*/
 
@@ -659,6 +1088,120 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         defaultPermissionId = permissionIds[0];
     }
 
+    /// @notice Setup session with recipient whitelist check
+    /// @dev Recipient config format: [count: 1][chainId: 32][recipient: 20]
+    function _setupSessionWithRecipientConfig(uint256 chainId, address recipient) internal {
+        // Set active mode for policy data generation
+        activeFieldMode = FIELD_RECIPIENT;
+
+        vm.prank(env.smartAccount1.account);
+
+        // Create modeConfig with FIELD_RECIPIENT enabled
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({
+            policy: address(compactClaimPolicy),
+            initData: abi.encodePacked(
+                modeConfig, // 4 bytes  - mode configuration
+                uint8(1), // 1 byte   - count of entries
+                chainId, // 32 bytes - chainId
+                recipient // 20 bytes - recipient address
+            )
+        });
+
+        ERC7739Data memory erc7739Data;
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256(abi.encodePacked("recipientSalt", chainId, recipient, block.timestamp)),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: erc7739Data,
+            actions: new ActionData[](0),
+            claimPolicies: policyDatas
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+        PermissionId[] memory permissionIds =
+            smartSessionEmissary.enableSessions(sessions, testLockTag);
+        defaultPermissionId = permissionIds[0];
+    }
+
+    /// @notice Setup session with tokenOut whitelist check
+    /// @dev TokenOut config format: [count: 1][chainId: 32][token: 20]
+    function _setupSessionWithTokenOutConfig(uint256 chainId, address token) internal {
+        // Set active mode for policy data generation
+        activeFieldMode = FIELD_TOKEN_OUT;
+
+        vm.prank(env.smartAccount1.account);
+
+        // Create modeConfig with FIELD_TOKEN_OUT enabled
+        uint32 modeConfig = _createModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({
+            policy: address(compactClaimPolicy),
+            initData: abi.encodePacked(
+                modeConfig, // 4 bytes  - mode configuration
+                uint8(1), // 1 byte   - count of entries
+                chainId, // 32 bytes - chainId
+                token // 20 bytes - token address
+            )
+        });
+
+        ERC7739Data memory erc7739Data;
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256(abi.encodePacked("tokenOutSalt", chainId, token, block.timestamp)),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: erc7739Data,
+            actions: new ActionData[](0),
+            claimPolicies: policyDatas
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+        PermissionId[] memory permissionIds =
+            smartSessionEmissary.enableSessions(sessions, testLockTag);
+        defaultPermissionId = permissionIds[0];
+    }
+
+    /// @notice Setup session with recipientIsSponsor check (no chainId needed)
+    /// @dev recipientIsSponsor has no init data - just the mode flag
+    function _setupSessionWithRecipientIsSponsorConfig() internal {
+        // Set active mode for policy data generation
+        activeFieldMode = FIELD_RECIPIENT_IS_SPONSOR;
+
+        vm.prank(env.smartAccount1.account);
+
+        // Create modeConfig with FIELD_RECIPIENT_IS_SPONSOR enabled
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({
+            policy: address(compactClaimPolicy),
+            initData: abi.encodePacked(modeConfig) // No additional init data needed
+        });
+
+        ERC7739Data memory erc7739Data;
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256(abi.encodePacked("recipientIsSponsorSalt", block.timestamp)),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: erc7739Data,
+            actions: new ActionData[](0),
+            claimPolicies: policyDatas
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+        PermissionId[] memory permissionIds =
+            smartSessionEmissary.enableSessions(sessions, testLockTag);
+        defaultPermissionId = permissionIds[0];
+    }
     /*//////////////////////////////////////////////////////////////
                          SIGNATURE HELPERS
     //////////////////////////////////////////////////////////////*/
@@ -758,19 +1301,56 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         bytes memory mandateData;
         if (activeFieldMode == FIELD_ORIGIN_OPS) {
             // originOps in CHECK_STORAGE: pass individual mandate field hashes
-            // Policy reads individual hashes, validates originOps, then computes mandateHash
             bytes32 targetHash = _computeTargetHash(element.mandate.target);
             bytes32 originOpsHash = hasher.hashOps(element.mandate.originOps);
             bytes32 destOpsHash = hasher.hashOps(element.mandate.destOps);
             bytes32 qHash = keccak256(element.mandate.q);
 
             mandateData = abi.encodePacked(
-                targetHash, // 32 bytes
-                uint256(element.mandate.target.targetChain), // 32 bytes
-                uint128(element.mandate.minGas), // 16 bytes
-                originOpsHash, // 32 bytes - validated against requirement
-                destOpsHash, // 32 bytes
-                qHash // 32 bytes
+                targetHash,
+                uint256(element.mandate.target.targetChain),
+                uint128(element.mandate.minGas),
+                originOpsHash,
+                destOpsHash,
+                qHash
+            );
+        } else if (
+            activeFieldMode == FIELD_RECIPIENT || activeFieldMode == FIELD_TOKEN_OUT
+                || activeFieldMode == FIELD_RECIPIENT_IS_SPONSOR
+        ) {
+            // Target fields in CHECK_STORAGE: pass expanded target + rest of mandate
+            Target memory target = element.mandate.target;
+            bytes32 originOpsHash = hasher.hashOps(element.mandate.originOps);
+            bytes32 destOpsHash = hasher.hashOps(element.mandate.destOps);
+            bytes32 qHash = keccak256(element.mandate.q);
+
+            if (activeFieldMode == FIELD_TOKEN_OUT) {
+                // TokenOut expanded: [recipient][targetChain][fillExpiry][count][token+amount...]
+                mandateData = abi.encodePacked(
+                    target.recipient,
+                    uint256(target.targetChain),
+                    uint256(target.fillExpiry),
+                    uint8(target.tokenOut.length)
+                );
+                for (uint256 i = 0; i < target.tokenOut.length; i++) {
+                    mandateData = abi.encodePacked(
+                        mandateData, target.tokenOut[i][0], target.tokenOut[i][1]
+                    );
+                }
+            } else {
+                // Recipient expanded: [recipient][targetChain][fillExpiry][tokenOutHash]
+                bytes32 tokenOutHash = hasher.hashTokenOut(target.tokenOut);
+                mandateData = abi.encodePacked(
+                    target.recipient,
+                    uint256(target.targetChain),
+                    uint256(target.fillExpiry),
+                    tokenOutHash
+                );
+            }
+
+            // Append rest of mandate
+            mandateData = abi.encodePacked(
+                mandateData, uint128(element.mandate.minGas), originOpsHash, destOpsHash, qHash
             );
         } else {
             // All mandate fields in SKIP mode: pass pre-computed mandateHash
