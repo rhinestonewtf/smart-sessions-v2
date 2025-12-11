@@ -24,6 +24,11 @@ contract MockAdapter is AdapterBasePrefund, ArbiterBase {
         uint256 elementIndex;
     }
 
+    struct ClaimDataPermit2 {
+        Types.Order order;
+        Types.Signatures userSigs;
+    }
+
     constructor(
         address router,
         address compact,
@@ -93,6 +98,36 @@ contract MockAdapter is AdapterBasePrefund, ArbiterBase {
         _transferToSolver(claimData.order.tokenIn, solver);
     }
 
+    function mock_permit2_handleClaim(ClaimDataPermit2 calldata claimData)
+        external
+        payable
+        onlyViaRouter
+        returns (bytes4)
+    {
+        address solver = _tokenInRecipient();
+        _prefundRecipient(msg.sender, claimData.order.recipient, claimData.order.tokenOut);
+
+        MockAdapter(payable(ARBITER)).handlePermit2(claimData, solver);
+
+        emit RouterFilled(claimData.order.sponsor, claimData.order.nonce);
+        return this.mock_permit2_handleClaim.selector;
+    }
+
+    function handlePermit2(ClaimDataPermit2 calldata claimData, address solver) external {
+        // Permit2 always uses block.chainid as origin chain
+        bytes32 mandateHash =
+            _permit2PreClaimOps({ order: claimData.order, sigs: claimData.userSigs });
+
+        _unlockPermit2({
+            order: claimData.order,
+            sig: claimData.userSigs.notarizedClaimSig,
+            depositor: address(this),
+            mandateHash: mandateHash
+        });
+
+        _transferToSolver(claimData.order.tokenIn, solver);
+    }
+
     function handleExogenousChain(ClaimDataCompact calldata claimData, address solver) external {
         uint256 notarizedChainId = claimData.order.notarizedChainId;
 
@@ -136,6 +171,7 @@ contract MockAdapter is AdapterBasePrefund, ArbiterBase {
         returns (bool)
     {
         return selector == this.mock_compact_handleClaim.selector
+            || selector == this.mock_permit2_handleClaim.selector
             || selector == this.mock_handleFill.selector || AdapterBase.supportsInterface(selector)
             || ArbiterBase.supportsInterface(selector);
     }
