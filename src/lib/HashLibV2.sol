@@ -286,6 +286,7 @@ library HashLibV2 {
             a.set(i, actionData.hashActionData());
         }
         _hash = a.hash();
+        a.free();
     }
 
     /*//////////////////////////////////////////////////////////////
