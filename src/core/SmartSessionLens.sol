@@ -404,7 +404,7 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
     /// @return The session digest
     function getSessionDigest(
         address account,
-        Session memory data,
+        Session calldata data,
         bytes12 lockTag,
         uint256 expires
     )

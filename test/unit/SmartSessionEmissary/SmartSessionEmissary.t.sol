@@ -14,6 +14,7 @@ import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.s
 
 // Libraries
 import { IntegrationEncodeLib } from "@smartsessions-test/utils/lib/IntegrationEncodeLib.sol";
+import { HashLibV2 } from "@lib/HashLibV2.sol";
 
 // Types
 import {
@@ -28,6 +29,12 @@ import {
 import { Session, EnableSession } from "@types/DataTypes.sol";
 
 contract SmartSessionEmissary_Unit_Test is Base_Test {
+    /*//////////////////////////////////////////////////////////////
+                               LIBRARIES
+    //////////////////////////////////////////////////////////////*/
+
+    using HashLibV2 for ChainDigest[];
+
     /*//////////////////////////////////////////////////////////////
                                 CONSTANTS
     //////////////////////////////////////////////////////////////*/
@@ -275,6 +282,11 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         sessions[0] = session;
         PermissionId[] memory permissionIds = smartSessionEmissary.enableSessions(sessions, lockTag);
         return permissionIds[0];
+    }
+
+    /// @notice external wrapper for multichainDigest that can be called in tests
+    function multichainDigest(ChainDigest[] calldata chainDigests) external pure returns (bytes32) {
+        return chainDigests.multichainDigest();
     }
 
     /*//////////////////////////////////////////////////////////////

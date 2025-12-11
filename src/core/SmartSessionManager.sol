@@ -170,7 +170,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
     /// @param userSig The signature from the user authorizing the session disable
     function _disableSessions(
         address account,
-        DisableSession memory disableData,
+        DisableSession calldata disableData,
         PermissionId permissionId,
         bytes12 lockTag,
         uint256 expires,

@@ -494,7 +494,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -581,7 +581,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
         testDisableData = SmartSessionEmissaryDisable({
             session: DisableSession({ hashesAndChainIds: chainDigests, chainDigestIndex: 0 }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -670,7 +670,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -729,7 +729,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
                 sessionToEnable: secondSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -776,7 +776,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -817,7 +817,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
         testDisableData = SmartSessionEmissaryDisable({
             session: DisableSession({ hashesAndChainIds: chainDigests, chainDigestIndex: 1 }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -847,7 +847,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
                 chainDigestIndex: 2 // points to arbitrum, NOT current chain
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -870,7 +870,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
         testDisableData = SmartSessionEmissaryDisable({
             session: DisableSession({ hashesAndChainIds: chainDigests, chainDigestIndex: 0 }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -896,7 +896,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
         testDisableData = SmartSessionEmissaryDisable({
             session: DisableSession({ hashesAndChainIds: chainDigests, chainDigestIndex: 1 }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -1005,7 +1005,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
             sessionDigest: _getSessionDigest(testSession, testLockTag, testExpires)
         });
 
-        bytes32 multichainDigest = chainDigests.multichainDigest();
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
 
         testEnableData = SmartSessionEmissaryEnable({
             session: EnableSession({
@@ -1025,7 +1025,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
         chainDigests[0] =
             ChainDigest({ chainId: uint64(block.chainid), sessionDigest: disableDigest });
 
-        bytes32 multichainDigest = chainDigests.multichainDigest();
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
 
         testDisableData = SmartSessionEmissaryDisable({
             session: DisableSession({ hashesAndChainIds: chainDigests, chainDigestIndex: 0 }),
@@ -1043,7 +1043,7 @@ contract SmartSessionMixin_removeConfig_Unit_Test is SmartSessionEmissary_Unit_T
         chainDigests[0] =
             ChainDigest({ chainId: uint64(block.chainid), sessionDigest: disableDigest });
 
-        bytes32 multichainDigest = chainDigests.multichainDigest();
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
 
         testDisableData = SmartSessionEmissaryDisable({
             session: DisableSession({ hashesAndChainIds: chainDigests, chainDigestIndex: 0 }),

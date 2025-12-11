@@ -557,7 +557,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -598,7 +598,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
             sessionDigest: _getSessionDigest(testSession, secondLockTag, testExpires)
         });
 
-        bytes32 multichainDigest = chainDigests.multichainDigest();
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(secondOwner, multichainDigest);
 
         SmartSessionEmissaryEnable memory secondEnableData = SmartSessionEmissaryEnable({
@@ -618,7 +618,6 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
         assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
     }
-
 
     /*//////////////////////////////////////////////////////////////
                        CALLER SIGNATURE TESTS
@@ -649,7 +648,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
             sessionDigest: _getSessionDigest(testSession, testLockTag, testExpires)
         });
 
-        bytes32 multichainDigest = chainDigests.multichainDigest();
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
 
         testEnableData.session.hashesAndChainIds = chainDigests;
         testEnableData.allocatorSig = _signAllocator(multichainDigest);
@@ -675,7 +674,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
             sessionDigest: _getSessionDigest(testSession, testLockTag, testExpires)
         });
 
-        bytes32 multichainDigest = chainDigests.multichainDigest();
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
 
         testEnableData.session.hashesAndChainIds = chainDigests;
         testEnableData.allocatorSig = _signAllocator(multichainDigest);
@@ -795,7 +794,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -891,7 +890,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 sessionToEnable: secondSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -953,7 +952,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 chainDigestIndex: 1 // points to current chain
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -984,7 +983,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 chainDigestIndex: 0 // points to mainnet, NOT current chain
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -1011,7 +1010,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -1037,7 +1036,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -1066,7 +1065,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                 sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 1
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(chainDigests.multichainDigest()),
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
@@ -1211,7 +1210,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
             sessionDigest: _getSessionDigest(testSession, testLockTag, testExpires)
         });
 
-        bytes32 multichainDigest = chainDigests.multichainDigest();
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
 
         testEnableData = SmartSessionEmissaryEnable({
             session: EnableSession({
