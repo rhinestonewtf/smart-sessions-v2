@@ -124,6 +124,7 @@ interface Interface {
     error NoPoliciesSet(PermissionId permissionId);
     error NotSet();
     error PolicyViolation(PermissionId permissionId, address policy);
+    error Reentrancy();
     error SignerNotFound(PermissionId permissionId, address account);
     error UnauthorizedSource();
     error UnsafeFallbackNotAllowed();
@@ -185,7 +186,6 @@ interface Interface {
         address sponsor,
         bytes32 digest,
         bytes memory emissaryData,
-        Types.Operation memory executions,
-        bytes12 lockTag
+        Types.Operation memory executions
     ) external returns (bytes4);
 }
