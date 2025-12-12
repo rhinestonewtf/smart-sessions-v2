@@ -250,7 +250,7 @@ sequenceDiagram
 
 ## Claim Policies
 
-Claim policies validate Compact claims against configurable rules. The base policy supports these fields:
+Claim policies validate Rhinestone Warp claims against configurable rules. The base policy supports these fields:
 
 | Field              | Description                                              |
 | ------------------ | -------------------------------------------------------- |
@@ -277,14 +277,6 @@ Mode 11 = CHECK_SUBPOLICY → Delegate to external policy contract
 ```
 
 All fields support all four modes, except `RECIPIENT_IS_SPONSOR` which is a simple flag - when mode != SKIP, it enforces `recipient == sponsor` with no storage lookup required.
-
-### CompactClaimPolicy
-
-For MultichainCompact claims:
-
-- TokenIn includes `lockTag` (token + lockTag packed as resource lock ID)
-- Uses `domainSeparator` from calldata
-- Computes full MultichainCompact EIP-712 hash
 
 ---
 
