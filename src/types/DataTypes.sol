@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
+import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
 
 // Types
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
