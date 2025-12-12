@@ -46,11 +46,12 @@ flowchart TB
         SK[Session Key]
     end
 
-    subgraph Compact["📋 The Compact"]
-        TC[TheCompact Contract]
-        AD[Adapter / Arbiter]
+    subgraph Warp["🔷 Rhinestone Warp"]
+        ARB[Arbiter]
         IE[IntentExecutor]
     end
+
+    TC[📋 TheCompact]
 
     subgraph Emissary["🔐 SmartSessionEmissary"]
         VC[verifyClaim]
@@ -65,12 +66,11 @@ flowchart TB
     end
 
     SA -->|"Enable Session"| Emissary
-    SK -->|"Sign Intent"| TC
+    SK -->|"Sign Intent"| Warp
 
-    TC --> AD
-    AD -->|"Validate Claim"| VC
-    AD -->|"Execute Ops"| IE
-    IE -->|"Validate Execution"| VE
+    ARB -->|"Fill Claim"| TC
+    TC -->|"Validate Claim"| VC
+    IE -->|"Execute Ops"| VE
 
     VC --> CP
     VC --> SV
@@ -118,11 +118,13 @@ When TheCompact calls `verifyClaim` with mode `0x01`:
 
 ```mermaid
 sequenceDiagram
+    participant ARB as Arbiter
     participant TC as TheCompact
     participant SSE as SmartSessionEmissary
     participant CP as ClaimPolicy
     participant SV as SessionValidator
 
+    ARB->>TC: fill(claim, ...)
     TC->>SSE: verifyClaim(sponsor, digest, claimHash, emissaryData, lockTag)
 
     Note over SSE: Mode 0x01 → SmartSession path
@@ -141,6 +143,7 @@ sequenceDiagram
     end
 
     SSE-->>TC: selector or 0xFFFFFFFF
+    TC-->>ARB: claim filled
 ```
 
 ### verifyExecution Flow
