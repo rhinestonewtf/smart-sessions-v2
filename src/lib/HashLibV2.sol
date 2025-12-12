@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.28;
 
-// Interfaces
-import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
-
 // Libraries
 import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
