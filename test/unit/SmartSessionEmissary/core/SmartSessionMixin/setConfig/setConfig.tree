@@ -1,0 +1,85 @@
+SmartSessionMixin::setConfig
+├── given valid configuration and enable data
+│   ├── when caller is the account
+│   │   ├── it should emit SmartSessionEmissaryConfigUpdated event
+│   │   ├── it should enable the permission
+│   │   ├── it should derive correct lockTag from allocator, scope, and resetPeriod
+│   │   ├── it should increment nonce for replay protection
+│   │   └── it should not require user signature
+│   └── when caller is not the account
+│       ├── given valid user signature
+│       │   └── it should enable the permission
+│       └── given invalid user signature
+│           └── it should revert with InvalidUserSignature
+├── given session with policies
+│   ├── when session has claim policies
+│   │   └── it should enable claim policies for the lockTag
+│   ├── when session has ERC7739 policies
+│   │   └── it should enable ERC1271 policies
+│   ├── when session has action policies
+│   │   └── it should enable action policies with correct actionId
+│   ├── when session has multiple actions
+│   │   └── it should enable all actions
+│   └── when session has multiple policies per action
+│       └── it should enable all policies for the action
+├── given different scope values
+│   ├── when scope is ChainSpecific
+│   │   └── it should derive lockTag with ChainSpecific scope
+│   └── when scope is Multichain
+│       └── it should derive lockTag with Multichain scope
+├── given different resetPeriod values
+│   ├── when resetPeriod is OneSecond
+│   │   └── it should derive lockTag with OneSecond resetPeriod
+│   └── when resetPeriod is OneMinute
+│       └── it should derive lockTag with OneMinute resetPeriod
+├── given NO_LOCKTAG (allocator is address(0))
+│   ├── when called on init
+│   │   └── it should not require allocator signature
+│   ├── when called on subsequent calls
+│   │   └── it should not require allocator signature
+│   └── it should skip claim policy enablement but still enable action policies
+├── given multiple lockTags for same permissionId
+│   └── it should enable both lockTags independently
+├── given different allocators
+│   └── it should derive unique lockTags per allocator
+├── given lockTag isolation
+│   ├── when same lockTag used by different permissionIds
+│   │   └── it should isolate lockTags per permissionId
+│   └── when same permissionId and lockTag but different accounts
+│       └── it should isolate lockTags per account
+├── given init vs subsequent calls
+│   ├── when lockTag is not yet enabled (init)
+│   │   ├── it should not require allocator signature
+│   │   └── it should add lockTag to enabledLockTags for this permissionId
+│   └── when lockTag is already enabled (subsequent)
+│       ├── given valid allocator signature
+│       │   └── it should succeed
+│       └── given invalid allocator signature
+│           └── it should revert with InvalidAllocatorSignature
+├── given nonce management
+│   └── it should track nonces independently per lockTag
+├── given session validator
+│   ├── when called on init
+│   │   └── it should set session validator and config
+│   └── when called on subsequent calls
+│       └── it should not change existing validator
+├── given multichain enable data
+│   ├── when chainDigestIndex points to current chain
+│   │   └── it should succeed
+│   ├── when chainDigestIndex points to wrong chain
+│   │   └── it should revert with ChainIdMismatch
+│   ├── when session digest doesn't match computed digest
+│   │   └── it should revert with HashMismatch
+│   ├── when single chain in multichain array
+│   │   └── it should succeed
+│   └── when different digests per chain
+│       └── it should validate only current chain's digest
+└── given invalid enable data
+    ├── when expires is in the past
+    │   └── it should revert with InvalidEmissaryEnableData
+    ├── when expires equals current timestamp
+    │   └── it should revert with InvalidEmissaryEnableData
+    ├── when permissionId doesn't match session
+    │   └── it should revert with InvalidPermissionId
+    └── when nonce has already been used (replay)
+        └── it should revert with HashMismatch

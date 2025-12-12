@@ -1,0 +1,9 @@
+SmartSessionLens::getActionPolicies
+├── when no session exists
+│   └── it returns empty array
+├── when checking different action id
+│   └── it returns empty array
+├── when one policy exists
+│   └── it returns single policy address
+└── when multiple policies exist
+    └── it returns all policy addresses

@@ -6,6 +6,9 @@ import { BaseClaimPolicy } from "@policies/claim/base/BaseClaimPolicy.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { Permit2EIP712 } from "@compact-utils/common/Permit2EIP712.sol";
 
+// Interfaces
+import { IPermit2ClaimPolicy } from "@policies/claim/permit2/interfaces/IPermit2ClaimPolicy.sol";
+
 // Libraries
 import { BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
@@ -16,7 +19,7 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
-import { PolicyConfig, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTypes.sol";
+import { PolicyConfig } from "@policies/claim/base/types/BaseDataTypes.sol";
 
 // forgefmt: disable-start
 /// @title Permit2 Claim Policy
@@ -330,5 +333,13 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     {
         BasePolicyStorage storage $ = configId.getStorage(account);
         return $.tokenInSet[chainId].contains(bytes32(bytes20(token)));
+    }
+
+    /// @notice Checks if this contract implements the given interface
+    /// @param interfaceID The interface identifier to check
+    /// @return True if the interface is supported
+    function supportsInterface(bytes4 interfaceID) public pure override returns (bool) {
+        return super.supportsInterface(interfaceID)
+            || interfaceID == type(IPermit2ClaimPolicy).interfaceId;
     }
 }

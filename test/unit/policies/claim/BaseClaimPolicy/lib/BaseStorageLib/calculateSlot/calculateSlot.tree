@@ -1,0 +1,13 @@
+BaseStorageLib::calculateSlot
+├── given valid inputs
+│   ├── it should return deterministic slot
+│   ├── it should match keccak256 computation
+│   └── it should use STORAGE_POSITION constant
+├── given different configId values
+│   └── it should return different slots
+├── given different account values
+│   └── it should return different slots
+├── given same configId and account
+│   └── it should return same slot
+└── given storage isolation matrix
+    └── it should return unique slots for all combinations

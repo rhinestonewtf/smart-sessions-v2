@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Libraries
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // forgefmt: disable-start
@@ -36,19 +37,20 @@ library Permit2ConfigLib {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    using CalldataSliceLib for bytes;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
                       TOKEN IN INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [chainId: 32 bytes][token: 20 bytes] = 52 bytes each
 
     ┌────────────────────────────────────────────────────────┐
     │  Permit2 TokenIn Config                                │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (52 bytes):                             │    │
@@ -61,7 +63,7 @@ library Permit2ConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 52) bytes
+    Total size: 1 + (count × 52) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -78,20 +80,18 @@ library Permit2ConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Decode count (32 bytes)
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Start offset after count
-        uint256 offset = 32;
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
         // Loop through each entry
-        for (uint256 i = 0; i < count; i++) {
-            // Decode chainId (32 bytes)
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            // Decode token (20 bytes)
-            address token = address(bytes20(initData[offset + 32:offset + 52]));
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out chainId and token
+            uint256 chainId;
+            address token;
+            (chainId, offset) = initData.sliceUint256(offset);
+            (token, offset) = initData.sliceAddress(offset);
             // Write directly to storage (left-padded address as bytes32)
             $.tokenInSet[chainId].add(bytes32(bytes20(token)));
-            // Advance offset
-            offset += 52;
         }
         // Return remaining calldata
         remaining = initData[offset:];

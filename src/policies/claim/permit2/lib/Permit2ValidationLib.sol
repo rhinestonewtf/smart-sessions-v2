@@ -7,6 +7,7 @@ import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 // Libraries
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
@@ -25,14 +26,14 @@ import { MODE_SKIP, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTy
 /// │                                                            │
 /// │  Input (calldata):                                         │
 /// │  ┌──────────────────────────────────────────────────────┐  │
-/// │  │  length (32 bytes)                                   │  │
+/// │  │  length (1 byte)                                     │  │
 /// │  │  TokenPermissions[]: [token (32) | amount (32)] each │  │
 /// │  └──────────────────────────────────────────────────────┘  │
 /// │                                                            │
 /// │  Key differences from Compact:                             │
 /// │  - No lockTag - just token addresses                       │
-/// │  - Uses AddressSet instead of Bytes32Set                   │
-/// │  - Uses chainId=0 (origin chain) for whitelist lookup      │
+/// │  - Uses Bytes32Set with left-padded addresses              │
+/// │  - Uses block.chainid for whitelist lookup                 │
 /// │                                                            │
 /// │  Mode routing:                                             │
 /// │  ┌──────────────┐     ┌──────────────┐                     │
@@ -59,6 +60,7 @@ library Permit2ValidationLib {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    using CalldataSliceLib for bytes;
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint8;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
@@ -69,7 +71,7 @@ library Permit2ValidationLib {
 
     /// @notice Validates tokenIn with mode-based routing
     /// @dev Handles SKIP, STORAGE, CATCHALL, and SUBPOLICY modes.
-    ///      Note: Uses chainId=0 for whitelist lookup (origin chain context).
+    ///      Note: Uses block.chainid for whitelist lookup (origin chain context).
     /// @param configId The configuration ID
     /// @param data The calldata containing tokenIn
     /// @param account The account performing the action
@@ -98,7 +100,8 @@ library Permit2ValidationLib {
 
         // SKIP: Just read pre-computed hash
         if (mode == MODE_SKIP) {
-            return (true, bytes32(data[offset:offset + 32]), offset + 32);
+            (tokenInHash, newOffset) = data.sliceBytes32(offset);
+            return (true, tokenInHash, newOffset);
         }
 
         // STORAGE / CATCHALL: Validate against whitelist
@@ -117,12 +120,20 @@ library Permit2ValidationLib {
 
     /*//////////////////////////////////////////////////////////////
                            STORAGE VALIDATION
+    //////////////////////////////////////////////////////////////
+
+    TokenPermissions layout (per entry):
+    ┌────────────────────────────────────────────────────────────┐
+    │  [0:32]   token (address, left-padded to 32 bytes)         │
+    │  [32:64]  amount (uint256)                                 │
+    └────────────────────────────────────────────────────────────┘
+    Total: 64 bytes per entry
+
     //////////////////////////////////////////////////////////////*/
 
-    // forgefmt: disable-start
     /// @notice Validates tokenIn against storage whitelist
-    /// @dev Checks token address membership in AddressSet.
-    ///      Uses chainId=0 for lookup (origin chain context).
+    /// @dev Checks token address membership in Bytes32Set.
+    ///      Uses block.chainid for lookup (origin chain context).
     /// @param baseStorage Base storage pointer
     /// @param data The calldata containing tokenIn
     /// @param offset Current offset in calldata
@@ -130,14 +141,6 @@ library Permit2ValidationLib {
     /// @return valid True if all entries are whitelisted
     /// @return tokenInHash The computed EIP-712 hash
     /// @return newOffset Updated offset
-    ///
-    /// TokenPermissions layout (per entry):
-    /// ┌────────────────────────────────────────────────────────────┐
-    /// │  [0:32]   token (address, left-padded to 32 bytes)         │
-    /// │  [32:64]  amount (uint256)                                 │
-    /// └────────────────────────────────────────────────────────────┘
-    /// Total: 64 bytes per entry
-    // forgefmt: disable-end
     function _validateTokenInStorage(
         BasePolicyStorage storage baseStorage,
         bytes calldata data,
@@ -148,9 +151,9 @@ library Permit2ValidationLib {
         view
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
-        // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out array length
+        uint8 length;
+        (length, offset) = data.sliceUint8(offset);
 
         // Get whitelist using block.chainid
         uint256 effectiveChainId = mode.getEffectiveChainId(block.chainid);
@@ -163,15 +166,12 @@ library Permit2ValidationLib {
 
         // Create calldata pointer to array
         uint256[2][] calldata tokenPermissions;
-        assembly {
-            tokenPermissions.offset := add(data.offset, offset)
-            tokenPermissions.length := length
-        }
+        (tokenPermissions, offset) = data.sliceUint256PairArray(offset, length);
 
         // Validate each entry (just check token address)
         for (uint256 i = 0; i < length; i++) {
             address token = address(uint160(tokenPermissions[i][0]));
-
+            // Check left-padded address in set
             if (!tokenSet.contains(bytes32(bytes20(token)))) {
                 return (false, bytes32(0), 0);
             }
@@ -180,7 +180,7 @@ library Permit2ValidationLib {
         // Compute hash
         tokenInHash = EIP712TypeHashLib.hashTokenPermissions(tokenPermissions);
 
-        return (true, tokenInHash, offset + (length * 64));
+        return (true, tokenInHash, offset);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -210,27 +210,30 @@ library Permit2ValidationLib {
         view
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
-        // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out array length
+        uint8 length;
+        (length, offset) = data.sliceUint8(offset);
 
         // Create calldata pointer
         uint256[2][] calldata tokenPermissions;
-        assembly {
-            tokenPermissions.offset := add(data.offset, offset)
-            tokenPermissions.length := length
-        }
+        (tokenPermissions, offset) = data.sliceUint256PairArray(offset, length);
 
         // Call sub-policy (no chainId - origin chain context implicit)
         bytes memory tokenInData = abi.encode(tokenPermissions);
         valid = I1271Policy(subPolicy)
-            .check1271SignedAction(configId, msg.sender, account, hash, tokenInData);
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: tokenInData
+            });
 
         if (!valid) return (false, bytes32(0), 0);
 
         // Compute hash
         tokenInHash = EIP712TypeHashLib.hashTokenPermissions(tokenPermissions);
 
-        return (true, tokenInHash, offset + (length * 64));
+        return (true, tokenInHash, offset);
     }
 }

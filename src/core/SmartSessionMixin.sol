@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
+import { ReentrancyGuardTransient } from "solady/utils/ReentrancyGuardTransient.sol";
 
 // Libraries
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
@@ -20,14 +21,12 @@ import { ExecutionLibV2 } from "@lib/ExecutionLibV2.sol";
 import { ECDSA } from "solady/utils/ECDSA.sol";
 
 // Types
-import { PermissionId, PolicyType } from "@smartsessions/DataTypes.sol";
+import { PermissionId } from "@smartsessions/DataTypes.sol";
 import {
-    DisableSession,
-    INVALID_SIGNATURE,
-    NO_LOCKTAG,
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
-    SmartSessionEmissaryDisable
+    SmartSessionEmissaryDisable,
+    EMPTY_CONTENT_HASH
 } from "@types/DataTypes.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
@@ -35,7 +34,11 @@ import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
 /// @dev Bridges lockTag-based emissary system with permissionId-based SmartSession system
-abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 {
+abstract contract SmartSessionMixin is
+    SmartSessionManager,
+    SmartSessionERC7739,
+    ReentrancyGuardTransient
+{
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -66,6 +69,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         SmartSessionEmissaryEnable calldata enableData
     )
         external
+        nonReentrant
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
@@ -162,14 +166,12 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param digest The digest of claim being verified which includes executions
     /// @param emissaryData Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return result The function selector on success, or a specific failure code otherwise
     function _verifyExecutionSmartSession(
         address account,
         bytes32 digest,
         bytes calldata emissaryData,
-        Types.Operation calldata executions,
-        bytes12 lockTag
+        Types.Operation calldata executions
     )
         internal
         virtual
@@ -187,16 +189,15 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
             digest: digest,
             executions: executions.safeToERC7579().parse(),
             decompressedSignature: packedSig,
-            account: account,
-            lockTag: lockTag
+            account: account
         });
 
         /// @solidity memory-safe-assembly
         assembly {
-            // forgefmt: disable-next-line
-            // validSig ? bytes4(keccak256("verifyExecution(address,bytes32,bytes,Types.Operation,bytes12)")) : 0xffffffff`.
-            // We use `0xffffffff` for invalid signatures.
-            result := shl(224, or(0x88ec78fb, sub(0, iszero(validSig))))
+            // validSig ?
+            // bytes4(keccak256("verifyExecution(address,bytes32,bytes,Types.Operation,bytes12)")) :
+            // 0xffffffff`. We use `0xffffffff` for invalid signatures.
+            result := shl(224, or(0x043b31ea, sub(0, iszero(validSig))))
         }
     }
 
@@ -211,15 +212,13 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
     /// @param executions The execution data for the user operation
     /// @param decompressedSignature The decompressed signature for validation
     /// @param account The account for which policies are being enforced
-    /// @param lockTag The lock tag associated with the session
     /// @return validSig True if the signature is valid, false otherwise
     function _enforceActionPolicies(
         PermissionId permissionId,
         bytes32 digest,
         Execution[] calldata executions,
         bytes memory decompressedSignature,
-        address account,
-        bytes12 lockTag
+        address account
     )
         internal
         returns (bool validSig)
@@ -236,7 +235,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         //////////////////////////////////////////////////////////////*/
 
         // Check action policies for the given permissionId and batch execution
-        $actionPolicies[lockTag].actionPolicies
+        $actionPolicies.actionPolicies
             .checkBatch7579Exec({
                 executions: executions,
                 permissionId: permissionId,
@@ -249,9 +248,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         //////////////////////////////////////////////////////////////*/
 
         // Check if this digest was already validated
-        if (digest.isAlreadyVerified({
-                account: account, permissionId: permissionId, lockTag: lockTag
-            })) {
+        if (digest.isAlreadyVerified({ account: account, permissionId: permissionId })) {
             return true;
         }
 
@@ -266,9 +263,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
         // Cache the result if valid
         if (validSig) {
-            digest.markAsVerified({
-                account: account, permissionId: permissionId, lockTag: lockTag
-            });
+            digest.markAsVerified({ account: account, permissionId: permissionId });
         }
     }
 
@@ -326,9 +321,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         if (!valid) return valid;
 
         // Check if this digest was already validated
-        if (digest.isAlreadyVerified({
-                account: sponsor, permissionId: permissionId, lockTag: lockTag
-            })) {
+        if (digest.isAlreadyVerified({ account: sponsor, permissionId: permissionId })) {
             return true;
         }
 
@@ -399,8 +392,8 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         // Detect direct mode (skip ERC-7739 wrapping)
         bool directMode = appDomainSeparator == bytes32(0);
 
-        // Init contentHash to bytes32(0)
-        bytes32 contentHash;
+        // Init contentHash to EMPTY_CONTENT_HASH
+        bytes32 contentHash = EMPTY_CONTENT_HASH;
 
         // If we're not using direct mode, calculate the contents hash
         if (!directMode) {
@@ -451,4 +444,15 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Returns the typed data hash for a given hash
     function _getTypedDataHashSansChainId(bytes32 hash) internal view virtual returns (bytes32);
+
+    /// @notice Always use transient reentrancy guard only on mainnet
+    function _useTransientReentrancyGuardOnlyOnMainnet()
+        internal
+        view
+        virtual
+        override
+        returns (bool)
+    {
+        return false;
+    }
 }

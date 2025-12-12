@@ -1,0 +1,9 @@
+SmartSessionLens::isPermissionEnabled
+├── when permission is not enabled
+│   └── it returns false
+├── when checking different account
+│   └── it returns false
+├── when permission is enabled
+│   └── it returns true
+└── when multiple permissions are enabled
+    └── it returns true for each

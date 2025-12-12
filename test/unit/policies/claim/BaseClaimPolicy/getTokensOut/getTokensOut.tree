@@ -1,0 +1,12 @@
+BaseClaimPolicy::getTokensOut
+├── given not initialized
+│   └── it should return empty array
+├── given initialized with STORAGE mode
+│   ├── it should return single token for chainId
+│   ├── it should return multiple tokens for chainId
+│   └── it should return empty array for unconfigured chainId
+├── given initialized with CATCHALL mode
+│   └── it should return tokens for chainId 0
+└── given storage isolation
+    ├── it should isolate per configId
+    └── it should isolate per account

@@ -27,18 +27,16 @@ library DigestCacheLib {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Computes the transient storage slot for a given digest and session parameters
-    /// @dev Hashes the base slot with account, digest, permissionId, and lockTag to create
+    /// @dev Hashes the base slot with account, digest, permissionId to create
     ///      a unique slot that avoids collisions across different sessions
     /// @param digest The digest that was verified
     /// @param account The account address associated with the verification
     /// @param permissionId The SmartSession permission identifier
-    /// @param lockTag The lock tag associated with the session
     /// @return slot The computed transient storage slot
     function _computeSlot(
         bytes32 digest,
         address account,
-        PermissionId permissionId,
-        bytes12 lockTag
+        PermissionId permissionId
     )
         private
         pure
@@ -48,15 +46,14 @@ library DigestCacheLib {
             // Get the free memory pointer
             let ptr := mload(0x40)
 
-            // Pack data for hashing: [baseSlot, account, digest, permissionId, lockTag]
+            // Pack data for hashing: [baseSlot, account, digest, permissionId]
             mstore(ptr, TSTORE_BASE_SLOT)
             mstore(add(ptr, 0x20), account)
             mstore(add(ptr, 0x40), digest)
             mstore(add(ptr, 0x60), permissionId)
-            mstore(add(ptr, 0x80), lockTag)
 
             // Compute the unique slot via keccak256
-            slot := keccak256(ptr, 0xa0)
+            slot := keccak256(ptr, 0x80)
         }
     }
 
@@ -69,19 +66,17 @@ library DigestCacheLib {
     /// @param digest The digest that was verified
     /// @param account The account address associated with the verification
     /// @param permissionId The SmartSession permission identifier
-    /// @param lockTag The lock tag associated with the session
     /// @return isVerified True if the digest was already verified this transaction
     function isAlreadyVerified(
         bytes32 digest,
         address account,
-        PermissionId permissionId,
-        bytes12 lockTag
+        PermissionId permissionId
     )
         internal
         view
         returns (bool isVerified)
     {
-        bytes32 slot = _computeSlot(digest, account, permissionId, lockTag);
+        bytes32 slot = _computeSlot(digest, account, permissionId);
         assembly {
             isVerified := tload(slot)
         }
@@ -96,16 +91,8 @@ library DigestCacheLib {
     /// @param digest The digest that was verified
     /// @param account The account address associated with the verification
     /// @param permissionId The SmartSession permission identifier
-    /// @param lockTag The lock tag associated with the session
-    function markAsVerified(
-        bytes32 digest,
-        address account,
-        PermissionId permissionId,
-        bytes12 lockTag
-    )
-        internal
-    {
-        bytes32 slot = _computeSlot(digest, account, permissionId, lockTag);
+    function markAsVerified(bytes32 digest, address account, PermissionId permissionId) internal {
+        bytes32 slot = _computeSlot(digest, account, permissionId);
         assembly {
             tstore(slot, VERIFIED)
         }

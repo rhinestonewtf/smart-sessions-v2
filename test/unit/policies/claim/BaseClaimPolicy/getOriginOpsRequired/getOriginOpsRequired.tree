@@ -1,0 +1,9 @@
+BaseClaimPolicy::getOriginOpsRequired
+├── given not initialized
+│   └── it should return false
+├── given initialized with required=true
+│   └── it should return true
+├── given initialized with required=false
+│   └── it should return false
+└── given multiple chainIds
+    └── it should return correct value per chainId

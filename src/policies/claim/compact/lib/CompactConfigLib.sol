@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Libraries
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // forgefmt: disable-start
@@ -47,13 +48,14 @@ library CompactConfigLib {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    using CalldataSliceLib for bytes;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
 
     /*//////////////////////////////////////////////////////////////
                       TOKEN IN INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [chainId: 32 bytes][id: 32 bytes] = 64 bytes each
 
     The id is a Compact resource lock ID: [lockTag (96 high) | token (160 low)]
@@ -61,7 +63,7 @@ library CompactConfigLib {
     ┌────────────────────────────────────────────────────────┐
     │  Compact TokenIn Config                                │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (64 bytes):                             │    │
@@ -75,7 +77,7 @@ library CompactConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 64) bytes
+    Total size: 1 + (count × 64) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -92,20 +94,19 @@ library CompactConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Decode count (32 bytes)
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initialize offset
-        uint256 offset = 32;
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
         // Loop through each entry
-        for (uint256 i = 0; i < count; i++) {
-            // Decode chainId (32 bytes)
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            // Read Compact ID directly - [lockTag (96 high) | token (160 low)]
-            bytes32 id = bytes32(initData[offset + 32:offset + 64]);
-            // Add to storage set
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out chainId and id
+            uint256 chainId;
+            bytes32 id;
+            (chainId, offset) = initData.sliceUint256(offset);
+            // id includes both lockTag and token packed
+            (id, offset) = initData.sliceBytes32(offset);
+            // Write directly to storage
             $.tokenInSet[chainId].add(id);
-            // Advance offset
-            offset += 64;
         }
         // Return remaining calldata
         remaining = initData[offset:];

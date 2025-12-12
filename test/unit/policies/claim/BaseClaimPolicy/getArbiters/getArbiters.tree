@@ -1,0 +1,8 @@
+BaseClaimPolicy::getArbiters
+├── given arbiters are configured
+│   ├── it should return all arbiters
+│   └── it should return correct count
+├── given no arbiters configured
+│   └── it should return empty array
+└── given multiple arbiters
+    └── it should return all in order

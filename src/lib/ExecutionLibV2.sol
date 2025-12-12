@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 // Types
-import { Types } from "@compact-utils/types/OrderTypes.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 import { Execution as ExecutionCompactUtils } from "@compact-utils/common/SmartExecutionLib.sol";
 

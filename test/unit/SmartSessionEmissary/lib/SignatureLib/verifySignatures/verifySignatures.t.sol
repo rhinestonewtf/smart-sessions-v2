@@ -33,7 +33,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             userSig,
-            true // isInit - allocator sig not checked
+            false // isInit - allocator sig not checked
         );
     }
 
@@ -52,11 +52,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet, // Must be smart account since msg.sender != user
             allocatorSig,
             userSig,
-            true // isInit
+            false // isInit
         );
     }
 
-    function test_verifySignatures_RevertsWhen_MsgSenderIsUser_AllocatorEOA() public {
+    function test_verifySignatures_revertsWhen_MsgSenderIsUser_AllocatorEOA() public {
         // Arrange
         bytes memory allocatorSig = createEOASignature(testHash, allocatorPrivateKey);
         bytes memory userSig = createEOASignature(testHash, userPrivateKey);
@@ -72,7 +72,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -91,7 +91,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -110,11 +110,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_MixedEOAAndWallet() public {
+    function test_verifySignatures_revertsWhen_MixedEOAAndWallet() public {
         // Arrange - Allocator is EOA, User is wallet
         bytes memory allocatorSig = createEOASignature(testHash, allocatorPrivateKey);
         bytes memory userSig = createSmartAccountSignature(testHash, userPrivateKey);
@@ -130,11 +130,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_InvalidAllocatorSignature_EOA() public {
+    function test_verifySignatures_revertsWhen_InvalidAllocatorSignature_EOA() public {
         // Arrange
         bytes memory invalidAllocatorSig = createEOASignature(testHash, attackerPrivateKey);
         bytes memory userSig = createSmartAccountSignature(testHash, userPrivateKey);
@@ -148,11 +148,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             invalidAllocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_InvalidAllocatorSignature_Wallet() public {
+    function test_verifySignatures_revertsWhen_InvalidAllocatorSignature_Wallet() public {
         // Arrange
         bytes memory invalidAllocatorSig = createSmartAccountSignature(testHash, attackerPrivateKey);
         bytes memory userSig = createSmartAccountSignature(testHash, userPrivateKey);
@@ -166,11 +166,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             invalidAllocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_InvalidUserSignature_Wallet() public {
+    function test_verifySignatures_revertsWhen_InvalidUserSignature_Wallet() public {
         // Arrange
         bytes memory allocatorSig = createSmartAccountSignature(testHash, allocatorPrivateKey);
         bytes memory invalidUserSig = createEOASignature(testHash, attackerPrivateKey);
@@ -184,11 +184,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             invalidUserSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_WrongHashForAllocator() public {
+    function test_verifySignatures_revertsWhen_WrongHashForAllocator() public {
         // Arrange - Sign different hash
         bytes memory allocatorSig = createSmartAccountSignature(invalidHash, allocatorPrivateKey);
         bytes memory userSig = createSmartAccountSignature(testHash, userPrivateKey);
@@ -202,11 +202,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_WrongHashForUser() public {
+    function test_verifySignatures_revertsWhen_WrongHashForUser() public {
         // Arrange - Sign different hash
         bytes memory allocatorSig = createSmartAccountSignature(testHash, allocatorPrivateKey);
         bytes memory userSig = createSmartAccountSignature(invalidHash, userPrivateKey);
@@ -220,11 +220,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_MalformedAllocatorSignature() public {
+    function test_verifySignatures_revertsWhen_MalformedAllocatorSignature() public {
         // Arrange
         bytes memory malformedSig = createMalformedSignature();
         bytes memory userSig = createSmartAccountSignature(testHash, userPrivateKey);
@@ -238,11 +238,11 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             malformedSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
-    function test_verifySignatures_RevertsWhen_WalletReturnsInvalid() public {
+    function test_verifySignatures_revertsWhen_WalletReturnsInvalid() public {
         // Arrange - Deploy wallet that returns invalid
         address failingWallet = deployFailingWallet();
 
@@ -258,7 +258,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             failingWallet,
             allocatorSig,
             userSig,
-            false // not init
+            true // not init
         );
     }
 
@@ -275,7 +275,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             emptySig,
             emptySig,
-            false // not init
+            true // not init
         );
     }
 
@@ -292,7 +292,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
     //         userWallet,
     //         sig,
     //         sig,
-    //         false // not init
+    //         true // not init
     //     );
     // }
 
@@ -311,7 +311,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userWallet,
             invalidAllocatorSig,
             userSig,
-            true // isInit
+            false // isInit
         );
     }
 
@@ -330,7 +330,7 @@ contract SignatureLib_verifySignatures_Test is SignatureLib_Unit_Test {
             userEOA,
             allocatorSig,
             invalidUserSig,
-            false // not init
+            true // not init
         );
     }
 

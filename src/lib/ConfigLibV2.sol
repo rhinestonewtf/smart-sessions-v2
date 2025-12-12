@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
-import { ModuleType } from "@smartsessions/interfaces/IRegistry.sol";
 import { ISmartSession } from "@smartsessions/ISmartSession.sol";
 import { IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
 
@@ -112,8 +111,7 @@ library ConfigLibV2 {
             }
 
             // Record the enabled action ID
-            $self.actionPolicies[actionId]
-            .enable({
+            $self.actionPolicies[actionId].enable({
                 policyType: PolicyType.ACTION,
                 permissionId: permissionId,
                 configId: permissionId.toConfigId(actionId),
@@ -173,13 +171,15 @@ library ConfigLibV2 {
 
             uint256 contentNamesLength = contexts[i].contentNames.length;
             if (contentNamesLength != 0) {
-                $enabledERC7739.enabledDomainSeparators[permissionId]
-                .add(account, appDomainSeparator);
+                $enabledERC7739.enabledDomainSeparators[permissionId].add(
+                    account, appDomainSeparator
+                );
             }
             for (uint256 y; y < contentNamesLength; y++) {
                 bytes32 contentHash = contexts[i].contentNames[y].hashERC7739Content();
-                $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator]
-                .add(account, contentHash);
+                $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].add(
+                    account, contentHash
+                );
             }
         }
     }

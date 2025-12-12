@@ -1,0 +1,16 @@
+BaseConfigLib::getFieldMode
+├── given field ARBITER (id 0)
+│   ├── given mode SKIP
+│   │   └── it should return 0
+│   ├── given mode STORAGE
+│   │   └── it should return 1
+│   ├── given mode CATCHALL
+│   │   └── it should return 2
+│   └── given mode SUBPOLICY
+│       └── it should return 3
+├── given field in middle (RECIPIENT, id 3)
+│   └── it should extract correct 2 bits at position 6-7,
+├── given field at end (RECIPIENT_IS_SPONSOR, id 9)
+│   └── it should extract correct 2 bits at position 18-19
+└── given multiple fields set
+    └── it should return correct mode for each field

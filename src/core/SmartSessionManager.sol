@@ -10,7 +10,6 @@ import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
 import { IdLibV2 } from "@lib/IdLibV2.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
-import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
 import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
 import { SignatureLib } from "@lib/SignatureLib.sol";
 import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
@@ -22,16 +21,10 @@ import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import {
     PermissionId,
     ActionId,
-    SignerConf,
-    EnumerableActionPolicy,
     PolicyType,
-    EMPTY_PERMISSIONID,
-    Policy,
-    EnumerableERC7739Config,
-    ERC7579_MODULE_TYPE_VALIDATOR
+    EMPTY_PERMISSIONID
 } from "@smartsessions/DataTypes.sol";
 import {
-    Session,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryConfig,
     DisableSession,
@@ -84,8 +77,20 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
                 account: account, nonce: nonce, expires: enableData.expires, lockTag: lockTag
             });
 
-        // Check if the permissionId is already enabled for the account
-        bool isInit = $enabledLockTags.contains({ account: account, value: bytes32(lockTag) });
+        // Calculate the permissionId
+        PermissionId permissionId = enableData.session.sessionToEnable.toPermissionId();
+
+        // Ensure the permissionId matches the config
+        require(permissionId == config.permissionId, InvalidPermissionId(config.permissionId));
+
+        // Check if this lockTag is already enabled for this permissionId.
+        // - First enable (isInit=false): Only user signature required
+        // - Subsequent enables (isInit=true): Both user AND allocator signatures required
+        //
+        // Note: When allocator == address(0) (no allocator / NO_LOCKTAG flow),
+        // the allocator signature check is always skipped regardless of isInit.
+        bool isInit =
+            $enabledLockTags[permissionId].contains({ account: account, value: bytes32(lockTag) });
 
         // Verify the user and allocator signatures
         hash.verifySignatures({
@@ -93,14 +98,8 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             user: account,
             allocatorSignature: enableData.allocatorSig,
             userSignature: enableData.userSig,
-            isInit: !isInit
+            isInit: isInit
         });
-
-        // Calculate the permissionId
-        PermissionId permissionId = enableData.session.sessionToEnable.toPermissionId();
-
-        // Ensure the permissionId matches the config
-        require(permissionId == config.permissionId, InvalidPermissionId(config.permissionId));
 
         // Enable ERC7739 content
         $enabledERC7739.enable({
@@ -118,15 +117,15 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             account: account
         });
 
+        // Enable action policies
+        $actionPolicies.enable({
+            permissionId: permissionId,
+            actionPolicyDatas: enableData.session.sessionToEnable.actions,
+            account: account
+        });
+
         // Enable action and claim policies only if lockTag is not NO_LOCKTAG
         if (lockTag != NO_LOCKTAG) {
-            // Enable action policies
-            $actionPolicies[lockTag].enable({
-                permissionId: permissionId,
-                actionPolicyDatas: enableData.session.sessionToEnable.actions,
-                account: account
-            });
-
             // Enable claim policies
             $claimPolicies[lockTag].enable({
                 policyType: PolicyType.ERC1271,
@@ -135,9 +134,6 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
                 policyDatas: enableData.session.sessionToEnable.claimPolicies,
                 account: account
             });
-
-            // Add the lockTag to the enabled lockTags for the account
-            $enabledLockTags.add({ account: account, value: bytes32(lockTag) });
         }
 
         // Enable mode can involve enabling ISessionValidator (new Permission)
@@ -155,8 +151,11 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             });
         }
 
-        // Add to enabled sessions
+        // Add the permissionid to enabled sessions for the account
         $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });
+
+        // Add the lockTag to this permissionId
+        $enabledLockTags[permissionId].add({ account: account, value: bytes32(lockTag) });
     }
 
     /// @notice Disables sessions for an account after verifying required signatures
@@ -171,7 +170,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
     /// @param userSig The signature from the user authorizing the session disable
     function _disableSessions(
         address account,
-        DisableSession memory disableData,
+        DisableSession calldata disableData,
         PermissionId permissionId,
         bytes12 lockTag,
         uint256 expires,
@@ -199,7 +198,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             user: account,
             allocatorSignature: allocatorSig,
             userSignature: userSig,
-            isInit: false
+            isInit: true // Disabling always requires both signatures if allocator is set
         });
 
         // Remove the session from the smart session config
@@ -218,21 +217,16 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
         $erc1271Policies.policyList[permissionId].removeAll(account);
 
         // Remove all Action policies for this session
-        uint256 actionLength =
-            $actionPolicies[lockTag].enabledActionIds[permissionId].length(account);
+        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
         for (uint256 i; i < actionLength; i++) {
             ActionId actionId = ActionId.wrap(
-                $actionPolicies[lockTag].enabledActionIds[permissionId].at({
-                    account: account, index: i
-                })
+                $actionPolicies.enabledActionIds[permissionId].at({ account: account, index: i })
             );
-            $actionPolicies[lockTag].actionPolicies[actionId].policyList[permissionId].removeAll(
-                account
-            );
+            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(account);
         }
 
         // removing all stored actionIds
-        $actionPolicies[lockTag].enabledActionIds[permissionId].removeAll(account);
+        $actionPolicies.enabledActionIds[permissionId].removeAll(account);
 
         // Remove all claim policies for this session
         $claimPolicies[lockTag].policyList[permissionId].removeAll(account);
@@ -246,8 +240,8 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
         // Remove the permissionId from enabled sessions
         $enabledSessions.remove({ account: account, value: PermissionId.unwrap(permissionId) });
 
-        // Remove the lockTag from the enabled lockTag
-        $enabledLockTags.remove({ account: account, value: bytes32(lockTag) });
+        // Remove the lockTag from this permissionId
+        $enabledLockTags[permissionId].remove({ account: account, value: bytes32(lockTag) });
     }
 
     /*//////////////////////////////////////////////////////////////

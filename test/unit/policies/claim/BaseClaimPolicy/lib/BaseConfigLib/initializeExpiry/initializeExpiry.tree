@@ -1,0 +1,12 @@
+BaseConfigLib::initializeExpiry
+├── given zero values
+│   └── it should store zero packed value
+├── given only min value
+│   └── it should store min in lower bits
+├── given only max value
+│   └── it should store max in upper bits
+├── given both min and max
+│   ├── it should store packed value correctly
+│   └── it should return remaining calldata
+└── given extra data after expiry
+    └── it should return extra data as remaining

@@ -10,7 +10,8 @@ import { IArbiter } from "@policies/claim/base/interfaces/IArbiter.sol";
 
 // Libraries
 import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfigLib.sol";
-import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 import { ArgPolicyTreeLibV2 } from "@policies/claim/base/lib/ArgPolicyTreeLibV2.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
@@ -20,19 +21,14 @@ import {
     ParamRules,
     QualificationRulesStorage,
     MODE_SKIP,
-    MODE_CHECK_STORAGE,
-    MODE_CHECK_CATCHALL,
-    MODE_CHECK_SUBPOLICY,
     FIELD_ARBITER,
     FIELD_EXPIRY,
-    FIELD_TOKEN_IN,
     FIELD_RECIPIENT,
     FIELD_FILL_EXPIRY,
     FIELD_TOKEN_OUT,
     FIELD_ORIGIN_OPS,
     FIELD_DEST_OPS,
     FIELD_QUALIFICATION,
-    FIELD_RECIPIENT_IS_SPONSOR,
     ANY_ADDRESS
 } from "@policies/claim/base/types/BaseDataTypes.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
@@ -74,6 +70,7 @@ library BaseValidationLib {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    using CalldataSliceLib for bytes;
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint8;
     using ArgPolicyTreeLibV2 for ParamRules;
@@ -141,17 +138,16 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Check if arbiter is in the authorized set
         return $.arbiterConfig.contains(arbiter);
     }
 
     /// @notice Validates arbiter by delegating to external sub-policy
     /// @dev Encodes arbiter as signature data for the sub-policy call
+    /// @param $ The storage pointer
     /// @param arbiter The arbiter address to validate
     /// @param configId The configuration ID
     /// @param account The account being validated
     /// @param hash The original hash being validated
-    /// @param $ The storage pointer
     /// @return True if sub-policy approves the arbiter
     function _validateArbiterSubPolicy(
         BasePolicyStorage storage $,
@@ -164,14 +160,16 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get sub-policy address
         address policy = $.subPolicies[FIELD_ARBITER];
-        // Encode arbiter as the signature data for sub-policy
         bytes memory arbiterData = abi.encode(arbiter);
-        // Delegate to sub-policy
-        return
-            I1271Policy(policy)
-                .check1271SignedAction(configId, msg.sender, account, hash, arbiterData);
+        return I1271Policy(policy)
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: arbiterData
+            });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -263,14 +261,16 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get sub-policy address
         address policy = $.subPolicies[FIELD_EXPIRY];
-        // Encode expiry for sub-policy
         bytes memory expiryData = abi.encode(expiry);
-        // Delegate to sub-policy
-        return
-            I1271Policy(policy)
-                .check1271SignedAction(configId, msg.sender, account, hash, expiryData);
+        return I1271Policy(policy)
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: expiryData
+            });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -292,8 +292,6 @@ library BaseValidationLib {
     │  ├── No storage lookup required - just memory comparison    │
     │  └── Ideal for "bridge to self" session keys                │
     └─────────────────────────────────────────────────────────────┘
-
-    //////////////////////////////////////////////////////////////*/
 
     //////////////////////////////////////////////////////////////*/
 
@@ -355,9 +353,7 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get effective chainId (0 for catch-all mode)
         uint256 effectiveChainId = mode.getEffectiveChainId(targetChainId);
-        // Get expected recipient
         address expected = $.recipientConfig[effectiveChainId];
         return recipient == expected || expected == ANY_ADDRESS;
     }
@@ -382,13 +378,16 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get sub-policy address
         address policy = $.subPolicies[FIELD_RECIPIENT];
-        // Encode targetChainId and recipient for sub-policy
         bytes memory recipientData = abi.encode(targetChainId, recipient);
-        // Delegate to sub-policy
         return I1271Policy(policy)
-            .check1271SignedAction(configId, msg.sender, account, hash, recipientData);
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: recipientData
+            });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -458,11 +457,8 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get effective chainId (0 for catch-all mode)
         uint256 effectiveChainId = mode.getEffectiveChainId(targetChainId);
-        // Get stored min/max for this chain
         uint256 packed = $.fillExpiryConfig[effectiveChainId];
-        // Unpack and validate
         (uint128 min, uint128 max) = BaseConfigLib.unpackUint128(packed);
         return fillExpiry >= min && fillExpiry <= max;
     }
@@ -487,13 +483,16 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get sub-policy address
         address policy = $.subPolicies[FIELD_FILL_EXPIRY];
-        // Encode targetChainId and fillExpiry for sub-policy
         bytes memory fillExpiryData = abi.encode(targetChainId, fillExpiry);
-        // Delegate to sub-policy
         return I1271Policy(policy)
-            .check1271SignedAction(configId, msg.sender, account, hash, fillExpiryData);
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: fillExpiryData
+            });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -507,13 +506,13 @@ library BaseValidationLib {
     ┌────────────────────────────────────────────────────────┐
     │  TokenOut Array                                        │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  length (uint256) - 32 bytes                   │    │
+    │  │  length (uint8) - 1 byte                       │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (64 bytes = 2 slots):                   │    │
     │  │  ┌────────────────────┬────────────────────┐   │    │
     │  │  │ token address (32) │ amount (32)        │   │    │
-    │  │  │ (right-padded)     │                    │   │    │
+    │  │  │ (left-padded)      │                    │   │    │
     │  │  └────────────────────┴────────────────────┘   │    │
     │  └────────────────────────────────────────────────┘    │
     └────────────────────────────────────────────────────────┘
@@ -583,9 +582,9 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 tokenOutHash, uint256 newOffset)
     {
-        // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out array length
+        uint8 length;
+        (length, offset) = data.sliceUint8(offset);
 
         // Get whitelist for this chain (or catch-all)
         uint256 effectiveChainId = mode.getEffectiveChainId(targetChainId);
@@ -598,15 +597,11 @@ library BaseValidationLib {
 
         // Create calldata pointer to token array (2 slots per entry)
         uint256[2][] calldata tokenOut;
-        assembly {
-            tokenOut.offset := add(data.offset, offset)
-            tokenOut.length := length
-        }
+        (tokenOut, offset) = data.sliceUint256PairArray(offset, length);
 
         // Validate each token against whitelist
-        for (uint256 i = 0; i < length; i++) {
+        for (uint8 i = 0; i < length; i++) {
             address token = address(uint160(tokenOut[i][0]));
-
             if (!tokenSet.contains(token)) {
                 return (false, bytes32(0), 0);
             }
@@ -615,7 +610,7 @@ library BaseValidationLib {
         // Compute hash for EIP-712
         tokenOutHash = EIP712TypeHashLib.hashTokenOut(tokenOut);
 
-        return (true, tokenOutHash, offset + (length * 64));
+        return (true, tokenOutHash, offset);
     }
 
     /// @notice Validates tokenOut by delegating to external sub-policy
@@ -642,33 +637,32 @@ library BaseValidationLib {
         view
         returns (bool, bytes32, uint256)
     {
-        // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out array length
+        uint8 length;
+        (length, offset) = data.sliceUint8(offset);
 
         // Create calldata pointer to token array (2 slots per entry)
         uint256[2][] calldata tokenOut;
-        assembly {
-            tokenOut.offset := add(data.offset, offset)
-            tokenOut.length := length
-        }
+        (tokenOut, offset) = data.sliceUint256PairArray(offset, length);
 
         // Delegate to sub-policy
         address policy = $.subPolicies[FIELD_TOKEN_OUT];
-
-        // Encode targetChainId and tokenOut for sub-policy
         bytes memory tokenOutData = abi.encode(targetChainId, tokenOut);
-
-        // Call sub-policy
         bool valid = I1271Policy(policy)
-            .check1271SignedAction(configId, msg.sender, account, hash, tokenOutData);
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: tokenOutData
+            });
 
         // Early return if invalid
         if (!valid) return (false, bytes32(0), 0);
 
         // Compute hash for EIP-712
         bytes32 tokenOutHash = EIP712TypeHashLib.hashTokenOut(tokenOut);
-        return (true, tokenOutHash, offset + (length * 64));
+        return (true, tokenOutHash, offset);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -711,9 +705,8 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 opsHash, uint256 newOffset)
     {
-        // Read the ops hash (32 bytes)
-        opsHash = bytes32(data[offset:offset + 32]);
-        offset += 32;
+        // Slice out the ops hash
+        (opsHash, offset) = data.sliceBytes32(offset);
 
         uint8 mode = config.getFieldMode(FIELD_ORIGIN_OPS);
 
@@ -754,7 +747,6 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get effective chainId (0 for catch-all mode)
         uint256 effectiveChainId = mode.getEffectiveChainId(chainId);
         return $.originOpsConfig[effectiveChainId];
     }
@@ -779,13 +771,16 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get sub-policy address
         address policy = $.subPolicies[FIELD_ORIGIN_OPS];
-        // Encode chainId and opsHash for sub-policy
         bytes memory opsData = abi.encode(chainId, opsHash);
-        // Delegate to sub-policy
-        return
-            I1271Policy(policy).check1271SignedAction(configId, msg.sender, account, hash, opsData);
+        return I1271Policy(policy)
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: opsData
+            });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -824,9 +819,8 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 opsHash, uint256 newOffset)
     {
-        // Read the ops hash (32 bytes)
-        opsHash = bytes32(data[offset:offset + 32]);
-        offset += 32;
+        // Slice out the ops hash
+        (opsHash, offset) = data.sliceBytes32(offset);
 
         uint8 mode = config.getFieldMode(FIELD_DEST_OPS);
 
@@ -868,7 +862,6 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get effective chainId (0 for catch-all mode)
         uint256 effectiveChainId = mode.getEffectiveChainId(targetChainId);
         return $.destOpsConfig[effectiveChainId];
     }
@@ -893,45 +886,45 @@ library BaseValidationLib {
         view
         returns (bool)
     {
-        // Get sub-policy address
         address policy = $.subPolicies[FIELD_DEST_OPS];
-        // Encode targetChainId and opsHash for sub-policy
         bytes memory opsData = abi.encode(targetChainId, opsHash);
-        // Delegate to sub-policy
-        return
-            I1271Policy(policy).check1271SignedAction(configId, msg.sender, account, hash, opsData);
+        return I1271Policy(policy)
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: opsData
+            });
     }
 
     /*//////////////////////////////////////////////////////////////
-                      QUALIFICATION VALIDATION
-    //////////////////////////////////////////////////////////////
+                       QUALIFICATION VALIDATION
+     //////////////////////////////////////////////////////////////
 
-    Qualification is arbitrary arbiter-specific data.
-    The validation:
-    1. Evaluates parameter rules against qualification data
-    2. Computes the qualification hash
+     Qualification is arbitrary arbiter-specific data.
+     The validation:
+     1. Evaluates parameter rules against qualification data
+     2. Computes the qualification hash
 
-    Qualification data format:
-    ┌────────────────────────────────────────────────────────┐
-    │  Qualification Data                                    │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  dataLength (uint256) - 32 bytes               │    │
-    │  └────────────────────────────────────────────────┘    │
-    │  If we use sub policy mode, we need do include a flag: │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  flags (uint8) - 1 byte                        │    │
-    │  │  ┌──────────────────────────────────────────┐  │    │
-    │  │  │ bit 0: useArbiterHash                    │  │    │
-    │  │  │   0 = use keccak256(data)                │  │    │
-    │  │  │   1 = call arbiter.qualificationHash()   │  │    │
-    │  │  └──────────────────────────────────────────┘  │    │
-    │  └────────────────────────────────────────────────┘    │
-    │  ┌────────────────────────────────────────────────┐    │
-    │  │  qualificationData (dataLength bytes)          │    │
-    │  └────────────────────────────────────────────────┘    │
-    └────────────────────────────────────────────────────────┘
+     Qualification data format (storage mode):
+     ┌────────────────────────────────────────────────────────┐
+     │  [dataLength: 32][qualificationData: dataLength]       │
+     └────────────────────────────────────────────────────────┘
 
-    //////////////////////////////////////////////////////////////*/
+     Qualification data format (sub-policy mode):
+     ┌────────────────────────────────────────────────────────┐
+     │  [flags: 1][dataLength: 32][qualificationData: length] │
+     │                                                        │
+     │  flags (uint8):                                        │
+     │  ┌──────────────────────────────────────────┐          │
+     │  │ bit 0: useArbiterHash                    │          │
+     │  │   0 = use keccak256(data)                │          │
+     │  │   1 = call arbiter.qualificationHash()   │          │
+     │  └──────────────────────────────────────────┘          │
+     └────────────────────────────────────────────────────────┘
+
+     //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates qualification data with mode-based routing
     /// @dev Evaluates parameter rules and computes qualification hash
@@ -962,7 +955,6 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
-        // Get field mode
         uint8 mode = config.getFieldMode(FIELD_QUALIFICATION);
 
         // Route to appropriate validator
@@ -1001,16 +993,13 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
-        // Read data length
-        uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out qualification data with length prefix
+        bytes calldata qualificationData;
+        (qualificationData, offset) = data.sliceBytesWithLength(offset);
 
         // Get config for this chain+arbiter
         uint256 effectiveChainId = mode.getEffectiveChainId(chainId);
         QualificationRulesStorage storage config = $.qualificationConfig[effectiveChainId][arbiter];
-
-        // Extract qualification data
-        bytes calldata qualificationData = data[offset:offset + dataLength];
 
         // Evaluate parameter rules if any exist
         if (config.rules.rules.length != 0) {
@@ -1026,12 +1015,13 @@ library BaseValidationLib {
             qualificationHash = keccak256(qualificationData);
         }
 
-        return (true, qualificationHash, offset + dataLength);
+        return (true, qualificationHash, offset);
     }
 
     /// @notice Validates qualification by delegating to external sub-policy
-    /// @dev Compared to storage based validation, this requires the data to includes an extra flag
-    ///      byte to determine hash method @param $ The storage pointer
+    /// @dev Compared to storage based validation, this requires the data to include an extra flag
+    ///      byte to determine hash method
+    /// @param $ The storage pointer
     /// @param data The calldata containing qualification data
     /// @param offset Current offset in calldata
     /// @param chainId The chain ID
@@ -1056,38 +1046,38 @@ library BaseValidationLib {
         view
         returns (bool valid, bytes32 qualificationHash, uint256 newOffset)
     {
-        // Read data length
-        uint256 dataLength = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out flags byte first
+        uint8 flags;
+        (flags, offset) = data.sliceUint8(offset);
 
-        // Read flags byte
-        uint8 flags = uint8(data[offset]);
-        offset += 1;
-
-        bytes calldata qualificationData = data[offset:offset + dataLength];
+        // Slice out qualification data with length prefix
+        bytes calldata qualificationData;
+        (qualificationData, offset) = data.sliceBytesWithLength(offset);
 
         // Delegate to sub-policy
         address policy = $.subPolicies[FIELD_QUALIFICATION];
-
-        // Encode chainId, arbiter, and data for sub-policy
         bytes memory qualData = abi.encode(chainId, arbiter, qualificationData);
-
         valid = I1271Policy(policy)
-            .check1271SignedAction(configId, msg.sender, account, hash, qualData);
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: qualData
+            });
 
         // Early return if invalid
         if (!valid) return (false, bytes32(0), 0);
 
         // Compute hash based on flags
         bool useArbiterHash = (flags & 0x01) != 0;
-
         if (useArbiterHash) {
             qualificationHash = IArbiter(arbiter).qualificationHash(qualificationData);
         } else {
             qualificationHash = keccak256(qualificationData);
         }
 
-        return (true, qualificationHash, offset + dataLength);
+        return (true, qualificationHash, offset);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -1129,6 +1119,7 @@ library BaseValidationLib {
     /// @param hash The hash for sub-policy validation
     /// @return valid True if all Mandate fields are valid
     /// @return mandateHash The computed Mandate hash
+    // solhint-disable-next-line code-complexity
     function validateMandate(
         BasePolicyStorage storage $,
         bytes calldata data,
@@ -1173,6 +1164,7 @@ library BaseValidationLib {
         // Read minGas (not validated, just for hash computation)
         uint128 minGas = uint128(bytes16(data[offset:offset + 16]));
         offset += 16;
+        // We're not using CalldataSlice lib to avoid stack too deep :)
 
         // Validate originOps
         bytes32 originOpsHash;
@@ -1235,7 +1227,7 @@ library BaseValidationLib {
     ┌────────────────────────────────────────────────────────┐
     │                        Target                          │
     │  ┌──────────────────────────────────────────────────┐  │
-    │  │  recipient (address) - 20 bytes (+ 12 padding)   │  │
+    │  │  recipient (address) - 20 bytes                  │  │
     │  ├──────────────────────────────────────────────────┤  │
     │  │  targetChainId (uint256) - 32 bytes              │  │
     │  ├──────────────────────────────────────────────────┤  │
@@ -1278,6 +1270,7 @@ library BaseValidationLib {
         targetChainId = uint256(bytes32(data[offset + 20:offset + 52]));
         uint256 fillExpiry = uint256(bytes32(data[offset + 52:offset + 84]));
         offset += 84;
+        // We're not using CalldataSlice lib to avoid stack too deep :)
 
         // Validate recipient if required
         if (config.hasCheckRecipientIsSponsor()) {

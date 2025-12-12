@@ -1,0 +1,9 @@
+SmartSessionLens::isERC7739ContentEnabled
+├── when no session exists
+│   └── it returns false
+├── when checking different domain
+│   └── it returns false
+├── when checking different content
+│   └── it returns false
+└── when content is enabled
+    └── it returns true

@@ -1,0 +1,13 @@
+CompactClaimPolicy::isTokenInWhitelisted
+├── given policy is not initialized
+│   └── it should return false
+├── given token+lockTag is whitelisted
+│   └── it should return true
+├── given token+lockTag is not whitelisted
+│   └── it should return false
+├── given same token with different lockTag
+│   └── it should return false
+├── given same token on different chainId
+│   └── it should return false
+└── given different accounts
+    └── it should isolate storage per account

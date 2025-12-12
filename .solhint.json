@@ -13,6 +13,8 @@
     "not-rely-on-time": "off",
     "one-contract-per-file": "off",
     "var-name-mixedcase": "off",
-    "import-path-check": "off"
+    "import-path-check": "off",
+    "no-inline-assembly": "off",
+    "payable-fallback": "off"
   }
 }

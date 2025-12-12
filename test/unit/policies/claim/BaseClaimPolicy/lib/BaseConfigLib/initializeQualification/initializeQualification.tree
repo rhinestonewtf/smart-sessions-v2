@@ -1,0 +1,15 @@
+BaseConfigLib::initializeQualification
+├── given zero entries
+│   └── it should return remaining data unchanged
+├── given single entry
+│   ├── it should write qualificationData to storage for chainId
+│   └── it should return remaining calldata
+├── given multiple entries
+│   ├── it should write all entries to storage
+│   └── it should return remaining calldata
+├── given extra data after entries
+│   └── it should return extra data as remaining
+├── given ruleCount is zero
+│   └── it should revert with QualificationRulesNotSet
+└── given packedNodesLength is zero
+    └── it should revert with QualificationRulesNotSet

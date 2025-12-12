@@ -1,0 +1,9 @@
+BaseClaimPolicy::isTokenOutWhitelisted
+├── given not initialized
+│   └── it should return false
+├── given initialized with STORAGE mode
+│   ├── it should return true for whitelisted token
+│   ├── it should return false for non-whitelisted token
+│   └── it should return false for wrong chainId
+└── given multiple tokens
+    └── it should return correct result for each token

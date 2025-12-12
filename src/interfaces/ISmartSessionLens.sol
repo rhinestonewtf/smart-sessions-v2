@@ -83,9 +83,17 @@ interface ISmartSessionLens {
 
     /// @notice Check if a lockTag is enabled for an account
     /// @param account The account address
+    /// @param permissionId The permission ID associated with the lockTag
     /// @param lockTag The lock tag
     /// @return True if the lockTag is enabled
-    function isLockTagEnabled(address account, bytes12 lockTag) external view returns (bool);
+    function isLockTagEnabled(
+        address account,
+        PermissionId permissionId,
+        bytes12 lockTag
+    )
+        external
+        view
+        returns (bool);
 
     /*//////////////////////////////////////////////////////////////
                              ACTION POLICIES
@@ -95,13 +103,11 @@ interface ISmartSessionLens {
     /// @param account The account address
     /// @param permissionId The permission ID
     /// @param actionId The action ID
-    /// @param lockTag The associated lock tag
     /// @return Array of policy addresses
     function getActionPolicies(
         address account,
         PermissionId permissionId,
-        ActionId actionId,
-        bytes12 lockTag
+        ActionId actionId
     )
         external
         view
@@ -110,12 +116,10 @@ interface ISmartSessionLens {
     /// @notice Get all enabled actions for an account
     /// @param account The account address
     /// @param permissionId The permission ID
-    /// @param lockTag The associated lock tag
     /// @return Array of enabled action IDs as bytes32
     function getEnabledActions(
         address account,
-        PermissionId permissionId,
-        bytes12 lockTag
+        PermissionId permissionId
     )
         external
         view
@@ -125,14 +129,12 @@ interface ISmartSessionLens {
     /// @param account The account address
     /// @param permissionId The permission ID
     /// @param actionId The action ID
-    /// @param lockTag The associated lock tag
     /// @param policy The policy address to check
     /// @return True if the policy is enabled
     function isActionPolicyEnabled(
         address account,
         PermissionId permissionId,
         ActionId actionId,
-        bytes12 lockTag,
         address policy
     )
         external
@@ -143,13 +145,11 @@ interface ISmartSessionLens {
     /// @param account The account address
     /// @param permissionId The permission ID
     /// @param actionId The action ID
-    /// @param lockTag The associated lock tag
     /// @return True if the action ID is enabled
     function isActionIdEnabled(
         address account,
         PermissionId permissionId,
-        ActionId actionId,
-        bytes12 lockTag
+        ActionId actionId
     )
         external
         view

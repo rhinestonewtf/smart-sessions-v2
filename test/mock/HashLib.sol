@@ -104,9 +104,10 @@ library HashLib {
         pure
         returns (bytes32)
     {
-        return keccak256(
-            abi.encode(TYPEHASH_TARGET, recipient, tokenOutHash, targetChain, fillExpires)
-        );
+        return
+            keccak256(
+                abi.encode(TYPEHASH_TARGET, recipient, tokenOutHash, targetChain, fillExpires)
+            );
     }
 
     function hashMandate(

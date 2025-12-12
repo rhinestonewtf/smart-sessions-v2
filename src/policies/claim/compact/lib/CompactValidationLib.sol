@@ -9,7 +9,7 @@ import { BaseConfigLib, PolicyConfig } from "@policies/claim/base/lib/BaseConfig
 import { BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
 import { EIP712TypeHashLib } from "@compact-utils/types/EIP712TypeHashLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
-import { CompactConfigLib } from "@policies/claim/compact/lib/CompactConfigLib.sol";
+import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -26,7 +26,7 @@ import { MODE_SKIP, FIELD_TOKEN_IN } from "@policies/claim/base/types/BaseDataTy
 /// │                                                            │
 /// │  Input (calldata):                                         │
 /// │  ┌──────────────────────────────────────────────────────┐  │
-/// │  │  length (32 bytes)                                   │  │
+/// │  │  length (1 byte)                                     │  │
 /// │  │  Lock[]: [id (32) | amount (32)] × length            │  │
 /// │  │  id = [lockTag (96 high) | token (160 low)]          │  │
 /// │  └──────────────────────────────────────────────────────┘  │
@@ -56,6 +56,7 @@ library CompactValidationLib {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    using CalldataSliceLib for bytes;
     using BaseConfigLib for PolicyConfig;
     using BaseConfigLib for uint8;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
@@ -139,9 +140,9 @@ library CompactValidationLib {
         view
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
-        // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out array length
+        uint8 length;
+        (length, offset) = data.sliceUint8(offset);
 
         // Get whitelist (chainId=0 for catchall)
         uint256 effectiveChainId = mode.getEffectiveChainId(chainId);
@@ -154,17 +155,12 @@ library CompactValidationLib {
 
         // Create calldata pointer to array
         uint256[2][] calldata tokenIn;
-        assembly {
-            tokenIn.offset := add(data.offset, offset)
-            tokenIn.length := length
-        }
+        (tokenIn, offset) = data.sliceUint256PairArray(offset, length);
 
         // Validate each entry
-        for (uint256 i = 0; i < length; i++) {
-            // Reject if not in set
-            if (!tokenSet.contains(
-                    bytes32(tokenIn[i][0]) // packed token+lockTag
-                )) {
+        for (uint8 i = 0; i < length; i++) {
+            // Reject if not in set (packed token+lockTag)
+            if (!tokenSet.contains(bytes32(tokenIn[i][0]))) {
                 return (false, bytes32(0), 0);
             }
         }
@@ -172,7 +168,7 @@ library CompactValidationLib {
         // Compute hash
         tokenInHash = EIP712TypeHashLib.hashTokenIn(tokenIn);
 
-        return (true, tokenInHash, offset + (length * 64));
+        return (true, tokenInHash, offset);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -203,16 +199,13 @@ library CompactValidationLib {
         view
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
-        // Decode array length
-        uint256 length = uint256(bytes32(data[offset:offset + 32]));
-        offset += 32;
+        // Slice out array length
+        uint8 length;
+        (length, offset) = data.sliceUint8(offset);
 
         // Create calldata pointer
         uint256[2][] calldata tokenIn;
-        assembly {
-            tokenIn.offset := add(data.offset, offset)
-            tokenIn.length := length
-        }
+        (tokenIn, offset) = data.sliceUint256PairArray(offset, length);
 
         // Get sub-policy address
         address subPolicy = baseStorage.subPolicies[FIELD_TOKEN_IN];
@@ -220,13 +213,19 @@ library CompactValidationLib {
         // Call sub-policy
         bytes memory tokenInData = abi.encode(chainId, tokenIn);
         valid = I1271Policy(subPolicy)
-            .check1271SignedAction(configId, msg.sender, account, hash, tokenInData);
+            .check1271SignedAction({
+                id: configId,
+                requestSender: msg.sender,
+                account: account,
+                hash: hash,
+                signature: tokenInData
+            });
 
         if (!valid) return (false, bytes32(0), 0);
 
         // Compute hash
         tokenInHash = EIP712TypeHashLib.hashTokenIn(tokenIn);
 
-        return (true, tokenInHash, offset + (length * 64));
+        return (true, tokenInHash, offset);
     }
 }

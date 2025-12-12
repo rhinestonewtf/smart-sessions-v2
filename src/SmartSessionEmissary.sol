@@ -4,8 +4,6 @@ pragma solidity ^0.8.30;
 // Contracts
 import { Emissary as VanillaEmissary } from "@compact-utils/emissary/Emissary.sol";
 import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
-import { EIP712 } from "@solady/utils/EIP712.sol";
-import { ERC7579ValidatorBase } from "@modulekit/module-bases/ERC7579ValidatorBase.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
@@ -23,7 +21,6 @@ import {
 
 // Types
 import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
-import { PackedUserOperation } from "@modulekit/external/ERC4337.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 /// @title Smart Session Emissary
@@ -187,43 +184,20 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     /// @param digest The hash of the user operation
     /// @param emissaryData Data containing mode and mode-specific execution data
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address sponsor,
         bytes32 digest,
         bytes calldata emissaryData,
-        Types.Operation calldata executions,
-        bytes12 lockTag
+        Types.Operation calldata executions
     )
         public
         onlyIntentExecutor
         returns (bytes4)
     {
-        // Extract mode from first byte
-        EmissaryMode mode = emissaryData.decodeEmissaryMode();
-
-        // Mode-based dispatch for execution verification
-        if (mode == EMISSARY_VANILLA) {
-            // Validate using vanilla emissary signature validation
-            return _validateSignature({
-                sponsor: sponsor, digest: digest, emissaryData: emissaryData, lockTag: lockTag
-            })
-                ? this.verifyExecution.selector
-                : INVALID_SIGNATURE;
-        } else if (mode == EMISSARY_SMART_SESSION) {
-            // Validate using SmartSession verification
-            return _verifyExecutionSmartSession({
-                account: sponsor,
-                digest: digest,
-                emissaryData: emissaryData[1:],
-                executions: executions,
-                lockTag: lockTag
-            });
-        }
-
-        // Default case for unsupported modes
-        return INVALID_SIGNATURE;
+        return _verifyExecutionSmartSession({
+            account: sponsor, digest: digest, emissaryData: emissaryData[1:], executions: executions
+        });
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -261,22 +235,23 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
 
     /// @notice Delegates unknown function calls to the LENS contract
     /// @dev Enables view functions and nonce management without bloating main contract bytecode
+    // solhint-disable-next-line no-complex-fallback
     fallback() external {
         address lens = LENS;
         assembly {
             // Copy calldata to memory
-            calldatacopy(0, 0, calldatasize())
+            calldatacopy(0x00, 0x00, calldatasize())
 
             // Delegatecall to lens
-            let result := delegatecall(gas(), lens, 0, calldatasize(), 0, 0)
+            let result := delegatecall(gas(), lens, 0x00, calldatasize(), 0x00, 0x00)
 
             // Copy returndata to memory
-            returndatacopy(0, 0, returndatasize())
+            returndatacopy(0x00, 0x00, returndatasize())
 
             // Return or revert based on result
             switch result
-            case 0 { revert(0, returndatasize()) }
-            default { return(0, returndatasize()) }
+            case 0 { revert(0x00, returndatasize()) }
+            default { return(0x00, returndatasize()) }
         }
     }
 }

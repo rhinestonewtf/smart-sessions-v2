@@ -3,13 +3,12 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IEmissary } from "@compact-utils/interfaces/IEmissary.sol";
-import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
 
 // Types
 import {
     SmartSessionEmissaryConfig,
-    EmissaryConfig,
-    SmartSessionEmissaryEnable
+    SmartSessionEmissaryEnable,
+    SmartSessionEmissaryDisable
 } from "@types/DataTypes.sol";
 import { PermissionId } from "@smartsessions/DataTypes.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
@@ -69,6 +68,18 @@ interface ISmartSessionEmissary is IEmissary {
     )
         external;
 
+    /// @notice Removes a Smart Session Emissary configuration for a specific account
+    /// @param account The address of the account for which the configuration is being removed
+    /// @param config The Smart Session Emissary configuration to be removed
+    /// @param disableData The disable data containing the allocatorSignature, user signature,
+    ///                    disable session data, and expiration time
+    function removeConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryDisable calldata disableData
+    )
+        external;
+
     /*//////////////////////////////////////////////////////////////
                                  VERIFY
     //////////////////////////////////////////////////////////////*/
@@ -81,14 +92,12 @@ interface ISmartSessionEmissary is IEmissary {
     /// @param hash The hash of the user operation
     /// @param data Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address account,
         bytes32 hash,
         bytes calldata data,
-        Types.Operation calldata executions,
-        bytes12 lockTag
+        Types.Operation calldata executions
     )
         external
         returns (bytes4);

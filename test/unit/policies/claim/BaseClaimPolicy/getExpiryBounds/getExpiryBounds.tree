@@ -1,0 +1,6 @@
+BaseClaimPolicy::getExpiryBounds
+├── given expiry is configured
+│   ├── it should return correct minExpiry
+│   └── it should return correct maxExpiry
+└── given expiry is not configured
+    └── it should return zeros

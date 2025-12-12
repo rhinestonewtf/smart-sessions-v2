@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Interfaces
+import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
+import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
+
 // Libraries
 import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/BaseStorageLib.sol";
+import { CalldataSliceLib } from "@policies/claim/base/lib/CalldataSliceLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
@@ -29,6 +34,7 @@ import {
     MASK_MANDATE_CHECKS,
     FIELD_RECIPIENT_IS_SPONSOR
 } from "@policies/claim/base/types/BaseDataTypes.sol";
+import { ConfigId } from "@smartsessions/DataTypes.sol";
 
 // forgefmt: disable-start
 /// @title Base Config Library
@@ -78,7 +84,7 @@ import {
 │  └────────────────────────────────────────────────────────┘ │
 │                                                             │
 │  Different config = different layout:                       │
-│  modeConfig = 0x00000141 (AR=01, RC=01, TO=01)             │
+│  modeConfig = 0x00000141 (AR=01, RC=01, TO=01)              │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │  [0:4]     modeConfig (0x00000141)                     │ │
 │  │  [4:...]   arbiter config    ← AR=01, present          │ │
@@ -99,9 +105,9 @@ import {
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │                   Full Calldata                     │    │
-│  │  ┌────────┬────────┬────────┬────────┬────────┐    │    │
-│  │  │ config │ arbiter│ expiry │tokenIn │recipnt │    │    │
-│  │  └────────┴────────┴────────┴────────┴────────┘    │    │
+│  │  ┌────────┬────────┬────────┬────────┬────────┐     │    │
+│  │  │ config │ arbiter│ expiry │tokenIn │recipnt │     │    │
+│  │  └────────┴────────┴────────┴────────┴────────┘     │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                         │                                   │
 │                         ▼                                   │
@@ -167,6 +173,7 @@ library BaseConfigLib {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
+    using CalldataSliceLib for bytes;
     using BaseStorageLib for *;
     using BaseConfigLib for *;
     using EnumerableSetLib for EnumerableSetLib.AddressSet;
@@ -178,6 +185,15 @@ library BaseConfigLib {
 
     /// @notice Thrown when no qualification rules are set but qualification check is required
     error QualificationRulesNotSet();
+
+    /// @notice Thrown when an invalid mode is provided
+    error InvalidMode();
+
+    /// @notice Thrown when min bound exceeds max bound
+    error InvalidBounds();
+
+    /// @notice Thrown when subpolicy address doesn't implement I1271Policy
+    error InvalidSubPolicy();
 
     /*//////////////////////////////////////////////////////////////
                              MODE EXTRACTION
@@ -418,13 +434,13 @@ library BaseConfigLib {
                          ARBITER INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][arbiters...]
+    Layout: [count: 1 byte][arbiters...]
     Entry:  [arbiter: 20 bytes] each
 
     ┌────────────────────────────────────────────────────────────┐
     │  Arbiter Config                                            │
     │  ┌──────────────────────────────────────────────────────┐  │
-    │  │  count (uint256) - 32 bytes                          │  │
+    │  │  count (uint8) - 1 byte                              │  │
     │  └──────────────────────────────────────────────────────┘  │
     │  ┌──────────────────────────────────────────────────────┐  │
     │  │  arbiter[0] (20 bytes)                               │  │
@@ -435,7 +451,7 @@ library BaseConfigLib {
     │  └──────────────────────────────────────────────────────┘  │
     └────────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 20) bytes
+    Total size: 1 + (count × 20) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -451,18 +467,18 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Read count
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
-        // Read each arbiter address
-        for (uint256 i = 0; i < count; i++) {
-            // Store arbiter
-            $.arbiterConfig.add(address(bytes20(initData[offset:offset + 20])));
-            // Advance offset
-            offset += 20;
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
+        // Loop through each arbiter
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out arbiter address
+            address arbiter;
+            (arbiter, offset) = initData.sliceAddress(offset);
+            // Write directly to storage
+            $.arbiterConfig.add(arbiter);
         }
-        // Return remaining data
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 
@@ -493,15 +509,24 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        $.expiryConfig = uint256(bytes32(initData[0:32]));
-        remaining = initData[32:];
+        // Slice out packed expiry (32 bytes containing min and max)
+        (uint256 packed, uint256 offset) = initData.sliceUint256(0);
+
+        // Validate min <= max
+        (uint128 min, uint128 max) = unpackUint128(packed);
+        require(min <= max, InvalidBounds());
+
+        // Write directly to storage
+        $.expiryConfig = packed;
+        // Return remaining calldata
+        remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
                            RECIPIENT INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [targetChainId: 32 bytes][recipient: 20 bytes] = 52 bytes each
 
     The recipient config maps target chain IDs to recipient addresses.
@@ -520,7 +545,7 @@ library BaseConfigLib {
     ┌────────────────────────────────────────────────────────┐
     │  Recipient Config                                      │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (52 bytes):                             │    │
@@ -531,7 +556,7 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 52) bytes
+    Total size: 1 + (count × 52) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -546,21 +571,20 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Read count
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
-        // Read each recipient entry
-        for (uint256 i = 0; i < count; i++) {
-            // Read chainId and recipient address
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            address recipient = address(bytes20(initData[offset + 32:offset + 52]));
-            // Store recipient for chainId
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
+        // Loop through each recipient entry
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out chainId and recipient
+            uint256 chainId;
+            address recipient;
+            (chainId, offset) = initData.sliceUint256(offset);
+            (recipient, offset) = initData.sliceAddress(offset);
+            // Write directly to storage
             $.recipientConfig[chainId] = recipient;
-            // Advance offset
-            offset += 52;
         }
-        // Return remaining data
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 
@@ -568,13 +592,13 @@ library BaseConfigLib {
                       FILL EXPIRY INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [targetChainId: 32][minFillExpiry: 16][maxFillExpiry: 16] = 64 bytes
 
     ┌────────────────────────────────────────────────────────┐
     │  FillExpiry Config                                     │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (64 bytes):                             │    │
@@ -585,7 +609,7 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 64) bytes
+    Total size: 1 + (count × 64) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -600,19 +624,25 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Read count
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
-        // Read each fill expiry entry
-        for (uint256 i = 0; i < count; i++) {
-            // Read chainId, minFillExpiry, maxFillExpiry
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            $.fillExpiryConfig[chainId] = uint256(bytes32(initData[offset + 32:offset + 64]));
-            // Advance offset
-            offset += 64;
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
+        // Loop through each fill expiry entry
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out chainId and packed min/max
+            uint256 chainId;
+            uint256 packed;
+            (chainId, offset) = initData.sliceUint256(offset);
+            (packed, offset) = initData.sliceUint256(offset);
+
+            // Validate min <= max
+            (uint128 min, uint128 max) = unpackUint128(packed);
+            require(min <= max, InvalidBounds());
+
+            // Write directly to storage
+            $.fillExpiryConfig[chainId] = packed;
         }
-        // Return remaining data
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 
@@ -620,13 +650,13 @@ library BaseConfigLib {
                        TOKEN OUT INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [targetChainId: 32 bytes][token: 20 bytes] = 52 bytes each
 
     ┌────────────────────────────────────────────────────────┐
     │  TokenOut Config                                       │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (52 bytes):                             │    │
@@ -637,7 +667,7 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 52) bytes
+    Total size: 1 + (count × 52) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -652,21 +682,20 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Read count
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
-        // Read each token out entry
-        for (uint256 i = 0; i < count; i++) {
-            // Read chainId and token address
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            address token = address(bytes20(initData[offset + 32:offset + 52]));
-            // Store token for chainId
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
+        // Loop through each token out entry
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out chainId and token
+            uint256 chainId;
+            address token;
+            (chainId, offset) = initData.sliceUint256(offset);
+            (token, offset) = initData.sliceAddress(offset);
+            // Write directly to storage
             $.tokenOutSet[chainId].add(token);
-            // Advance offset
-            offset += 52;
         }
-        // Return remaining data
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 
@@ -674,13 +703,13 @@ library BaseConfigLib {
                        ORIGIN OPS INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [chainId: 32 bytes][requireOriginOps: 1 byte] = 33 bytes each
 
     ┌────────────────────────────────────────────────────────┐
     │  OriginOps Config                                      │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (33 bytes):                             │    │
@@ -691,7 +720,7 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 33) bytes
+    Total size: 1 + (count × 33) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -706,21 +735,20 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Read count
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
-        // Read each origin ops entry
-        for (uint256 i = 0; i < count; i++) {
-            // Read chainId and required flag
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            bool required = uint8(initData[offset + 32]) != 0;
-            // Store origin ops requirement for chainId
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
+        // Loop through each origin ops entry
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out chainId and required flag
+            uint256 chainId;
+            bool required;
+            (chainId, offset) = initData.sliceUint256(offset);
+            (required, offset) = initData.sliceBool(offset);
+            // Write directly to storage
             $.originOpsConfig[chainId] = required;
-            // Advance offset
-            offset += 33;
         }
-        // Return remaining data
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 
@@ -728,13 +756,13 @@ library BaseConfigLib {
                         DEST OPS INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry:  [targetChainId: 32 bytes][requireDestOps: 1 byte] = 33 bytes each
 
     ┌────────────────────────────────────────────────────────┐
     │  DestOps Config                                        │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (33 bytes):                             │    │
@@ -745,7 +773,7 @@ library BaseConfigLib {
     │  ... repeat for count entries ...                      │
     └────────────────────────────────────────────────────────┘
 
-    Total size: 32 + (count × 33) bytes
+    Total size: 1 + (count × 33) bytes
 
     //////////////////////////////////////////////////////////////*/
 
@@ -760,21 +788,20 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Read count
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
-        // Read each dest ops entry
-        for (uint256 i = 0; i < count; i++) {
-            // Read chainId and required flag
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            bool required = uint8(initData[offset + 32]) != 0;
-            // Store dest ops requirement for chainId
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
+
+        // Loop through each dest ops entry
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out chainId and required flag
+            uint256 chainId;
+            bool required;
+            (chainId, offset) = initData.sliceUint256(offset);
+            (required, offset) = initData.sliceBool(offset);
+            // Write directly to storage
             $.destOpsConfig[chainId] = required;
-            // Advance offset
-            offset += 33;
         }
-        // Return remaining data
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 
@@ -782,10 +809,10 @@ library BaseConfigLib {
                      QUALIFICATION INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry (variable size):
       [chainId: 32][arbiter: 20][useArbiterHash: 1][rootNodeIndex: 1]
-      [ruleCount: 32][rules...][packedNodesCount: 32][packedNodes...]
+      [ruleCount: 1][rules...][packedNodesCount: 1][packedNodes...]
 
     Rule (42 bytes each):
       [condition: 1][offset: 8][length: 1][ref: 32]
@@ -796,7 +823,7 @@ library BaseConfigLib {
     ┌────────────────────────────────────────────────────────┐
     │  Qualification Config                                  │
     │  ┌────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                    │    │
+    │  │  count (uint8) - 1 byte                        │    │
     │  └────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (variable):                             │    │
@@ -804,11 +831,11 @@ library BaseConfigLib {
     │  │  │ chainId (32) | arbiter (20) |           │   │    │
     │  │  │ useArbiterHash (1) | rootNodeIndex (1)  │   │    │
     │  │  ├─────────────────────────────────────────┤   │    │
-    │  │  │ ruleCount (32)                          │   │    │
+    │  │  │ ruleCount (1)                           │   │    │
     │  │  │ Rule: [cond(1)|off(8)|len(1)|ref(32)]   │   │    │
     │  │  │ ... more rules ...                      │   │    │
     │  │  ├─────────────────────────────────────────┤   │    │
-    │  │  │ packedNodesCount (32)                   │   │    │
+    │  │  │ packedNodesCount (1)                    │   │    │
     │  │  │ PackedNode: [node (32)]                 │   │    │
     │  │  │ ... more nodes ...                      │   │    │
     │  │  └─────────────────────────────────────────┘   │    │
@@ -829,53 +856,54 @@ library BaseConfigLib {
         internal
         returns (bytes calldata remaining)
     {
-        // Read count
-        uint256 count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
-        // Read each qualification entry
-        for (uint256 j = 0; j < count; j++) {
-            // Decode chainId (32 bytes)
-            uint256 chainId = uint256(bytes32(initData[offset:offset + 32]));
-            offset += 32;
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
 
-            // Decode arbiter address (20 bytes)
-            address arbiter = address(bytes20(initData[offset:offset + 20]));
-            offset += 20;
+        // Loop through each qualification entry
+        for (uint8 j = 0; j < count; j++) {
+            // Slice out header fields
+            uint256 chainId;
+            address arbiter;
+            bool useArbiterHash;
+            uint8 rootNodeIndex;
+            (chainId, offset) = initData.sliceUint256(offset);
+            (arbiter, offset) = initData.sliceAddress(offset);
+            (useArbiterHash, offset) = initData.sliceBool(offset);
+            (rootNodeIndex, offset) = initData.sliceUint8(offset);
 
-            // Decode useArbiterHash flag (1 byte)
-            bool useArbiterHash = uint8(initData[offset]) != 0;
-            offset += 1;
-
-            // Decode root node index (1 byte)
-            uint8 rootNodeIndex = uint8(initData[offset]);
-            offset += 1;
-
-            // Decode rule count (32 bytes)
-            uint256 ruleCount = uint256(bytes32(initData[offset:offset + 32]));
-            offset += 32;
+            // Slice out rule count
+            uint8 ruleCount;
+            (ruleCount, offset) = initData.sliceUint8(offset);
 
             // Decode each rule (42 bytes each)
             ParamRule[] memory paramRules = new ParamRule[](ruleCount);
-            for (uint256 i = 0; i < ruleCount; i++) {
+            for (uint8 i = 0; i < ruleCount; i++) {
+                // Slice out rule fields
+                uint8 condition;
+                uint64 ruleOffset;
+                uint8 length;
+                bytes32 ref;
+                (condition, offset) = initData.sliceUint8(offset);
+                (ruleOffset, offset) = initData.sliceUint64(offset);
+                (length, offset) = initData.sliceUint8(offset);
+                (ref, offset) = initData.sliceBytes32(offset);
+                // Build rule struct
                 paramRules[i] = ParamRule({
-                    condition: ParamCondition(uint8(initData[offset])),
-                    offset: uint64(bytes8(initData[offset + 1:offset + 9])),
-                    length: uint8(initData[offset + 9]),
-                    ref: bytes32(initData[offset + 10:offset + 42])
+                    condition: ParamCondition(condition),
+                    offset: ruleOffset,
+                    length: length,
+                    ref: ref
                 });
-                offset += 42;
             }
 
-            // Decode packed nodes count (32 bytes)
-            uint256 packedNodesLength = uint256(bytes32(initData[offset:offset + 32]));
-            offset += 32;
+            // Slice out packed nodes count
+            uint8 packedNodesLength;
+            (packedNodesLength, offset) = initData.sliceUint8(offset);
 
             // Decode each packed node (32 bytes each)
             uint256[] memory packedNodes = new uint256[](packedNodesLength);
-            for (uint256 i = 0; i < packedNodesLength; i++) {
-                packedNodes[i] = uint256(bytes32(initData[offset:offset + 32]));
-                offset += 32;
+            for (uint8 i = 0; i < packedNodesLength; i++) {
+                (packedNodes[i], offset) = initData.sliceUint256(offset);
             }
 
             // Make sure there are rules defined
@@ -889,22 +917,22 @@ library BaseConfigLib {
                 })
             });
         }
-
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 
     /*//////////////////////////////////////////////////////////////
-                      SUB-POLICIES INITIALIZATION
+                        SUB-POLICIES INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [count: 32 bytes][entries...]
+    Layout: [count: 1 byte][entries...]
     Entry (variable size):
-      [fieldId: 1][policyAddress: 20][initDataLength: 32][initData: variable]
+        [fieldId: 1][policyAddress: 20][initDataLength: 32][initData: variable]
 
     ┌────────────────────────────────────────────────────────────┐
     │  SubPolicy Config                                          │
     │  ┌────────────────────────────────────────────────────┐    │
-    │  │  count (uint256) - 32 bytes                        │    │
+    │  │  count (uint8) - 1 byte                            │    │
     │  └────────────────────────────────────────────────────┘    │
     │  ┌────────────────────────────────────────────────────┐    │
     │  │  Entry (variable):                                 │    │
@@ -921,66 +949,57 @@ library BaseConfigLib {
 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Decodes sub-policy configs and writes addresses to storage
-    /// @dev Returns extracted data for external initializer calls.
-    ///      We can't avoid memory here since we need to call external contracts.
+    /// @notice Decodes sub-policy configs, writes addresses to storage, and initializes each
+    /// @dev Reads directly from calldata and calls sub-policies in loop - no memory allocation
     /// @param $ Storage pointer to write sub-policy addresses to
     /// @param initData Calldata starting with sub-policy config
+    /// @param modeConfig The policy configuration for mode validation
+    /// @param account The account being configured
+    /// @param configId The configuration ID
     /// @return remaining Remaining calldata after all sub-policy configs
-    /// @return count Number of sub-policies
-    /// @return fieldIds Array of field IDs for each sub-policy
-    /// @return policyAddresses Array of sub-policy contract addresses
-    /// @return initDatas Array of init data for each sub-policy
     function initializeSubPolicies(
         BasePolicyStorage storage $,
-        bytes calldata initData
+        bytes calldata initData,
+        PolicyConfig modeConfig,
+        address account,
+        ConfigId configId
     )
         internal
-        returns (
-            bytes calldata remaining,
-            uint256 count,
-            uint8[] memory fieldIds,
-            address[] memory policyAddresses,
-            bytes[] memory initDatas
-        )
+        returns (bytes calldata remaining)
     {
-        // Read count
-        count = uint256(bytes32(initData[0:32]));
-        // Initial offset after count
-        uint256 offset = 32;
+        // Slice out count and initialize offset
+        (uint8 count, uint256 offset) = initData.sliceUint8(0);
 
-        // Prepare arrays
-        fieldIds = new uint8[](count);
-        policyAddresses = new address[](count);
-        initDatas = new bytes[](count);
+        // Loop through each sub-policy entry
+        for (uint8 i = 0; i < count; i++) {
+            // Slice out fieldId
+            uint8 fieldId;
+            (fieldId, offset) = initData.sliceUint8(offset);
 
-        // Read each sub-policy entry
-        for (uint256 i = 0; i < count; i++) {
-            // Decode fieldId (1 byte)
-            uint8 fieldId = uint8(initData[offset]);
-            offset += 1;
+            // Validate mode is SUBPOLICY
+            require(modeConfig.getFieldMode(fieldId) == MODE_CHECK_SUBPOLICY, InvalidMode());
 
-            // Decode policy address (20 bytes)
-            address policyAddress = address(bytes20(initData[offset:offset + 20]));
-            offset += 20;
+            // Slice out policy address
+            address policyAddress;
+            (policyAddress, offset) = initData.sliceAddress(offset);
 
-            // Decode init data length (32 bytes)
-            uint256 initDataLength = uint256(bytes32(initData[offset:offset + 32]));
-            offset += 32;
-
-            // Decode init data (variable length)
-            bytes memory policyInitData = initData[offset:offset + initDataLength];
-            offset += initDataLength;
+            // Validate subpolicy implements I1271Policy
+            require(
+                IERC165(policyAddress).supportsInterface(type(I1271Policy).interfaceId),
+                InvalidSubPolicy()
+            );
 
             // Write policy address to storage
             $.subPolicies[fieldId] = policyAddress;
 
-            // Store for external calls
-            fieldIds[i] = fieldId;
-            policyAddresses[i] = policyAddress;
-            initDatas[i] = policyInitData;
+            // Slice out init data with length prefix
+            bytes calldata policyInitData;
+            (policyInitData, offset) = initData.sliceBytesWithLength(offset);
+
+            // Initialize sub-policy directly with calldata slice
+            I1271Policy(policyAddress).initializeWithMultiplexer(account, configId, policyInitData);
         }
-        // Return remaining data
+        // Return remaining calldata
         remaining = initData[offset:];
     }
 }

@@ -1,0 +1,12 @@
+CalldataSliceLib::sliceUint128
+├── given zero value
+│   ├── it should return 0
+│   └── it should return offset + 16
+├── given max value
+│   ├── it should return type(uint128).max
+│   └── it should return offset + 16
+├── given value at offset
+│   ├── it should read from correct position
+│   └── it should return offset + 16
+└── given trailing data after uint128
+    └── it should not include trailing bytes in result

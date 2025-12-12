@@ -1,0 +1,13 @@
+SmartSessionLens::getSessionDigest
+├── when called with valid inputs
+│   └── it returns non-zero digest
+├── when called with different expires
+│   └── it returns different digests
+├── when called with different lock tags
+│   └── it returns different digests
+├── when called with different accounts
+│   └── it returns different digests
+├── when called with same inputs
+│   └── it returns same digest
+└── when nonce is revoked
+    └── it returns different digest

@@ -1,0 +1,7 @@
+BaseClaimPolicy::getRecipient
+├── given recipient is configured for chainId
+│   └── it should return correct recipient
+├── given recipient is not configured for chainId
+│   └── it should return address(0)
+└── given different chainIds
+    └── it should return correct recipient per chainId

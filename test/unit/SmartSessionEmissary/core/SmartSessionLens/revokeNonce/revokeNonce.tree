@@ -1,0 +1,9 @@
+SmartSessionLens::revokeNonce
+├── when called
+│   ├── it increments the nonce
+│   ├── it emits NonceIterated event
+│   ├── it works for any account
+│   └── it works with no lock tag
+└── when called multiple times
+    ├── it increments each time
+    └── it is independent per lock tag

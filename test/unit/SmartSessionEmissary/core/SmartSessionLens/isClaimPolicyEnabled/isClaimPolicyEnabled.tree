@@ -1,0 +1,9 @@
+SmartSessionLens::isClaimPolicyEnabled
+├── when no session exists
+│   └── it returns false
+├── when checking different policy
+│   └── it returns false
+├── when checking different lock tag
+│   └── it returns false
+└── when policy is enabled
+    └── it returns true

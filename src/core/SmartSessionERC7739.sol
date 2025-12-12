@@ -136,7 +136,7 @@ abstract contract SmartSessionERC7739 {
             /// @solidity memory-safe-assembly
             assembly {
                 t := mload(0x40) // Grab the free memory pointer.
-                    // Skip 2 words for the `typedDataSignTypehash` and `contents` struct hash.
+                // Skip 2 words for the `typedDataSignTypehash` and `contents` struct hash.
                 mstore(add(t, 0x40), keccak256(add(name, 0x20), mload(name)))
                 mstore(add(t, 0x60), keccak256(add(version, 0x20), mload(version)))
                 mstore(add(t, 0x80), chainId)
@@ -148,17 +148,17 @@ abstract contract SmartSessionERC7739 {
         /// @solidity memory-safe-assembly
         assembly {
             let m := mload(0x40) // Cache the free memory pointer.
-                // `c` is `contentsDescription.length`, which is stored in the last 2 bytes of the
-                // signature.
+            // `c` is `contentsDescription.length`, which is stored in the last 2 bytes of the
+            // signature.
             let c := shr(240, calldataload(add(signature.offset, sub(signature.length, 2))))
             for { } 1 { } {
                 let l := add(0x42, c) // Total length of appended data (32 + 32 + c + 2).
                 let o := add(signature.offset, sub(signature.length, l)) // Offset of appended data.
                 mstore(0x00, 0x1901) // Store the "\x19\x01" prefix.
                 calldatacopy(0x20, o, 0x40) // Copy the `APP_DOMAIN_SEPARATOR` and `contents` struct
-                    // hash.
-                    // Only use the `TypedDataSign` workflow.
-                    // `TypedDataSign({ContentsName} contents,string name,...){ContentsType}`.
+                // hash.
+                // Only use the `TypedDataSign` workflow.
+                // `TypedDataSign({ContentsName} contents,string name,...){ContentsType}`.
                 mstore(m, "TypedDataSign(") // Store the start of `TypedDataSign`'s type encoding.
                 let p := add(m, 0x0e) // Advance 14 bytes to skip "TypedDataSign(".
                 calldatacopy(p, add(o, 0x40), c) // Copy `contentsName`, optimistically.
@@ -170,7 +170,9 @@ abstract contract SmartSessionERC7739 {
                     let e := 0 // Length of `contentsName` in explicit mode.
                     for { let q := sub(add(p, c), 1) } 1 { } {
                         e := add(e, 1) // Scan backwards until we encounter a ')'.
-                        if iszero(gt(lt(e, c), eq(byte(0, mload(sub(q, e))), 41))) { break }
+                        if iszero(gt(lt(e, c), eq(byte(0, mload(sub(q, e))), 41))) {
+                            break
+                        }
                     }
                     c := sub(c, e) // Truncate `contentsDescription` to `contentsType`.
                     calldatacopy(p, add(add(o, 0x40), c), e) // Copy `contentsName`.
@@ -178,8 +180,8 @@ abstract contract SmartSessionERC7739 {
                 }
                 // `d & 1 == 1` means that `contentsName` is invalid.
                 let d := shr(byte(0, mload(p)), 0x7fffffe000000000000010000000000) // Starts with
-                    // `[a-z(]`.
-                    // Advance `p` until we encounter '('.
+                // `[a-z(]`.
+                // Advance `p` until we encounter '('.
                 for { } iszero(eq(byte(0, mload(p)), 40)) { p := add(p, 1) } {
                     d := or(shr(byte(0, mload(p)), 0x120100000001), d) // Has a byte in ", )\x00".
                 }
@@ -188,14 +190,14 @@ abstract contract SmartSessionERC7739 {
                 mstore(add(p, 0x3c), " verifyingContract,bytes32 salt)")
                 p := add(p, 0x5c)
                 calldatacopy(p, add(o, 0x40), c) // Copy `contentsType`.
-                    // Fill in the missing fields of the `TypedDataSign`.
+                // Fill in the missing fields of the `TypedDataSign`.
                 calldatacopy(t, o, 0x40) // Copy the `contents` struct hash to `add(t, 0x20)`.
                 mstore(t, keccak256(m, sub(add(p, c), m))) // Store `typedDataSignTypehash`.
-                    // The "\x19\x01" prefix is already at 0x00.
-                    // `APP_DOMAIN_SEPARATOR` is already at 0x20.
+                // The "\x19\x01" prefix is already at 0x00.
+                // `APP_DOMAIN_SEPARATOR` is already at 0x20.
                 appDomainSeparator := mload(0x20) // Load the `APP_DOMAIN_SEPARATOR`.
                 mstore(0x40, keccak256(t, 0xe0)) // `hashStruct(typedDataSign)`.
-                    // Compute the final hash, corrupted if `contentsName` is invalid.
+                // Compute the final hash, corrupted if `contentsName` is invalid.
                 hash := keccak256(0x1e, add(0x42, and(1, d)))
                 signature.length := sub(signature.length, l) // Truncate the signature.
                 break
