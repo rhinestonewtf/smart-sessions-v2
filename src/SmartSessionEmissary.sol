@@ -93,6 +93,10 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         view
         returns (bytes4 result)
     {
+        // ERC-7739 support detection
+        if (hash == 0x7739773977397739773977397739773977397739773977397739773977397739) {
+            return bytes4(0x77390001);
+        }
         // disallow that session can be authorized by other sessions
         if (sender == address(this)) return INVALID_SIGNATURE;
 
@@ -215,8 +219,8 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         override
         returns (string memory name, string memory version)
     {
-        name = "SSE";
-        version = "0.0.1";
+        name = "SmartSessionEmissary";
+        version = "1.0.0";
     }
 
     /// @notice Returns the EIP-712 typed data hash for a given hash without chain ID
