@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
+import { ReentrancyGuardTransient } from "solady/utils/ReentrancyGuardTransient.sol";
 
 // Libraries
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
@@ -33,7 +34,11 @@ import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 /// @title SmartSessionMixin
 /// @notice Mixin providing SmartSession functionality for emissaries
 /// @dev Bridges lockTag-based emissary system with permissionId-based SmartSession system
-abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 {
+abstract contract SmartSessionMixin is
+    SmartSessionManager,
+    SmartSessionERC7739,
+    ReentrancyGuardTransient
+{
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -64,6 +69,7 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
         SmartSessionEmissaryEnable calldata enableData
     )
         external
+        nonReentrant
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
@@ -438,4 +444,15 @@ abstract contract SmartSessionMixin is SmartSessionManager, SmartSessionERC7739 
 
     /// @notice Returns the typed data hash for a given hash
     function _getTypedDataHashSansChainId(bytes32 hash) internal view virtual returns (bytes32);
+
+    /// @notice Always use transient reentrancy guard only on mainnet
+    function _useTransientReentrancyGuardOnlyOnMainnet()
+        internal
+        view
+        virtual
+        override
+        returns (bool)
+    {
+        return false;
+    }
 }
