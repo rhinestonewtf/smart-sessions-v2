@@ -3,18 +3,14 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
+import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
 /// @title Mock Time-Based Policy
 /// @notice Example policy that validates signatures based on time windows and signers
-/// @dev This policy demonstrates a realistic use case for 1271 validation
 contract MockTimeBasedPolicy is I1271Policy {
-    /*//////////////////////////////////////////////////////////////
-                                 TYPES
-    //////////////////////////////////////////////////////////////*/
-
     struct PolicyConfig {
         address allowedSigner;
         uint256 validAfter;
@@ -22,30 +18,14 @@ contract MockTimeBasedPolicy is I1271Policy {
         uint256 maxAmount;
     }
 
-    /*//////////////////////////////////////////////////////////////
-                                 STATE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Stores policy configurations per configId and account
     mapping(ConfigId => mapping(address => PolicyConfig)) public configs;
-
-    /*//////////////////////////////////////////////////////////////
-                                ERRORS
-    //////////////////////////////////////////////////////////////*/
 
     error NotInitialized();
     error SignerNotAllowed();
     error OutsideTimeWindow();
     error AmountTooHigh();
 
-    /*//////////////////////////////////////////////////////////////
-                              FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
     /// @notice Initialize policy with time window and signer constraints
-    /// @param account The account this policy is being initialized for
-    /// @param configId The configuration ID for this policy instance
-    /// @param initData Encoded (allowedSigner, validAfter, validUntil, maxAmount)
     function initializeWithMultiplexer(
         address account,
         ConfigId configId,
@@ -57,9 +37,6 @@ contract MockTimeBasedPolicy is I1271Policy {
         (address allowedSigner, uint256 validAfter, uint256 validUntil, uint256 maxAmount) =
             abi.decode(initData, (address, uint256, uint256, uint256));
 
-        require(validUntil > validAfter, "Invalid time window");
-        require(allowedSigner != address(0), "Invalid signer");
-
         configs[configId][account] = PolicyConfig({
             allowedSigner: allowedSigner,
             validAfter: validAfter,
@@ -69,10 +46,6 @@ contract MockTimeBasedPolicy is I1271Policy {
     }
 
     /// @notice Validate signature based on time window and signer
-    /// @param configId The configuration ID to use
-    /// @param account The account that enabled this policy
-    /// @param data Encoded validation data: (signer, amount, timestamp)
-    /// @return True if validation passes, reverts otherwise
     function check1271SignedAction(
         ConfigId configId,
         address, // multiplexer
@@ -108,7 +81,8 @@ contract MockTimeBasedPolicy is I1271Policy {
     }
 
     /// @notice ERC-165 support
-    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
-        return interfaceId == type(I1271Policy).interfaceId;
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return
+            interfaceId == type(IERC165).interfaceId || interfaceId == type(I1271Policy).interfaceId;
     }
 }
