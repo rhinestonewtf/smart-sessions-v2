@@ -37,7 +37,7 @@ bytes32 constant LOCKTAG_DATA_TYPEHASH =
 ///          bool permitGenericPolicy
 ///      )
 bytes32 constant SIGNED_PERMISSIONS_TYPEHASH =
-    0x431d715aef39b0e3643a2df4b179e2a79a9466113b04af0563bc8aa91ebe5d01;
+    0xa6d649a3e6014c0f8cf1e42d360388616413c96247ed3e994eeff9e3ac2af36f;
 
 /// @dev SignedSession(
 ///          address account,                              // User account address
@@ -69,7 +69,7 @@ bytes32 constant SIGNED_PERMISSIONS_TYPEHASH =
 ///          address smartSessionEmissary                  // Smart Session Emissary address
 ///      )
 bytes32 constant SESSION_TYPEHASH =
-    0xb37443a5adb1cbcb209c378462e28884777c8cfc8a3077a32a585002125f66a0;
+    0x984917e689987af96289e12c5f5e934fcdf1df4186108f69ff7e8c3df950ce33;
 
 /// @dev ChainSession(uint64 chainId, SignedSession session)
 bytes32 constant CHAIN_SESSION_TYPEHASH =

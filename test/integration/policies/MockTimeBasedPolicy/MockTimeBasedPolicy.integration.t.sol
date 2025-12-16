@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 // Dependencies
 import {
-    Policy1271IntegrationTest
+    Policy1271_Integration_Test
 } from "@test/integration/policies/1271PolicyBase.integration.t.sol";
 
 // Contracts
@@ -17,7 +17,7 @@ import { Vm } from "forge-std/Vm.sol";
 /// @title MockTimeBasedPolicy Integration Test
 /// @dev A mock test suite for the MockTimeBasedPolicy contract to demonstrate how to test using
 ///      Policy1271IntegrationTest base
-contract MockTimeBasedPolicy_Integration_Test is Policy1271IntegrationTest {
+contract MockTimeBasedPolicy_Integration_Test is Policy1271_Integration_Test {
     /*//////////////////////////////////////////////////////////////
                                  STATE
     //////////////////////////////////////////////////////////////*/

@@ -55,7 +55,7 @@ contract CalculateTypehashes is Script {
         // SignedPermissions - MODIFIED
         // References: ActionData, ERC7739Data, LockTagData (alphabetically with their deps)
         string memory signedPermissions =
-            "SignedPermissions(ActionData[] actions,ERC7739Data erc7739Policies,LockTagData lockTagPolicies,bool permitGenericPolicy)ActionData(bytes4 actionTargetSelector,address actionTarget,PolicyData[] actionPolicies)ERC7739Context(bytes32 appDomainSeparator,string[] contentNames)ERC7739Data(ERC7739Context[] allowedERC7739Content,PolicyData[] erc1271Policies)LockTagData(bytes12 lockTag,PolicyData[] claimPolicies)PolicyData(address policy,bytes initData)";
+            "SignedPermissions(ActionData[] actions,ERC7739Data erc7739Policies,LockTagData lockTagPolicies,bool permitGenericPolicy)ActionData(bytes4 actionTargetSelector,address actionTarget,PolicyData[] actionPolicies)ERC7739Context(bytes32 appDomainSeparator,string[] contentName)ERC7739Data(ERC7739Context[] allowedERC7739Content,PolicyData[] erc1271Policies)LockTagData(bytes12 lockTag,PolicyData[] claimPolicies)PolicyData(address policy,bytes initData)";
         console2.log("SIGNED_PERMISSIONS_TYPEHASH:");
         console2.logBytes32(keccak256(bytes(signedPermissions)));
         console2.log("");
@@ -63,7 +63,7 @@ contract CalculateTypehashes is Script {
         // SignedSession - MODIFIED
         // References: SignedPermissions (and all its deps)
         string memory signedSession =
-            "SignedSession(address account,uint256 expires,uint256 nonce,SignedPermissions permissions,bytes32 salt,address sessionValidator,bytes sessionValidatorInitData,address smartSessionEmissary)ActionData(bytes4 actionTargetSelector,address actionTarget,PolicyData[] actionPolicies)ERC7739Context(bytes32 appDomainSeparator,string[] contentNames)ERC7739Data(ERC7739Context[] allowedERC7739Content,PolicyData[] erc1271Policies)LockTagData(bytes12 lockTag,PolicyData[] claimPolicies)PolicyData(address policy,bytes initData)SignedPermissions(ActionData[] actions,ERC7739Data erc7739Policies,LockTagData lockTagPolicies,bool permitGenericPolicy)";
+            "SignedSession(address account,uint256 expires,uint256 nonce,SignedPermissions permissions,bytes32 salt,address sessionValidator,bytes sessionValidatorInitData,address smartSessionEmissary)ActionData(bytes4 actionTargetSelector,address actionTarget,PolicyData[] actionPolicies)ERC7739Context(bytes32 appDomainSeparator,string[] contentName)ERC7739Data(ERC7739Context[] allowedERC7739Content,PolicyData[] erc1271Policies)LockTagData(bytes12 lockTag,PolicyData[] claimPolicies)PolicyData(address policy,bytes initData)SignedPermissions(ActionData[] actions,ERC7739Data erc7739Policies,LockTagData lockTagPolicies,bool permitGenericPolicy)";
         console2.log("SESSION_TYPEHASH:");
         console2.logBytes32(keccak256(bytes(signedSession)));
         console2.log("");
