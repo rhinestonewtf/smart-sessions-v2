@@ -93,8 +93,8 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
                                   1271
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice SessionKey ERC-1271 signature validation with mode-based dispatch
-    /// @dev Implements ERC-1271 forwarding as defined by ERC-7579. SessionKeys can sign messages
+    /// @notice Session based ERC-1271 signature validation with mode-based dispatch
+    /// @dev Implements ERC-1271 forwarding as defined by ERC-7579. Sessions can sign messages
     ///      and validate ERC-1271 on behalf of smart accounts. Supports two validation modes:
     ///
     ///      Mode 0x00 (IS_VALID_SIG_1271) - Direct validation:
