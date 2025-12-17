@@ -107,8 +107,8 @@ flowchart LR
     end
 
     subgraph SignatureModes["isValidSignature Modes"]
-        S0["0x02 IS_VALID_1271<br/>→ Direct validation"]
-        S1["0x03 IS_VALID_7739<br/>→ Nested EIP-712"]
+        S0["0x00 IS_VALID_1271<br/>→ Direct validation"]
+        S1["0x01 IS_VALID_7739<br/>→ Nested EIP-712"]
     end
 ```
 
