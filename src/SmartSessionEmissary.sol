@@ -93,20 +93,27 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
                                   1271
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice SessionKey ERC-1271 signature validation
-    ///         this function implements the ERC-1271 forwarding function defined by ERC-7579
-    ///         SessionKeys can be used to sign messages and validate ERC-1271 on behalf of Accounts
-    ///         In order to validate a signature, the signature must be wrapped with ERC-7739
-    /// @param sender The address of ERC-1271 sender
-    /// @param hash The hash of the message
-    /// @param signature The signature of the message
-    ///        signature is expected to be in the format:
-    ///       (PermissionId (32 bytes),
-    ///        ERC7739 (abi.encodePacked(signatureForSessionValidator,
-    ///                                  _DOMAIN_SEP_B,
-    ///                                  contents,
-    ///                                  contentsType,
-    ///                                  uint16(contentsType.length))
+    /// @notice SessionKey ERC-1271 signature validation with mode-based dispatch
+    /// @dev Implements ERC-1271 forwarding as defined by ERC-7579. SessionKeys can sign messages
+    ///      and validate ERC-1271 on behalf of smart accounts. Supports two validation modes:
+    ///
+    ///      Mode 0x00 (IS_VALID_SIG_1271) - Direct validation:
+    ///        Signature format: [mode (1)] [permissionId (32)] [policyDataOffset (32)]
+    ///                          [validatorSig (variable)] [policyData (variable)]
+    ///        Hash is bound to account via: ECDSA.toEthSignedMessageHash(abi.encode(account, hash))
+    ///
+    ///      Mode 0x01 (IS_VALID_SIG_1271_7739) - ERC-7739 nested EIP-712 validation:
+    ///        Signature format: [mode (1)] [permissionId (32)] [policyDataOffset (32)]
+    ///                          [validatorSig (variable)] [policyData (variable)]
+    ///                          [appDomainSeparator (32)] [contentHash (32)]
+    ///                          [contentsDescription (variable)]
+    ///                          [uint16(contentsDescription.length)]
+    ///        Validates typed data signatures with app-specific domain separation
+    ///
+    /// @param sender The address of the smart account (ERC-1271 sender)
+    /// @param hash The hash of the message to validate
+    /// @param signature Mode byte followed by mode-specific signature data
+    /// @return result EIP-1271 magic value (0x1626ba7e) on success, 0xffffffff on failure
     function isValidSignatureWithSender(
         address sender,
         bytes32 hash,
