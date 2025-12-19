@@ -1,4 +1,4 @@
-SmartSessionMixin::removeConfig
+SmartSessionLens::removeConfig
 ├── given valid configuration and disable data
 │   ├── when caller is the account
 │   │   ├── it should emit SmartSessionEmissaryConfigUpdated event with enabled=false

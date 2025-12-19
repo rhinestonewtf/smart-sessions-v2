@@ -399,7 +399,7 @@ contract SmartSessionEmissary_verifyClaim_Test is SmartSessionEmissary_Unit_Test
 
     function _createSignatureWithPermissionId(PermissionId permissionId)
         internal
-        view
+        pure
         returns (bytes memory)
     {
         bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);

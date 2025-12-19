@@ -10,7 +10,7 @@ import {
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable
 } from "@types/DataTypes.sol";
-import { PermissionId } from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 interface ISmartSessionEmissary is IEmissary {
@@ -21,48 +21,8 @@ interface ISmartSessionEmissary is IEmissary {
     /// @notice Thrown when the msg.sender is not the intent executor
     error UnauthorizedSource();
 
-    /// @notice Thrown when the session is not valid
-    error InvalidSession(PermissionId permissionId);
-
-    /// @notice Thrown when a permission ID is not valid
-    error InvalidPermissionId(PermissionId permissionId);
-
-    /// @notice Thrown when the Emissary enable data is not valid
-    error InvalidEmissaryEnableData();
-
-    /// @notice Thrown when the Emissary enable data allocator signature is not valid
-    error InvalidAllocatorSignature();
-
-    /// @notice Thrown when the Emissary enable data user signature is not valid
-    error InvalidUserSignature();
-
-    /*//////////////////////////////////////////////////////////////
-                                 EVENTS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Emitted when a Smart Session Emissary configuration is successfully set for an
-    ///         account.
-    /// @param account The address of the account for which the configuration was set.
-    /// @param permissionId The permission ID associated with the Smart Session.
-    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
-    event SmartSessionEmissaryConfigEnabled(
-        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
-    );
-
-    /*//////////////////////////////////////////////////////////////
-                                 CONFIG
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Sets the Smart Session Emissary configuration for a specific account.
-    /// @param account The address of the account for which the configuration is being set.
-    /// @param config The Smart Session Emissary configuration.
-    /// @param enable The Smart Session Emissary enable data.
-    function setConfig(
-        address account,
-        SmartSessionEmissaryConfig calldata config,
-        SmartSessionEmissaryEnable calldata enable
-    )
-        external;
+    /// @notice Thrown when an unsupported smart session mode is provided during verifyExecution
+    error UnsupportedSmartSessionMode(SmartSessionMode mode);
 
     /*//////////////////////////////////////////////////////////////
                                  VERIFY

@@ -42,9 +42,9 @@ import { Vm } from "@forge-std/Vm.sol";
 import { Scope } from "@the-compact/types/Scope.sol";
 import { ResetPeriod } from "@the-compact/types/ResetPeriod.sol";
 
-/// @title SmartSessionMixin.setConfig Unit Tests
+/// @title SmartSessionLens.setConfig Unit Tests
 /// @notice Unit tests for the setConfig function
-contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test {
+contract SmartSessionLens_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -76,8 +76,8 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event SmartSessionEmissaryConfigUpdated(
-        address indexed account, PermissionId permissionId, bytes12 indexed lockTag, bool enabled
+    event SmartSessionEmissaryConfigEnabled(
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
     );
 
     /*//////////////////////////////////////////////////////////////
@@ -120,13 +120,13 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_success() public {
         // Arrange
         vm.expectEmit(true, true, false, true);
-        emit SmartSessionEmissaryConfigUpdated(
-            instance.account, testConfig.permissionId, testLockTag, true
+        emit SmartSessionEmissaryConfigEnabled(
+            instance.account, testConfig.permissionId, testLockTag
         );
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -141,7 +141,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         assertEq(testLockTag, expectedLockTag);
@@ -157,7 +157,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         uint256 nonceAfter = _lens().getNonce(instance.account, testLockTag);
@@ -172,7 +172,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -196,7 +196,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -232,7 +232,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -252,7 +252,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bytes32[] memory enabledActions =
@@ -298,7 +298,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bytes32[] memory enabledActions =
@@ -352,7 +352,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         ActionId actionId = ActionId.wrap(keccak256(abi.encodePacked(target, selector)));
@@ -382,7 +382,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -398,7 +398,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -418,7 +418,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -432,7 +432,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -453,7 +453,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -469,7 +469,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         testEnableData.allocatorSig = "";
 
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Second enable
         _rebuildEnableData();
@@ -477,7 +477,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -500,7 +500,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert - permission enabled
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -533,7 +533,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_multipleLockTags() public {
         // Arrange - first enable
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Create second config with different scope
         SmartSessionEmissaryConfig memory secondConfig = SmartSessionEmissaryConfig({
@@ -563,7 +563,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
+        _lens().setConfig(instance.account, secondConfig, secondEnableData);
 
         // Assert - both lockTags enabled for same permissionId
         assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
@@ -574,7 +574,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_differentAllocators_uniqueLockTags() public {
         // Arrange - first allocator
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Create second allocator
         Vm.Wallet memory secondOwner = vm.createWallet("secondOwner");
@@ -612,7 +612,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
+        _lens().setConfig(instance.account, secondConfig, secondEnableData);
 
         // Assert - both lockTags enabled independently for same permissionId
         assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
@@ -630,7 +630,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -656,7 +656,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(differentCaller);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -683,7 +683,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         // Act & Assert
         vm.expectRevert(InvalidUserSignature.selector);
         vm.prank(differentCaller);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -697,7 +697,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -713,7 +713,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabledAfter =
@@ -725,14 +725,14 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_subsequentCall_validAllocatorSig() public {
         // Arrange - first enable
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Prepare second call
         _rebuildEnableData();
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -743,7 +743,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_subsequentCall_invalidAllocatorSig_reverts() public {
         // Arrange - first enable
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Prepare second call with invalid sig
         _rebuildEnableData();
@@ -753,7 +753,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         // Act & Assert
         vm.expectRevert(InvalidAllocatorSignature.selector);
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -764,7 +764,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_noncesIndependentPerLockTag() public {
         // Arrange - first lockTag
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         uint256 firstLockTagNonce = _lens().getNonce(instance.account, testLockTag);
         assertEq(firstLockTagNonce, 1);
@@ -800,7 +800,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
+        _lens().setConfig(instance.account, secondConfig, secondEnableData);
 
         // Assert - each lockTag has independent nonce
         uint256 firstLockTagNonceAfter = _lens().getNonce(instance.account, testLockTag);
@@ -818,7 +818,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_enablesSessionValidator() public {
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         (address validator, bytes memory config) =
@@ -832,7 +832,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_subsequentCall_validatorUnchanged() public {
         // Arrange - first enable
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         (address validatorBefore,) =
             _lens().getSessionValidatorAndConfig(instance.account, testPermissionId);
@@ -842,7 +842,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Assert
         (address validatorAfter,) =
@@ -858,7 +858,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_lockTagsIsolatedPerPermissionId() public {
         // Arrange - enable first session with testLockTag
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Create second session with DIFFERENT salt (different permissionId) but SAME lockTag
         Session memory secondSession = Session({
@@ -896,7 +896,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, secondConfig, secondEnableData);
+        _lens().setConfig(instance.account, secondConfig, secondEnableData);
 
         // Assert - same lockTag enabled for BOTH permissionIds independently
         assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
@@ -915,7 +915,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
     function test_setConfig_lockTagsIsolatedPerAccount() public {
         // Arrange - enable for first account
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Create second account
         address secondAccount = makeAddr("secondAccount");
@@ -958,7 +958,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+        _lens().setConfig(instance.account, testConfig, multichainEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -990,7 +990,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         // Act & Assert
         vm.expectRevert(abi.encodeWithSelector(HashLibV2.ChainIdMismatch.selector, uint64(1)));
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+        _lens().setConfig(instance.account, testConfig, multichainEnableData);
     }
 
     /// @notice Test setConfig reverts when session digest doesn't match
@@ -1019,7 +1019,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
             abi.encodeWithSelector(HashLibV2.HashMismatch.selector, wrongDigest, correctDigest)
         );
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+        _lens().setConfig(instance.account, testConfig, multichainEnableData);
     }
 
     /// @notice Test setConfig with single chain in multichain array
@@ -1042,7 +1042,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, singleChainEnableData);
+        _lens().setConfig(instance.account, testConfig, singleChainEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -1071,7 +1071,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
 
         // Act
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, multichainEnableData);
+        _lens().setConfig(instance.account, testConfig, multichainEnableData);
 
         // Assert
         bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
@@ -1090,7 +1090,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         // Act & Assert
         vm.expectRevert(InvalidEmissaryEnableData.selector);
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
     }
 
     /// @notice Test setConfig reverts when expires equals current timestamp
@@ -1101,7 +1101,7 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
         // Act & Assert
         vm.expectRevert(InvalidEmissaryEnableData.selector);
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
     }
 
     /// @notice Test setConfig reverts when permissionId doesn't match session
@@ -1114,19 +1114,19 @@ contract SmartSessionMixin_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test
             abi.encodeWithSelector(InvalidPermissionId.selector, testConfig.permissionId)
         );
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
     }
 
     /// @notice Test setConfig reverts on nonce replay attack
     function test_setConfig_revertsWhen_nonceReplay() public {
         // Arrange - first enable
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
         // Act & Assert
         vm.expectRevert();
         vm.prank(instance.account);
-        smartSessionEmissary.setConfig(instance.account, testConfig, testEnableData);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
     }
 
     /*//////////////////////////////////////////////////////////////

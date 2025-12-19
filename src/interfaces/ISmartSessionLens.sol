@@ -6,7 +6,8 @@ import { PermissionId, ActionId, ERC7739ContextHashes } from "@smartsessions/Dat
 import {
     Session,
     SmartSessionEmissaryConfig,
-    SmartSessionEmissaryDisable
+    SmartSessionEmissaryDisable,
+    SmartSessionEmissaryEnable
 } from "@types/DataTypes.sol";
 
 /// @title ISmartSessionLens
@@ -72,8 +73,19 @@ interface ISmartSessionLens {
     function revokeNonce(bytes12 lockTag) external;
 
     /*//////////////////////////////////////////////////////////////
-                                DISABLE
+                                 CONFIG
     //////////////////////////////////////////////////////////////*/
+
+    /// @notice Sets the Smart Session Emissary configuration for a specific account.
+    /// @param account The address of the account for which the configuration is being set.
+    /// @param config The Smart Session Emissary configuration.
+    /// @param enable The Smart Session Emissary enable data.
+    function setConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryEnable calldata enable
+    )
+        external;
 
     /// @notice Removes a Smart Session Emissary configuration for a specific account
     /// @param account The address of the account for which the configuration is being removed

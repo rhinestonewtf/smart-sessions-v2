@@ -1,4 +1,4 @@
-SmartSessionMixin::setConfig
+SmartSessionLens::setConfig
 ├── given valid configuration and enable data
 │   ├── when caller is the account
 │   │   ├── it should emit SmartSessionEmissaryConfigUpdated event

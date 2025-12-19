@@ -4,7 +4,9 @@ pragma solidity ^0.8.28;
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
-import { ReentrancyGuardTransient } from "solady/utils/ReentrancyGuardTransient.sol";
+
+// Interfaces
+import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 
 // Libraries
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
@@ -19,7 +21,6 @@ import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
 import { ExecutionLibV2 } from "@lib/ExecutionLibV2.sol";
 import { ECDSA } from "solady/utils/ECDSA.sol";
-import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol";
 
 // Types
 import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
@@ -38,7 +39,7 @@ import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 abstract contract SmartSessionMixin is
     SmartSessionManager,
     SmartSessionERC7739,
-    ReentrancyGuardTransient
+    ISmartSessionEmissary
 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -55,30 +56,6 @@ abstract contract SmartSessionMixin is
     using DigestCacheLib for *;
     using SmartExecutionLib for *;
     using EncodeLibV2 for *;
-    using SmartSessionModeLib for *;
-
-    /*//////////////////////////////////////////////////////////////
-                                SET CONFIG
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Sets the Smart Session Emissary configuration for a specific account
-    /// @param account The address of the account for which the configuration is being set
-    /// @param config The Smart Session Emissary configuration
-    /// @param enableData The Emissary enable data
-    function setConfig(
-        address account,
-        SmartSessionEmissaryConfig calldata config,
-        SmartSessionEmissaryEnable calldata enableData
-    )
-        external
-        nonReentrant
-    {
-        PermissionId permissionId = enableData.session.sessionToEnable.toPermissionId();
-        // Enable session
-        _enableSession({
-            account: account, enableData: enableData, config: config, permissionId: permissionId
-        });
-    }
 
     /*//////////////////////////////////////////////////////////////
                                  CLAIM
@@ -140,14 +117,14 @@ abstract contract SmartSessionMixin is
         // Init validSig
         bool validSig;
 
-        // unpacking data packed in data
+        // Unpack mode, permissionId and signature from emissaryData
         (SmartSessionMode mode, PermissionId permissionId, bytes calldata packedSig) =
             emissaryData.unpackMode();
 
         // If the SmartSession.USE mode was selected, no further policies have to be enabled.
         // We can go straight to userOp validation
         // This condition is the average case, so should be handled as the first condition
-        if (mode.isUseMode()) {
+        if (mode == SmartSessionMode.USE) {
             validSig = _enforceActionPolicies({
                 permissionId: permissionId,
                 digest: digest,
@@ -162,7 +139,7 @@ abstract contract SmartSessionMixin is
         // If the signature is valid, the policies and signer will be enabled
         // after enabling the session, the policies will be enforced on the userOp similarly to the
         // SmartSession.USE
-        else if (mode.isEnableMode()) {
+        else if (mode == SmartSessionMode.ENABLE) {
             // unpack the EnableSession data and signature
             // calculate the permissionId from the Session data
             (
@@ -184,6 +161,10 @@ abstract contract SmartSessionMixin is
                 decompressedSignature: usePermissionSig,
                 account: account
             });
+        }
+        // if an Unknown mode is provided, the function will revert
+        else {
+            revert UnsupportedSmartSessionMode(mode);
         }
 
         /// @solidity memory-safe-assembly
@@ -438,15 +419,4 @@ abstract contract SmartSessionMixin is
 
     /// @notice Returns the typed data hash for a given hash
     function _getTypedDataHashSansChainId(bytes32 hash) internal view virtual returns (bytes32);
-
-    /// @notice Always use transient reentrancy guard only on mainnet
-    function _useTransientReentrancyGuardOnlyOnMainnet()
-        internal
-        view
-        virtual
-        override
-        returns (bool)
-    {
-        return false;
-    }
 }

@@ -64,6 +64,8 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         MOCK_INTENT_EXECUTOR = makeAddr("MockIntentExecutor");
         // Deploy the SmartSessionEmissary contract.
         smartSessionEmissary = new SmartSessionEmissaryMock(MOCK_INTENT_EXECUTOR);
+        // Label the contract for better readability in traces.
+        vm.label(address(smartSessionEmissary), "SmartSessionEmissary");
     }
 
     /*//////////////////////////////////////////////////////////////

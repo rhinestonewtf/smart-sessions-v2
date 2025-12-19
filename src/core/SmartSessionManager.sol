@@ -25,6 +25,7 @@ import {
     EMPTY_PERMISSIONID
 } from "@smartsessions/DataTypes.sol";
 import {
+    Session,
     SmartSessionEmissaryEnable,
     SmartSessionEmissaryDisable,
     SmartSessionEmissaryConfig,
@@ -36,7 +37,30 @@ import {
 /// @author Rhinestone
 /// @notice Core session lifecycle management for the SmartSession Emissary system.
 /// @dev Inherits storage layout from SmartSessionStorage for delegatecall compatibility.
-abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmissary {
+abstract contract SmartSessionManager is SmartSessionStorage {
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when a permission ID is not valid
+    error InvalidPermissionId(PermissionId permissionId);
+
+    /// @notice Thrown when the Emissary enable data is not valid
+    error InvalidEmissaryEnableData();
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Emitted when a Smart Session Emissary configuration is successfully set for an
+    ///         account.
+    /// @param account The address of the account for which the configuration was set.
+    /// @param permissionId The permission ID associated with the Smart Session.
+    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
+    event SmartSessionEmissaryConfigEnabled(
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
+    );
+
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -51,7 +75,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
     using SignatureLib for *;
 
     /*//////////////////////////////////////////////////////////////
-                           SESSION MANAGEMENT
+                                 ENABLE
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Enables a session for an account after verifying required signatures
@@ -106,9 +130,31 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             isInit: isInit
         });
 
+        // Enable session policies
+        _enablePolicies({
+            account: account,
+            permissionId: permissionId,
+            lockTag: lockTag,
+            session: enableData.session.sessionToEnable
+        });
+    }
+
+    /// @notice Enables all policies associated with a session for an account
+    /// @param account The address of the account for which policies are being enabled
+    /// @param permissionId The permission ID associated with the session
+    /// @param lockTag The lock tag derived from the allocator, scope, and reset period
+    /// @param session The session data containing policies to be enabled
+    function _enablePolicies(
+        address account,
+        PermissionId permissionId,
+        bytes12 lockTag,
+        Session memory session
+    )
+        internal
+    {
         // Enable ERC7739 content
         $enabledERC7739.enable({
-            contexts: enableData.session.sessionToEnable.erc7739Policies.allowedERC7739Content,
+            contexts: session.erc7739Policies.allowedERC7739Content,
             permissionId: permissionId,
             account: account
         });
@@ -118,51 +164,43 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             policyType: PolicyType.ERC1271,
             permissionId: permissionId,
             configId: permissionId.toErc1271PolicyId().toConfigId(account),
-            policyDatas: enableData.session.sessionToEnable.erc7739Policies.erc1271Policies,
+            policyDatas: session.erc7739Policies.erc1271Policies,
             account: account
         });
 
         // Enable action policies
         $actionPolicies.enable({
-            permissionId: permissionId,
-            actionPolicyDatas: enableData.session.sessionToEnable.actions,
-            account: account
+            permissionId: permissionId, actionPolicyDatas: session.actions, account: account
         });
 
-        // Enable action and claim policies only if lockTag is not NO_LOCKTAG
+        // Enable claim policies only if lockTag is not NO_LOCKTAG
         if (lockTag != NO_LOCKTAG) {
-            // Enable claim policies
             $claimPolicies[lockTag].enable({
                 policyType: PolicyType.ERC1271,
                 permissionId: permissionId,
                 configId: permissionId.toErc1271PolicyId().toConfigId(account),
-                policyDatas: enableData.session.sessionToEnable.claimPolicies,
+                policyDatas: session.claimPolicies,
                 account: account
             });
         }
 
-        // Enable mode can involve enabling ISessionValidator (new Permission)
-        // or just adding policies (existing permission)
-        // a) ISessionValidator is not set => enable ISessionValidator
-        // b) ISessionValidator is set => just add policies (above)
-        // Attention: if the same policy that has already been configured is added again,
-        // the policy will be overwritten with the new configuration
+        // Enable session validator if not already set
         if (address($sessionValidators[permissionId][account].sessionValidator) == address(0)) {
             $sessionValidators.enable({
                 permissionId: permissionId,
-                sessionValidator: enableData.session.sessionToEnable.sessionValidator,
-                sessionValidatorConfig: enableData.session.sessionToEnable.sessionValidatorInitData,
+                sessionValidator: session.sessionValidator,
+                sessionValidatorConfig: session.sessionValidatorInitData,
                 account: account
             });
         }
 
-        // Add the permissionid to enabled sessions for the account
+        // Add permissionId to enabled sessions
         $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });
 
-        // Add the lockTag to this permissionId
+        // Add lockTag to this permissionId
         $enabledLockTags[permissionId].add({ account: account, value: bytes32(lockTag) });
 
-        // Emit event if the session is enabled
-        emit SmartSessionEmissaryConfigEnabled(account, config.permissionId, lockTag);
+        // Emit event
+        emit SmartSessionEmissaryConfigEnabled(account, permissionId, lockTag);
     }
 }
