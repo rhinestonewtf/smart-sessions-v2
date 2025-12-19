@@ -103,7 +103,7 @@ contract BaseConfigLib_initializeRecipient_Unit_Test is BaseConfigLib_Unit_Test 
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.recipientConfig[chainId1], recipient1);
     }
 
@@ -120,7 +120,7 @@ contract BaseConfigLib_initializeRecipient_Unit_Test is BaseConfigLib_Unit_Test 
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.recipientConfig[chainId1], recipient1);
         assertEq($.recipientConfig[chainId2], recipient2);
     }
@@ -152,7 +152,7 @@ contract BaseConfigLib_initializeRecipient_Unit_Test is BaseConfigLib_Unit_Test 
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.recipientConfig[_chainId], _recipient);
     }
 }

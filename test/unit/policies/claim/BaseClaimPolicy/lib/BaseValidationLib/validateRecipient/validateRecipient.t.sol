@@ -61,7 +61,7 @@ contract BaseValidationLib_validateRecipient_Unit_Test is BaseValidationLib_Unit
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexor: msg.sender});
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
         return BaseValidationLib.validateRecipient(
             $, _recipient, _targetChainId, _config, configId, account, testHash
         );

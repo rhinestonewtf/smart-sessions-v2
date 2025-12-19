@@ -79,7 +79,7 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.expiryConfig, 0);
     }
 
@@ -108,7 +108,7 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         (uint128 min, uint128 max) = BaseConfigLib.unpackUint128($.expiryConfig);
         assertEq(min, 0);
         assertEq(max, 2000);
@@ -128,7 +128,7 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         (uint128 min, uint128 max) = BaseConfigLib.unpackUint128($.expiryConfig);
         assertEq(min, 1000);
         assertEq(max, 2000);
@@ -164,7 +164,7 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         (uint128 min, uint128 max) = BaseConfigLib.unpackUint128($.expiryConfig);
         assertEq(min, _min);
         assertEq(max, _max);

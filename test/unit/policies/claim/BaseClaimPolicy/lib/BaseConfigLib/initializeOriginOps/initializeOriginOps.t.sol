@@ -97,7 +97,7 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.originOpsConfig[chainId1], true);
     }
 
@@ -114,7 +114,7 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.originOpsConfig[chainId1], false);
     }
 
@@ -131,7 +131,7 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.originOpsConfig[chainId1], true);
         assertEq($.originOpsConfig[chainId2], false);
     }
@@ -163,7 +163,7 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.originOpsConfig[_chainId], _required);
     }
 }
