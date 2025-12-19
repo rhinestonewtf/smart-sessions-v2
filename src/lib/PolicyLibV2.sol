@@ -91,7 +91,7 @@ library PolicyLibV2 {
                 permissionId: permissionId,
                 callOnIPolicy: abi.encodeCall(
                     IActionPolicy.checkAction,
-                    (permissionId.toConfigId(actionId), account, target, value, callData)
+                    (permissionId.toConfigId(actionId, account), account, target, value, callData)
                 ),
                 minPolicies: minPolicies,
                 account: account
@@ -113,7 +113,7 @@ library PolicyLibV2 {
             permissionId: permissionId,
             callOnIPolicy: abi.encodeCall(
                 IActionPolicy.checkAction,
-                (permissionId.toConfigId(actionId), account, target, value, callData)
+                (permissionId.toConfigId(actionId, account), account, target, value, callData)
             ),
             minPolicies: minPolicies,
             account: account
