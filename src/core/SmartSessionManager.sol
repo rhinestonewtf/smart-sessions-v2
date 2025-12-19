@@ -112,7 +112,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
         $erc1271Policies.enable({
             policyType: PolicyType.ERC1271,
             permissionId: permissionId,
-            configId: permissionId.toErc1271PolicyId().toConfigId(),
+            configId: permissionId.toErc1271PolicyId().toConfigId(account),
             policyDatas: enableData.session.sessionToEnable.erc7739Policies.erc1271Policies,
             account: account
         });
@@ -130,7 +130,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ISmartSessionEmiss
             $claimPolicies[lockTag].enable({
                 policyType: PolicyType.ERC1271,
                 permissionId: permissionId,
-                configId: permissionId.toErc1271PolicyId().toConfigId(),
+                configId: permissionId.toErc1271PolicyId().toConfigId(account),
                 policyDatas: enableData.session.sessionToEnable.claimPolicies,
                 account: account
             });
