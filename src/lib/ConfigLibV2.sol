@@ -114,7 +114,7 @@ library ConfigLibV2 {
             $self.actionPolicies[actionId].enable({
                 policyType: PolicyType.ACTION,
                 permissionId: permissionId,
-                configId: permissionId.toConfigId(actionId),
+                configId: permissionId.toConfigId(actionId, account),
                 policyDatas: actionPolicyData.actionPolicies,
                 account: account
             });
@@ -135,7 +135,7 @@ library ConfigLibV2 {
     )
         internal
     {
-        // iterate over all policyData
+        // iterate over all policyData sv
         uint256 lengthConfigs = policyDatas.length;
         for (uint256 i; i < lengthConfigs; i++) {
             address policy = policyDatas[i].policy;
