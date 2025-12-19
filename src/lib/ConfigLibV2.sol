@@ -135,7 +135,7 @@ library ConfigLibV2 {
     )
         internal
     {
-        // iterate over all policyData sv
+        // iterate over all policyData
         uint256 lengthConfigs = policyDatas.length;
         for (uint256 i; i < lengthConfigs; i++) {
             address policy = policyDatas[i].policy;
