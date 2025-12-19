@@ -486,12 +486,12 @@ library BaseConfigLib {
                          EXPIRY INITIALIZATION
     //////////////////////////////////////////////////////////////
 
-    Layout: [minExpiry: 16 bytes][maxExpiry: 16 bytes]
+    Layout: [maxExpiry: 16 bytes][minExpiry: 16 bytes]
 
     ┌────────────────────────────────────────────────────────┐
     │  Expiry Config (32 bytes total)                        │
     │  ┌────────────────────┬────────────────────┐           │
-    │  │  minExpiry (u128)  │  maxExpiry (u128)  │           │
+    │  │  maxExpiry (u128)  │  minExpiry (u128)  │           │
     │  │  bytes [0:16]      │  bytes [16:32]     │           │
     │  └────────────────────┴────────────────────┘           │
     └────────────────────────────────────────────────────────┘
@@ -593,7 +593,7 @@ library BaseConfigLib {
     //////////////////////////////////////////////////////////////
 
     Layout: [count: 1 byte][entries...]
-    Entry:  [targetChainId: 32][minFillExpiry: 16][maxFillExpiry: 16] = 64 bytes
+    Entry:  [targetChainId: 32][maxFillExpiry: 16][minFillExpiry: 16] = 64 bytes
 
     ┌────────────────────────────────────────────────────────┐
     │  FillExpiry Config                                     │
@@ -603,7 +603,7 @@ library BaseConfigLib {
     │  ┌────────────────────────────────────────────────┐    │
     │  │  Entry (64 bytes):                             │    │
     │  │  ┌─────────────┬─────────────┬─────────────┐   │    │
-    │  │  │ chainId(32) │ min(16)     │ max(16)     │   │    │
+    │  │  │ chainId(32) │ max(16)     │ min(16)     │   │    │
     │  │  └─────────────┴─────────────┴─────────────┘   │    │
     │  └────────────────────────────────────────────────┘    │
     │  ... repeat for count entries ...                      │

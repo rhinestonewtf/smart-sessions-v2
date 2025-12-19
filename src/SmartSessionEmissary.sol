@@ -194,7 +194,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         if (mode == EMISSARY_VANILLA) {
             // Validate using vanilla emissary signature validation
             return _validateSignature({
-                sponsor: sponsor, digest: digest, emissaryData: emissaryData, lockTag: lockTag
+                sponsor: sponsor, digest: digest, emissaryData: emissaryData[1:], lockTag: lockTag
             })
                 ? this.verifyClaim.selector
                 : INVALID_SIGNATURE;
