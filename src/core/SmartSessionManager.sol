@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { SmartSessionStorage } from "@core/SmartSessionStorage.sol";
+import { ReentrancyGuardTransient } from "solady/utils/ReentrancyGuardTransient.sol";
 
 // Libraries
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
@@ -37,7 +38,7 @@ import {
 /// @author Rhinestone
 /// @notice Core session lifecycle management for the SmartSession Emissary system.
 /// @dev Inherits storage layout from SmartSessionStorage for delegatecall compatibility.
-abstract contract SmartSessionManager is SmartSessionStorage {
+abstract contract SmartSessionManager is SmartSessionStorage, ReentrancyGuardTransient {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -151,6 +152,7 @@ abstract contract SmartSessionManager is SmartSessionStorage {
         Session memory session
     )
         internal
+        nonReentrant
     {
         // Enable ERC7739 content
         $enabledERC7739.enable({
@@ -202,5 +204,20 @@ abstract contract SmartSessionManager is SmartSessionStorage {
 
         // Emit event
         emit SmartSessionEmissaryConfigEnabled(account, permissionId, lockTag);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        REENTRANCY GUARD OVERRIDE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Always use transient reentrancy guard only on mainnet
+    function _useTransientReentrancyGuardOnlyOnMainnet()
+        internal
+        view
+        virtual
+        override
+        returns (bool)
+    {
+        return false;
     }
 }

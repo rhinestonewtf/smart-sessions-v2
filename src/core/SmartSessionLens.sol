@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
-import { ReentrancyGuardTransient } from "solady/utils/ReentrancyGuardTransient.sol";
 
 // Interfaces
 import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
@@ -42,7 +41,7 @@ import {
 /// @notice Helper contract for reading SmartSession state and managing nonces
 /// @dev Added to mitigate contract size limit, called via delegatecall from SmartSessionEmissary
 ///      fallback. This contract inherits SmartSessionStorage to ensure identical storage layout.
-contract SmartSessionLens is SmartSessionManager, ReentrancyGuardTransient, ISmartSessionLens {
+contract SmartSessionLens is SmartSessionManager, ISmartSessionLens {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -117,7 +116,6 @@ contract SmartSessionLens is SmartSessionManager, ReentrancyGuardTransient, ISma
         SmartSessionEmissaryEnable calldata enableData
     )
         external
-        nonReentrant
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
@@ -633,20 +631,5 @@ contract SmartSessionLens is SmartSessionManager, ReentrancyGuardTransient, ISma
             data.sessionDigest({
                 account: account, lockTag: lockTag, expires: expires, nonce: nonce
             });
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                        REENTRANCY GUARD OVERRIDE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Always use transient reentrancy guard only on mainnet
-    function _useTransientReentrancyGuardOnlyOnMainnet()
-        internal
-        view
-        virtual
-        override
-        returns (bool)
-    {
-        return false;
     }
 }
