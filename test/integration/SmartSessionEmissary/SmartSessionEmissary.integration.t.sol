@@ -231,8 +231,6 @@ contract SmartSessionEmissary_Integration_Test is
         Types.Order memory order = _getOrder($intent.compact, 0);
         vm.chainId(order.notarizedChainId);
 
-        $intent.userEmissarySig = _createVerifyExecutionSmartSessionSignature("");
-
         (, bytes memory allocatorSig) =
             _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
 
@@ -246,7 +244,10 @@ contract SmartSessionEmissary_Integration_Test is
                 MockAdapter.mock_compact_handleClaim,
                 (MockAdapter.ClaimDataCompact({
                         order: order,
-                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        userSigs: Types.Signatures(
+                            _createSmartSessionSignature(""),
+                            _createVerifyExecutionSmartSessionSignature("")
+                        ),
                         otherElements: otherElements,
                         allocatorData: allocatorSig,
                         elementIndex: 0
@@ -326,7 +327,10 @@ contract SmartSessionEmissary_Integration_Test is
                 MockAdapter.mock_compact_handleClaim,
                 (MockAdapter.ClaimDataCompact({
                         order: order,
-                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        userSigs: Types.Signatures(
+                            _createSmartSessionSignature(""),
+                            _createVerifyExecutionSmartSessionSignature("")
+                        ),
                         otherElements: otherElements,
                         allocatorData: allocatorSig,
                         elementIndex: 0
@@ -553,7 +557,6 @@ contract SmartSessionEmissary_Integration_Test is
         bytes memory sessionValidatorSignature = abi.encodePacked(r, s, v);
 
         return abi.encodePacked(
-            EMISSARY_SMART_SESSION,
             SmartSessionMode.USE,
             permissionId,
             uint256(sessionValidatorSignature.length) + 64,
