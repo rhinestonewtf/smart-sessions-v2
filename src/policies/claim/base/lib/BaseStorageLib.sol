@@ -255,7 +255,7 @@ library BaseStorageLib {
             slot := keccak256(0x00, 0x80)
             // Restore both free memory pointer and zero slot
             mstore(0x40, ptr)
-            mstore(0x60, 0)
+            mstore(0x60, 0x00)
         }
     }
 }
