@@ -30,9 +30,6 @@ interface ISmartSessionEmissary is IEmissary {
     /// @notice Thrown when the Emissary enable data is not valid
     error InvalidEmissaryEnableData();
 
-    /// @notice Thrown when the Emissary disable data is not valid
-    error InvalidEmissaryDisableData();
-
     /// @notice Thrown when the Emissary enable data allocator signature is not valid
     error InvalidAllocatorSignature();
 
@@ -48,9 +45,8 @@ interface ISmartSessionEmissary is IEmissary {
     /// @param account The address of the account for which the configuration was set.
     /// @param permissionId The permission ID associated with the Smart Session.
     /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
-    /// @param enabled Indicates whether the Smart Session Emissary is enabled or disabled.
-    event SmartSessionEmissaryConfigUpdated(
-        address indexed account, PermissionId permissionId, bytes12 indexed lockTag, bool enabled
+    event SmartSessionEmissaryConfigEnabled(
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
     );
 
     /*//////////////////////////////////////////////////////////////
@@ -65,18 +61,6 @@ interface ISmartSessionEmissary is IEmissary {
         address account,
         SmartSessionEmissaryConfig calldata config,
         SmartSessionEmissaryEnable calldata enable
-    )
-        external;
-
-    /// @notice Removes a Smart Session Emissary configuration for a specific account
-    /// @param account The address of the account for which the configuration is being removed
-    /// @param config The Smart Session Emissary configuration to be removed
-    /// @param disableData The disable data containing the allocatorSignature, user signature,
-    ///                    disable session data, and expiration time
-    function removeConfig(
-        address account,
-        SmartSessionEmissaryConfig calldata config,
-        SmartSessionEmissaryDisable calldata disableData
     )
         external;
 

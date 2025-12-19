@@ -13,6 +13,8 @@ import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import { HashLibV2 } from "@lib/HashLibV2.sol";
 import { IdLibV2 } from "@lib/IdLibV2.sol";
+import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
+import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
 import {
@@ -20,9 +22,14 @@ import {
     ActionId,
     SignerConf,
     ERC7739ContextHashes,
-    ERC7579_MODULE_TYPE_VALIDATOR
+    ERC7579_MODULE_TYPE_VALIDATOR,
+    EMPTY_PERMISSIONID
 } from "@smartsessions/DataTypes.sol";
-import { Session } from "@types/DataTypes.sol";
+import {
+    Session,
+    SmartSessionEmissaryDisable,
+    SmartSessionEmissaryConfig
+} from "@types/DataTypes.sol";
 
 /// @title SmartSessionLens
 /// @notice Helper contract for reading SmartSession state and managing nonces
@@ -35,9 +42,12 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
 
     using EnumerableSet for *;
     using FlatBytesLib for *;
-    using HashLib for string;
-    using HashLibV2 for Session;
-    using IdLibV2 for Session;
+    using HashLib for *;
+    using HashLibV2 for *;
+    using IdLibV2 for *;
+    using EnumerableSet for *;
+    using ConfigLib for *;
+    using SignatureLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                   7579
@@ -82,6 +92,112 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
     function revokeNonce(bytes12 lockTag) external {
         uint256 nonce = ++$emissaryNonce[msg.sender][lockTag];
         emit NonceIterated(lockTag, msg.sender, nonce);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                DISABLE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Removes a Smart Session Emissary configuration for a specific account
+    /// @param account The address of the account for which the configuration is being removed
+    /// @param config The Smart Session Emissary configuration to be removed
+    /// @param disableData The disable data containing the allocatorSignature, user signature,
+    ///                    disable session data, and expiration time
+    function removeConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryDisable calldata disableData
+    )
+        external
+    {
+        // Disable session
+        _disableSessions({ account: account, disableData: disableData, config: config });
+    }
+
+    /// @notice Removes a session and all its associated policies from storage
+    /// @dev Cleans up in order: ERC1271 → Action → Claim → ERC7739 → Validator → Session
+    /// @param permissionId The unique identifier for the session to be removed
+    /// @param account The account address associated with the session
+    /// @param lockTag The lock tag used to identify the session
+    function _removeSession(PermissionId permissionId, address account, bytes12 lockTag) internal {
+        if (permissionId == EMPTY_PERMISSIONID) revert InvalidSession(permissionId);
+
+        // Remove all ERC1271 policies for this session
+        $erc1271Policies.policyList[permissionId].removeAll(account);
+
+        // Remove all Action policies for this session
+        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
+        for (uint256 i; i < actionLength; i++) {
+            ActionId actionId = ActionId.wrap(
+                $actionPolicies.enabledActionIds[permissionId].at({ account: account, index: i })
+            );
+            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(account);
+        }
+
+        // removing all stored actionIds
+        $actionPolicies.enabledActionIds[permissionId].removeAll(account);
+
+        // Remove all claim policies for this session
+        $claimPolicies[lockTag].policyList[permissionId].removeAll(account);
+
+        // Remove the enabled erc7739 config for this session
+        $enabledERC7739.removeAll({ permissionId: permissionId, smartAccount: account });
+
+        // Disable the session validator
+        $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
+
+        // Remove the permissionId from enabled sessions
+        $enabledSessions.remove({ account: account, value: PermissionId.unwrap(permissionId) });
+
+        // Remove the lockTag from this permissionId
+        $enabledLockTags[permissionId].remove({ account: account, value: bytes32(lockTag) });
+    }
+
+    /// @notice Disables sessions for an account after verifying required signatures
+    /// @dev Verifies signatures then delegates to _removeSession for cleanup
+    /// @param account The address of the account for which policies are being disabled
+    /// @param disableData The data containing session disable information
+    /// @param config The Smart Session Emissary configuration
+    function _disableSessions(
+        address account,
+        SmartSessionEmissaryDisable calldata disableData,
+        SmartSessionEmissaryConfig calldata config
+    )
+        internal
+    {
+        // Derive lockTag from allocator, scope, resetPeriod
+        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
+
+        // Verify data expires after current block timestamp
+        require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
+
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
+
+        // Get the hash for the disable operation
+        bytes32 hash = disableData.session
+            .getAndVerifyDigest({
+                permissionId: config.permissionId,
+                account: account,
+                nonce: nonce,
+                expires: disableData.expires,
+                lockTag: lockTag
+            });
+
+        // Verify the user and allocator signatures
+        hash.verifySignatures({
+            allocator: config.allocator,
+            user: account,
+            allocatorSignature: disableData.allocatorSig,
+            userSignature: disableData.userSig,
+            isInit: true // Disabling always requires both signatures if allocator is set
+        });
+
+        // Remove the session from the smart session config
+        _removeSession({ permissionId: config.permissionId, account: account, lockTag: lockTag });
+
+        // Emit event if the session is removed
+        emit SmartSessionEmissaryConfigDisabled(account, config.permissionId, lockTag);
     }
 
     /*//////////////////////////////////////////////////////////////

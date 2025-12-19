@@ -1,21 +1,60 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.28;
 
+// Libraries
+import { LibZip } from "@solady/utils/LibZip.sol";
+import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol";
+
 // Types
-import { PermissionId } from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
+import { SmartSessionEmissaryEnable, SmartSessionEmissaryConfig } from "@types/DataTypes.sol";
 
 /// @dev Library for unpacking permission ID and data from calldata.
 library EncodeLibV2 {
     /*//////////////////////////////////////////////////////////////
+                               LIBRARIES
+    //////////////////////////////////////////////////////////////*/
+
+    using LibZip for bytes;
+    using SmartSessionModeLib for *;
+
+    /*//////////////////////////////////////////////////////////////
+                                 DECODE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Decodes the Smart Session Emissary enable data, config, and signature from the
+    ///         packed and compressed calldata.
+    function decodeEnable(bytes calldata packedSig)
+        internal
+        pure
+        returns (
+            SmartSessionEmissaryEnable memory enableData,
+            SmartSessionEmissaryConfig memory config,
+            bytes memory signature
+        )
+    {
+        (enableData, config, signature) = abi.decode(
+            packedSig.flzDecompress(),
+            (SmartSessionEmissaryEnable, SmartSessionEmissaryConfig, bytes)
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
                                  UNPACK
     //////////////////////////////////////////////////////////////*/
 
-    function unpack(bytes calldata packed)
+    /// @notice Unpacks the Smart Session mode, permission ID (if applicable), and data from the
+    function unpackMode(bytes calldata packed)
         internal
         pure
-        returns (PermissionId permissionId, bytes calldata data)
+        returns (SmartSessionMode mode, PermissionId permissionId, bytes calldata data)
     {
-        permissionId = PermissionId.wrap(bytes32(packed[0:32]));
-        data = packed[32:];
+        mode = SmartSessionMode(uint8(bytes1(packed[:1])));
+        if (mode.isEnableMode()) {
+            data = packed[1:];
+        } else {
+            permissionId = PermissionId.wrap(bytes32(packed[1:33]));
+            data = packed[33:];
+        }
     }
 }

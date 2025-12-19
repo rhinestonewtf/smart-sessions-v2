@@ -139,7 +139,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
             }
 
             // Enable the ISessionValidator for this session
-            if (!_isISessionValidatorSet(permissionId, account)) {
+            if (address($sessionValidators[permissionId][account].sessionValidator) == address(0)) {
                 $sessionValidators.enable({
                     permissionId: permissionId,
                     sessionValidator: session.sessionValidator,

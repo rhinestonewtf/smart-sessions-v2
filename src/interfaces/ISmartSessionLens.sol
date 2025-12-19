@@ -3,17 +3,39 @@ pragma solidity ^0.8.28;
 
 // Types
 import { PermissionId, ActionId, ERC7739ContextHashes } from "@smartsessions/DataTypes.sol";
-import { Session } from "@types/DataTypes.sol";
+import {
+    Session,
+    SmartSessionEmissaryConfig,
+    SmartSessionEmissaryDisable
+} from "@types/DataTypes.sol";
 
 /// @title ISmartSessionLens
 /// @notice Interface for SmartSessionLens - helper contract for reading SmartSession state
 interface ISmartSessionLens {
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when the Emissary disable data is not valid
+    error InvalidEmissaryDisableData();
+
+    /// @notice Thrown when the session is not valid
+    error InvalidSession(PermissionId permissionId);
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Emitted when the nonce is incremented
     event NonceIterated(bytes12 lockTag, address indexed account, uint256 nonce);
+
+    /// @notice Emitted when a Smart Session Emissary configuration is disabled for an account.
+    /// @param account The address of the account for which the configuration was disabled.
+    /// @param permissionId The permission ID associated with the Smart Session.
+    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
+    event SmartSessionEmissaryConfigDisabled(
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
+    );
 
     /*//////////////////////////////////////////////////////////////
                                   7579
@@ -49,6 +71,21 @@ interface ISmartSessionLens {
     /// @param lockTag The lock tag associated with the nonce to be revoked
     function revokeNonce(bytes12 lockTag) external;
 
+    /*//////////////////////////////////////////////////////////////
+                                DISABLE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Removes a Smart Session Emissary configuration for a specific account
+    /// @param account The address of the account for which the configuration is being removed
+    /// @param config The Smart Session Emissary configuration to be removed
+    /// @param disableData The disable data containing the allocatorSignature, user signature,
+    ///                    disable session data, and expiration time
+    function removeConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryDisable calldata disableData
+    )
+        external;
     /*//////////////////////////////////////////////////////////////
                                PERMISSIONS
     //////////////////////////////////////////////////////////////*/

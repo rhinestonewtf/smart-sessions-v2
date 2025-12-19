@@ -19,9 +19,10 @@ import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
 import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
 import { ExecutionLibV2 } from "@lib/ExecutionLibV2.sol";
 import { ECDSA } from "solady/utils/ECDSA.sol";
+import { SmartSessionModeLib } from "@smartsessions/lib/SmartSessionModeLib.sol";
 
 // Types
-import { PermissionId } from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
@@ -43,7 +44,6 @@ abstract contract SmartSessionMixin is
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    using EncodeLibV2 for *;
     using IdLib for *;
     using IdLibV2 for *;
     using EnumerableSet for *;
@@ -54,9 +54,11 @@ abstract contract SmartSessionMixin is
     using HashLib for *;
     using DigestCacheLib for *;
     using SmartExecutionLib for *;
+    using EncodeLibV2 for *;
+    using SmartSessionModeLib for *;
 
     /*//////////////////////////////////////////////////////////////
-                                CONFIG
+                                SET CONFIG
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Sets the Smart Session Emissary configuration for a specific account
@@ -71,53 +73,11 @@ abstract contract SmartSessionMixin is
         external
         nonReentrant
     {
-        // Derive lockTag from allocator, scope, resetPeriod
-        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
-
-        // Verify data expires after current block timestamp
-        require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
-
-        // Enable policies
+        PermissionId permissionId = enableData.session.sessionToEnable.toPermissionId();
+        // Enable session
         _enableSession({
-            account: account, enableData: enableData, config: config, lockTag: lockTag
+            account: account, enableData: enableData, config: config, permissionId: permissionId
         });
-
-        // Emit event if the session is enabled
-        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag, true);
-    }
-
-    /// @notice Removes a Smart Session Emissary configuration for a specific account
-    /// @param account The address of the account for which the configuration is being removed
-    /// @param config The Smart Session Emissary configuration to be removed
-    /// @param disableData The disable data containing the allocatorSignature, user signature,
-    ///                    disable session data, and expiration time
-    function removeConfig(
-        address account,
-        SmartSessionEmissaryConfig calldata config,
-        SmartSessionEmissaryDisable calldata disableData
-    )
-        external
-    {
-        // Derive lockTag from allocator, scope, resetPeriod
-        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
-
-        // Verify data expires after current block timestamp
-        require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
-
-        // Disable sessions
-        _disableSessions({
-            account: account,
-            disableData: disableData.session,
-            permissionId: config.permissionId,
-            lockTag: lockTag,
-            expires: disableData.expires,
-            allocator: config.allocator,
-            allocatorSig: disableData.allocatorSig,
-            userSig: disableData.userSig
-        });
-
-        // Emit event if the session is removed
-        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag, false);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -181,16 +141,50 @@ abstract contract SmartSessionMixin is
         bool validSig;
 
         // unpacking data packed in data
-        (PermissionId permissionId, bytes calldata packedSig) = emissaryData.unpack();
+        (SmartSessionMode mode, PermissionId permissionId, bytes calldata packedSig) =
+            emissaryData.unpackMode();
 
-        // Enforce action policies
-        validSig = _enforceActionPolicies({
-            permissionId: permissionId,
-            digest: digest,
-            executions: executions.safeToERC7579().parse(),
-            decompressedSignature: packedSig,
-            account: account
-        });
+        // If the SmartSession.USE mode was selected, no further policies have to be enabled.
+        // We can go straight to userOp validation
+        // This condition is the average case, so should be handled as the first condition
+        if (mode.isUseMode()) {
+            validSig = _enforceActionPolicies({
+                permissionId: permissionId,
+                digest: digest,
+                executions: executions.safeToERC7579().parse(),
+                decompressedSignature: packedSig,
+                account: account
+            });
+        }
+        // If the SmartSession.ENABLE mode was selected, the userOp.signature will contain the
+        // EnableSession data This data will be used to enable policies and signer for the session
+        // The signature of the user on the EnableSession data will be checked
+        // If the signature is valid, the policies and signer will be enabled
+        // after enabling the session, the policies will be enforced on the userOp similarly to the
+        // SmartSession.USE
+        else if (mode.isEnableMode()) {
+            // unpack the EnableSession data and signature
+            // calculate the permissionId from the Session data
+            (
+                SmartSessionEmissaryEnable memory enableData,
+                SmartSessionEmissaryConfig memory config,
+                bytes memory usePermissionSig
+            ) = packedSig.decodeEnable();
+            permissionId = enableData.session.sessionToEnable.toPermissionIdMemory();
+
+            // ENABLE mode: Enable new policies and then enforce them
+            _enableSession({
+                account: account, enableData: enableData, config: config, permissionId: permissionId
+            });
+
+            validSig = _enforceActionPolicies({
+                permissionId: permissionId,
+                digest: digest,
+                executions: executions.safeToERC7579().parse(),
+                decompressedSignature: usePermissionSig,
+                account: account
+            });
+        }
 
         /// @solidity memory-safe-assembly
         assembly {

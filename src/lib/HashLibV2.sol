@@ -150,7 +150,7 @@ library HashLibV2 {
     /// @param lockTag The lock tag derived from allocator + scope + resetPeriod
     /// @return The keccak256 hash of the encoded LockTagData
     function hashLockTagData(
-        PolicyData[] calldata claimPolicies,
+        PolicyData[] memory claimPolicies,
         bytes12 lockTag
     )
         internal
@@ -174,7 +174,7 @@ library HashLibV2 {
     /// @param lockTag The lock tag for the session (used in LockTagData hash)
     /// @return digest The computed digest for the session
     function _sessionDigest(
-        Session calldata session,
+        Session memory session,
         address account,
         uint256 nonce,
         uint256 expires,
@@ -208,7 +208,7 @@ library HashLibV2 {
     /// @param lockTag The lock tag for the session
     /// @return The computed session digest
     function sessionDigest(
-        Session calldata session,
+        Session memory session,
         address account,
         uint256 nonce,
         uint256 expires,
@@ -227,7 +227,7 @@ library HashLibV2 {
     /// @param lockTag The lock tag to include in the LockTagData hash
     /// @return The keccak256 hash of the encoded permissions
     function hashPermissions(
-        Session calldata session,
+        Session memory session,
         bytes12 lockTag
     )
         internal
@@ -255,7 +255,7 @@ library HashLibV2 {
     /// @param actionDataArray The array of action data to hash
     /// @return permitFallback Whether a fallback action policy is present
     /// @return _hash The keccak256 hash of the encoded action data array
-    function hashActionDataArray(ActionData[] calldata actionDataArray)
+    function hashActionDataArray(ActionData[] memory actionDataArray)
         internal
         pure
         returns (bool permitFallback, bytes32 _hash)
@@ -323,7 +323,7 @@ library HashLibV2 {
     /// @dev The sessionDigest is pre-computed off-chain and passed in
     /// @param chainDigest The chain digest containing chainId and pre-computed session digest
     /// @return The keccak256 hash of the encoded ChainSession
-    function hashChainDigestMimicRPC(ChainDigest calldata chainDigest)
+    function hashChainDigestMimicRPC(ChainDigest memory chainDigest)
         internal
         pure
         returns (bytes32)
@@ -336,7 +336,7 @@ library HashLibV2 {
     /// @notice Hashes an array of ChainDigest structs
     /// @param chainDigestArray The array of chain digests to hash
     /// @return The keccak256 hash of the encoded chain digest array
-    function hashChainDigestArray(ChainDigest[] calldata chainDigestArray)
+    function hashChainDigestArray(ChainDigest[] memory chainDigestArray)
         internal
         pure
         returns (bytes32)
@@ -354,7 +354,7 @@ library HashLibV2 {
     /// @dev Uses a chain-agnostic domain separator for cross-chain compatibility
     /// @param hashesAndChainIds Array of chain digests across all target chains
     /// @return The EIP-712 typed data hash for multichain signing
-    function multichainDigest(ChainDigest[] calldata hashesAndChainIds)
+    function multichainDigest(ChainDigest[] memory hashesAndChainIds)
         internal
         pure
         returns (bytes32)
@@ -375,7 +375,7 @@ library HashLibV2 {
     /// @param lockTag The lock tag for the session
     /// @return digest The computed multichain digest for signature verification
     function getAndVerifyDigest(
-        EnableSession calldata enableData,
+        EnableSession memory enableData,
         address account,
         uint256 nonce,
         uint256 expires,

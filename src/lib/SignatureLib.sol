@@ -44,8 +44,8 @@ library SignatureLib {
         bytes32 hash,
         address allocator,
         address user,
-        bytes calldata allocatorSignature,
-        bytes calldata userSignature,
+        bytes memory allocatorSignature,
+        bytes memory userSignature,
         bool isInit
     )
         internal
@@ -53,14 +53,14 @@ library SignatureLib {
     {
         // Verify user signature if the sender is not the user
         if (msg.sender != user) {
-            require(user.isValidSignatureNowCalldata(hash, userSignature), InvalidUserSignature());
+            require(user.isValidSignatureNow(hash, userSignature), InvalidUserSignature());
         }
 
         // Verify allocator signature on subsequent enables (isInit=true)
         // Skip if no allocator is configured (allocator == address(0))
         if (isInit && allocator != address(0)) {
             require(
-                allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSignature),
+                allocator.isValidERC1271SignatureNow(hash, allocatorSignature),
                 InvalidAllocatorSignature()
             );
         }
