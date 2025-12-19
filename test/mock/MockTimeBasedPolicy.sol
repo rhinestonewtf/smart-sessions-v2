@@ -48,7 +48,7 @@ contract MockTimeBasedPolicy is I1271Policy {
     /// @notice Validate signature based on time window and signer
     function check1271SignedAction(
         ConfigId configId,
-        address, // multiplexer
+        address, // multiplexor
         address account,
         bytes32, // hash
         bytes calldata data

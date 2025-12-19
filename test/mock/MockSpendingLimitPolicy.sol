@@ -19,7 +19,7 @@ contract MockSpendingLimitPolicy is IActionPolicy {
         bool initialized;
     }
 
-    /// @notice Config storage: multiplexer => account => config
+    /// @notice Config storage: multiplexor => account => config
     mapping(address => mapping(address => PolicyConfig)) public configs;
 
     function initializeWithMultiplexer(
@@ -80,20 +80,20 @@ contract MockSpendingLimitPolicy is IActionPolicy {
     }
 
     function getPolicyState(
-        address multiplexer,
+        address multiplexor,
         address account
     )
         external
         view
         returns (uint256 totalSpent, uint256 callCount, bool initialized)
     {
-        PolicyConfig storage config = configs[multiplexer][account];
+        PolicyConfig storage config = configs[multiplexor][account];
         return (config.totalSpent, config.callCount, config.initialized);
     }
 
-    function resetCounters(address multiplexer, address account) external {
-        configs[multiplexer][account].totalSpent = 0;
-        configs[multiplexer][account].callCount = 0;
+    function resetCounters(address multiplexor, address account) external {
+        configs[multiplexor][account].totalSpent = 0;
+        configs[multiplexor][account].callCount = 0;
     }
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {

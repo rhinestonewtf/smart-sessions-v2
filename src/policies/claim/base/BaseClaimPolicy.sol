@@ -311,7 +311,7 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
     function check1271SignedAction(
         ConfigId configId,
         address,
-        /* multiplexer */
+        /* multiplexor */
         address account,
         bytes32 hash,
         bytes calldata data

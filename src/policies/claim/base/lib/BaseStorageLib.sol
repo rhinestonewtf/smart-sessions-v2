@@ -16,9 +16,9 @@ import {
 //////////////////////////////////////////////////////////////
 
 The BaseClaimPolicy uses a storage pattern with unique
-slot calculation per (multiplexer, configId, account) pair.
+slot calculation per (multiplexor, configId, account) pair.
 
-Storage slot = keccak256(BASE_SLOT, multiplexer, configId, account)
+Storage slot = keccak256(BASE_SLOT, multiplexor, configId, account)
 
 This provides:
 • Isolated storage per configuration
