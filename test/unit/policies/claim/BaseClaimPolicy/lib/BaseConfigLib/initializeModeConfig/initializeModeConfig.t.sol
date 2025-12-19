@@ -60,7 +60,7 @@ contract BaseConfigLib_initializeModeConfig_Unit_Test is BaseConfigLib_Unit_Test
         external
         returns (PolicyConfig, bytes memory)
     {
-        BasePolicyStorage storage $ = _configId.getStorage(_account);
+        BasePolicyStorage storage $ = _configId.getStorage(_account, msg.sender);
         (PolicyConfig _config, bytes calldata _remaining) = $.initializeModeConfig(_initData);
         return (_config, _remaining);
     }
@@ -82,7 +82,8 @@ contract BaseConfigLib_initializeModeConfig_Unit_Test is BaseConfigLib_Unit_Test
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq(PolicyConfig.unwrap($.modeConfig), 0x00000001);
     }
 

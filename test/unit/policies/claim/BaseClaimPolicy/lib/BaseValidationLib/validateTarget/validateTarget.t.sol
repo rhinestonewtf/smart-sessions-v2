@@ -73,7 +73,7 @@ contract BaseValidationLib_validateTarget_Unit_Test is BaseValidationLib_Unit_Te
         view
         returns (bool, bytes32, uint256, uint256)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexor: msg.sender});
         return
             BaseValidationLib.validateTarget(
                 $, _data, _offset, _config, configId, account, testHash

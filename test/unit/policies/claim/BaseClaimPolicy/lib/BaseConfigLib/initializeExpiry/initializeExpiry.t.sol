@@ -57,7 +57,7 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
         external
         returns (bytes memory)
     {
-        BasePolicyStorage storage $ = _configId.getStorage(_account);
+        BasePolicyStorage storage $ = _configId.getStorage(_account, msg.sender);
         bytes calldata _remaining = $.initializeExpiry(_initData);
         return _remaining;
     }
@@ -78,7 +78,8 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.expiryConfig, 0);
     }
 
@@ -106,7 +107,8 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         (uint128 min, uint128 max) = BaseConfigLib.unpackUint128($.expiryConfig);
         assertEq(min, 0);
         assertEq(max, 2000);
@@ -125,7 +127,8 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         (uint128 min, uint128 max) = BaseConfigLib.unpackUint128($.expiryConfig);
         assertEq(min, 1000);
         assertEq(max, 2000);
@@ -160,7 +163,8 @@ contract BaseConfigLib_initializeExpiry_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         (uint128 min, uint128 max) = BaseConfigLib.unpackUint128($.expiryConfig);
         assertEq(min, _min);
         assertEq(max, _max);

@@ -67,7 +67,7 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
         external
         returns (bytes memory)
     {
-        BasePolicyStorage storage $ = _configId.getStorage(_account);
+        BasePolicyStorage storage $ = _configId.getStorage(_account, msg.sender);
         bytes calldata _remaining = $.initializeArbiter(_initData);
         return _remaining;
     }
@@ -88,7 +88,8 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage is empty
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.arbiterConfig.length(), 0);
     }
 
@@ -104,7 +105,8 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.arbiterConfig.length(), 1);
         assertTrue($.arbiterConfig.contains(arbiter1));
     }
@@ -121,7 +123,8 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.arbiterConfig.length(), 3);
         assertTrue($.arbiterConfig.contains(arbiter1));
         assertTrue($.arbiterConfig.contains(arbiter2));
@@ -142,7 +145,8 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(keccak256(remaining), keccak256(extraData));
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.arbiterConfig.length(), 1);
         assertTrue($.arbiterConfig.contains(arbiter1));
     }
@@ -165,7 +169,8 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
         assertEq(remaining.length, 0);
 
         // Verify storage - note: duplicates won't be added twice
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         for (uint8 i = 0; i < _count; i++) {
             assertTrue($.arbiterConfig.contains(_arbiters[i]));
         }

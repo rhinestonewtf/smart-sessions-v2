@@ -62,7 +62,7 @@ contract BaseValidationLib_validateArbiter_Unit_Test is BaseValidationLib_Unit_T
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexor: msg.sender});
         return BaseValidationLib.validateArbiter($, _arbiter, _config, configId, account, testHash);
     }
 

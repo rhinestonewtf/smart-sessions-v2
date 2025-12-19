@@ -95,7 +95,7 @@ contract BaseConfigLib_initializeSubPolicies_Unit_Test is BaseConfigLib_Unit_Tes
         external
         returns (bytes memory)
     {
-        BasePolicyStorage storage $ = _configId.getStorage(_account);
+        BasePolicyStorage storage $ = _configId.getStorage(_account, msg.sender);
         bytes calldata _remaining =
             $.initializeSubPolicies(_initData, _modeConfig, _account, _configId);
         return _remaining;
@@ -136,7 +136,8 @@ contract BaseConfigLib_initializeSubPolicies_Unit_Test is BaseConfigLib_Unit_Tes
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.subPolicies[FIELD_ARBITER], address(subPolicy1));
 
         // Verify initializeWithMultiplexer was called
@@ -162,7 +163,8 @@ contract BaseConfigLib_initializeSubPolicies_Unit_Test is BaseConfigLib_Unit_Tes
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.subPolicies[FIELD_ARBITER], address(subPolicy1));
 
         // Verify initializeWithMultiplexer was called with correct data
@@ -197,7 +199,8 @@ contract BaseConfigLib_initializeSubPolicies_Unit_Test is BaseConfigLib_Unit_Tes
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.subPolicies[FIELD_ARBITER], address(subPolicy1));
         assertEq($.subPolicies[FIELD_EXPIRY], address(subPolicy2));
 

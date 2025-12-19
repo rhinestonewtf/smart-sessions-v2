@@ -63,7 +63,7 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
         external
         returns (bytes memory)
     {
-        BasePolicyStorage storage $ = _configId.getStorage(_account);
+        BasePolicyStorage storage $ = _configId.getStorage(_account, msg.sender);
         bytes calldata _remaining = $.initializeOriginOps(_initData);
         return _remaining;
     }
@@ -96,7 +96,8 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.originOpsConfig[chainId1], true);
     }
 
@@ -112,7 +113,8 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.originOpsConfig[chainId1], false);
     }
 
@@ -128,7 +130,8 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.originOpsConfig[chainId1], true);
         assertEq($.originOpsConfig[chainId2], false);
     }
@@ -159,7 +162,8 @@ contract BaseConfigLib_initializeOriginOps_Unit_Test is BaseConfigLib_Unit_Test 
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: address(this) });
         assertEq($.originOpsConfig[_chainId], _required);
     }
 }

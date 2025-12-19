@@ -39,19 +39,22 @@ abstract contract CompactValidationLib_Unit_Test is CompactClaimPolicy_Unit_Test
         view
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: msg.sender });
         return $.validateTokenIn(configId, data, account, offset, chainId, config, HASH);
     }
 
     /// @notice Adds a token to the whitelist
     function addTokenToWhitelist(uint256 chainId, bytes32 id) external {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: msg.sender });
         $.tokenInSet[chainId].add(id);
     }
 
     /// @notice Sets a subpolicy for a field
     function setSubPolicy(uint8 fieldId, address subPolicy) external {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexor: msg.sender });
         $.subPolicies[fieldId] = subPolicy;
     }
 }
