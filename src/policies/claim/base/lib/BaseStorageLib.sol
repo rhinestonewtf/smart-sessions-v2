@@ -128,7 +128,7 @@ struct BasePolicyStorage {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice TokenIn whitelist per chain
-    /// @dev Compact: Bytes32Set where we store packed bytes32(token+lockTag)
+    /// @dev Compact: Bytes32Set where we store packed bytes32(lockTag, token)
     /// @dev Permit2: Bytes32Set where we store bytes32(bytes20(token))
     ///      chainId = 0 is reserved for catch-all (MODE_CHECK_CATCHALL)
     ///

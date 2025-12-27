@@ -424,7 +424,7 @@ contract CompactClaimPolicy is BaseClaimPolicy {
     /// @param configId The configuration ID
     /// @param account The account to query
     /// @param chainId The chain ID
-    /// @return tokens Array of packed bytes32 values (token+lockTag)
+    /// @return tokens Array of packed bytes32 values (lockTag + token)
     function getTokenInWhitelist(
         ConfigId configId,
         address account,
