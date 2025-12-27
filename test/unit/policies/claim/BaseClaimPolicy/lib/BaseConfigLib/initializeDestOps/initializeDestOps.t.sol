@@ -97,7 +97,7 @@ contract BaseConfigLib_initializeDestOps_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.destOpsConfig[chainId1], true);
     }
 
@@ -114,7 +114,7 @@ contract BaseConfigLib_initializeDestOps_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.destOpsConfig[chainId1], false);
     }
 
@@ -131,7 +131,7 @@ contract BaseConfigLib_initializeDestOps_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.destOpsConfig[chainId1], true);
         assertEq($.destOpsConfig[chainId2], false);
     }
@@ -163,7 +163,7 @@ contract BaseConfigLib_initializeDestOps_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.destOpsConfig[_chainId], _required);
     }
 }

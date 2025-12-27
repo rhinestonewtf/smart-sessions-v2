@@ -75,7 +75,7 @@ contract MockTimeBasedPolicy is I1271Policy {
     /// @return True if validation passes, reverts otherwise
     function check1271SignedAction(
         ConfigId configId,
-        address, // multiplexor
+        address, // multiplexer
         address account,
         bytes32, // hash
         bytes calldata data

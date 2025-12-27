@@ -16,9 +16,9 @@ import {
 //////////////////////////////////////////////////////////////
 
 The BaseClaimPolicy uses a storage pattern with unique
-slot calculation per (multiplexor, configId, account) pair.
+slot calculation per (multiplexer, configId, account) pair.
 
-Storage slot = keccak256(BASE_SLOT, multiplexor, configId, account)
+Storage slot = keccak256(BASE_SLOT, multiplexer, configId, account)
 
 This provides:
 • Isolated storage per configuration
@@ -208,19 +208,19 @@ library BaseStorageLib {
     /// @notice Returns the storage pointer for BasePolicyStorage
     /// @param id ConfigId for the policy configuration
     /// @param account Account address for the policy configuration
-    /// @param multiplexor Address of the msg.sender
+    /// @param multiplexer Address of the msg.sender
     /// @return $ Storage pointer to the BasePolicyStorage struct
     function getStorage(
         ConfigId id,
         address account,
-        address multiplexor
+        address multiplexer
     )
         internal
         pure
         returns (BasePolicyStorage storage $)
     {
         // Calculate the unique storage slot and cast to the storage struct
-        bytes32 slot = calculateSlot(STORAGE_POSITION, id, account, multiplexor);
+        bytes32 slot = calculateSlot(STORAGE_POSITION, id, account, multiplexer);
         // solhint-disable-next-line no-inline-assembly
         assembly {
             $.slot := slot
@@ -231,12 +231,12 @@ library BaseStorageLib {
                             SLOT CALCULATION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Calculates the storage slot for a given ConfigId, account, and multiplexor
+    /// @notice Calculates the storage slot for a given ConfigId, account, and multiplexer
     function calculateSlot(
         bytes32 baseSlot,
         ConfigId id,
         address account,
-        address multiplexor
+        address multiplexer
     )
         internal
         pure
@@ -246,9 +246,9 @@ library BaseStorageLib {
         assembly {
             // Load free memory pointer
             let ptr := mload(0x40)
-            // Store baseSlot, id, account, multiplexor in memory
+            // Store baseSlot, id, account, multiplexer in memory
             mstore(0x00, baseSlot)
-            mstore(0x20, multiplexor)
+            mstore(0x20, multiplexer)
             mstore(0x40, id)
             mstore(0x60, account)
             // Compute keccak256 hash of the 4 words to get the unique slot

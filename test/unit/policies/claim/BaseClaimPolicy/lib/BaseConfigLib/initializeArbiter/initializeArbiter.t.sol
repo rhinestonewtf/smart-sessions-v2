@@ -89,7 +89,7 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage is empty
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.arbiterConfig.length(), 0);
     }
 
@@ -106,7 +106,7 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.arbiterConfig.length(), 1);
         assertTrue($.arbiterConfig.contains(arbiter1));
     }
@@ -124,7 +124,7 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.arbiterConfig.length(), 3);
         assertTrue($.arbiterConfig.contains(arbiter1));
         assertTrue($.arbiterConfig.contains(arbiter2));
@@ -146,7 +146,7 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.arbiterConfig.length(), 1);
         assertTrue($.arbiterConfig.contains(arbiter1));
     }
@@ -170,7 +170,7 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage - note: duplicates won't be added twice
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         for (uint8 i = 0; i < _count; i++) {
             assertTrue($.arbiterConfig.contains(_arbiters[i]));
         }

@@ -140,7 +140,7 @@ contract BaseConfigLib_initializeQualification_Unit_Test is BaseConfigLib_Unit_T
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.qualificationConfig[chainId1][arbiter1].rules.rules.length, 1);
         assertEq($.qualificationConfig[chainId1][arbiter1].rules.packedNodes.length, 1);
     }
@@ -160,7 +160,7 @@ contract BaseConfigLib_initializeQualification_Unit_Test is BaseConfigLib_Unit_T
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.qualificationConfig[chainId1][arbiter1].rules.rules.length, 1);
         assertEq($.qualificationConfig[chainId2][arbiter2].rules.rules.length, 1);
     }

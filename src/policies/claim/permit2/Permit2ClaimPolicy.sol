@@ -305,7 +305,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         view
         returns (address[] memory tokens)
     {
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexor: msg.sender});
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
         EnumerableSetLib.Bytes32Set storage tokenSet = $.tokenInSet[chainId];
 
         uint256 length = tokenSet.length();
@@ -331,7 +331,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexor: msg.sender});
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
         return $.tokenInSet[chainId].contains(bytes32(bytes20(token)));
     }
 

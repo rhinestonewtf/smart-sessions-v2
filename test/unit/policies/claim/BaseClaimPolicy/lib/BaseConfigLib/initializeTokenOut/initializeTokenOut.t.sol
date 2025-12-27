@@ -105,7 +105,7 @@ contract BaseConfigLib_initializeTokenOut_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.tokenOutSet[chainId1].length(), 1);
         assertTrue($.tokenOutSet[chainId1].contains(token1));
     }
@@ -123,7 +123,7 @@ contract BaseConfigLib_initializeTokenOut_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.tokenOutSet[chainId1].length(), 2);
         assertTrue($.tokenOutSet[chainId1].contains(token1));
         assertTrue($.tokenOutSet[chainId1].contains(token2));
@@ -142,7 +142,7 @@ contract BaseConfigLib_initializeTokenOut_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.tokenOutSet[chainId1].length(), 1);
         assertTrue($.tokenOutSet[chainId1].contains(token1));
         assertEq($.tokenOutSet[chainId2].length(), 1);
@@ -176,7 +176,7 @@ contract BaseConfigLib_initializeTokenOut_Unit_Test is BaseConfigLib_Unit_Test {
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertTrue($.tokenOutSet[_chainId].contains(_token));
     }
 }
