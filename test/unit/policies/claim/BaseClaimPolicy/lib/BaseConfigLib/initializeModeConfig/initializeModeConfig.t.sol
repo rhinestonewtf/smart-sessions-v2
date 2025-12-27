@@ -83,7 +83,7 @@ contract BaseConfigLib_initializeModeConfig_Unit_Test is BaseConfigLib_Unit_Test
 
         // Verify storage
         BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexor: address(this) });
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq(PolicyConfig.unwrap($.modeConfig), 0x00000001);
     }
 
