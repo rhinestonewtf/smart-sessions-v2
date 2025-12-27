@@ -4,7 +4,9 @@ pragma solidity ^0.8.28;
 // Contracts
 import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 import { SmartSessionERC7739 } from "@core/SmartSessionERC7739.sol";
-import { ReentrancyGuardTransient } from "solady/utils/ReentrancyGuardTransient.sol";
+
+// Interfaces
+import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 
 // Libraries
 import { IdLib } from "@smartsessions/lib/IdLib.sol";
@@ -21,7 +23,7 @@ import { ExecutionLibV2 } from "@lib/ExecutionLibV2.sol";
 import { ECDSA } from "solady/utils/ECDSA.sol";
 
 // Types
-import { PermissionId } from "@smartsessions/DataTypes.sol";
+import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
 import {
     SmartSessionEmissaryConfig,
     SmartSessionEmissaryEnable,
@@ -37,13 +39,12 @@ import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 abstract contract SmartSessionMixin is
     SmartSessionManager,
     SmartSessionERC7739,
-    ReentrancyGuardTransient
+    ISmartSessionEmissary
 {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    using EncodeLibV2 for *;
     using IdLib for *;
     using IdLibV2 for *;
     using EnumerableSet for *;
@@ -54,71 +55,7 @@ abstract contract SmartSessionMixin is
     using HashLib for *;
     using DigestCacheLib for *;
     using SmartExecutionLib for *;
-
-    /*//////////////////////////////////////////////////////////////
-                                CONFIG
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Sets the Smart Session Emissary configuration for a specific account
-    /// @param account The address of the account for which the configuration is being set
-    /// @param config The Smart Session Emissary configuration
-    /// @param enableData The Emissary enable data
-    function setConfig(
-        address account,
-        SmartSessionEmissaryConfig calldata config,
-        SmartSessionEmissaryEnable calldata enableData
-    )
-        external
-        nonReentrant
-    {
-        // Derive lockTag from allocator, scope, resetPeriod
-        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
-
-        // Verify data expires after current block timestamp
-        require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
-
-        // Enable policies
-        _enableSession({
-            account: account, enableData: enableData, config: config, lockTag: lockTag
-        });
-
-        // Emit event if the session is enabled
-        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag, true);
-    }
-
-    /// @notice Removes a Smart Session Emissary configuration for a specific account
-    /// @param account The address of the account for which the configuration is being removed
-    /// @param config The Smart Session Emissary configuration to be removed
-    /// @param disableData The disable data containing the allocatorSignature, user signature,
-    ///                    disable session data, and expiration time
-    function removeConfig(
-        address account,
-        SmartSessionEmissaryConfig calldata config,
-        SmartSessionEmissaryDisable calldata disableData
-    )
-        external
-    {
-        // Derive lockTag from allocator, scope, resetPeriod
-        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
-
-        // Verify data expires after current block timestamp
-        require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
-
-        // Disable sessions
-        _disableSessions({
-            account: account,
-            disableData: disableData.session,
-            permissionId: config.permissionId,
-            lockTag: lockTag,
-            expires: disableData.expires,
-            allocator: config.allocator,
-            allocatorSig: disableData.allocatorSig,
-            userSig: disableData.userSig
-        });
-
-        // Emit event if the session is removed
-        emit SmartSessionEmissaryConfigUpdated(account, config.permissionId, lockTag, false);
-    }
+    using EncodeLibV2 for *;
 
     /*//////////////////////////////////////////////////////////////
                                  CLAIM
@@ -180,17 +117,55 @@ abstract contract SmartSessionMixin is
         // Init validSig
         bool validSig;
 
-        // unpacking data packed in data
-        (PermissionId permissionId, bytes calldata packedSig) = emissaryData.unpack();
+        // Unpack mode, permissionId and signature from emissaryData
+        (SmartSessionMode mode, PermissionId permissionId, bytes calldata packedSig) =
+            emissaryData.unpackMode();
 
-        // Enforce action policies
-        validSig = _enforceActionPolicies({
-            permissionId: permissionId,
-            digest: digest,
-            executions: executions.safeToERC7579().parse(),
-            decompressedSignature: packedSig,
-            account: account
-        });
+        // If the SmartSession.USE mode was selected, no further policies have to be enabled.
+        // We can go straight to userOp validation
+        // This condition is the average case, so should be handled as the first condition
+        if (mode == SmartSessionMode.USE) {
+            validSig = _enforceActionPolicies({
+                permissionId: permissionId,
+                digest: digest,
+                executions: executions.safeToERC7579().parse(),
+                decompressedSignature: packedSig,
+                account: account
+            });
+        }
+        // If the SmartSession.ENABLE mode was selected, the userOp.signature will contain the
+        // EnableSession data This data will be used to enable policies and signer for the session
+        // The signature of the user on the EnableSession data will be checked
+        // If the signature is valid, the policies and signer will be enabled
+        // after enabling the session, the policies will be enforced on the userOp similarly to the
+        // SmartSession.USE
+        else if (mode == SmartSessionMode.ENABLE) {
+            // unpack the EnableSession data and signature
+            // calculate the permissionId from the Session data
+            (
+                SmartSessionEmissaryEnable memory enableData,
+                SmartSessionEmissaryConfig memory config,
+                bytes memory usePermissionSig
+            ) = packedSig.decodeEnable();
+            permissionId = enableData.session.sessionToEnable.toPermissionIdMemory();
+
+            // ENABLE mode: Enable new policies and then enforce them
+            _enableSession({
+                account: account, enableData: enableData, config: config, permissionId: permissionId
+            });
+
+            validSig = _enforceActionPolicies({
+                permissionId: permissionId,
+                digest: digest,
+                executions: executions.safeToERC7579().parse(),
+                decompressedSignature: usePermissionSig,
+                account: account
+            });
+        }
+        // if an Unknown mode is provided, the function will revert
+        else {
+            revert UnsupportedSmartSessionMode(mode);
+        }
 
         /// @solidity memory-safe-assembly
         assembly {
@@ -444,15 +419,4 @@ abstract contract SmartSessionMixin is
 
     /// @notice Returns the typed data hash for a given hash
     function _getTypedDataHashSansChainId(bytes32 hash) internal view virtual returns (bytes32);
-
-    /// @notice Always use transient reentrancy guard only on mainnet
-    function _useTransientReentrancyGuardOnlyOnMainnet()
-        internal
-        view
-        virtual
-        override
-        returns (bool)
-    {
-        return false;
-    }
 }

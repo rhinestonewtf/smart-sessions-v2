@@ -31,74 +31,8 @@ interface Interface {
     type PolicyType is uint8;
     type ResetPeriod is uint8;
     type Scope is uint8;
+    type SmartSessionMode is uint8;
     type PermissionId is bytes32;
-
-    struct ActionData {
-        bytes4 actionTargetSelector;
-        address actionTarget;
-        PolicyData[] actionPolicies;
-    }
-
-    struct ChainDigest {
-        uint64 chainId;
-        bytes32 sessionDigest;
-    }
-
-    struct DisableSession {
-        uint8 chainDigestIndex;
-        ChainDigest[] hashesAndChainIds;
-    }
-
-    struct ERC7739Context {
-        bytes32 appDomainSeparator;
-        string[] contentNames;
-    }
-
-    struct ERC7739Data {
-        ERC7739Context[] allowedERC7739Content;
-        PolicyData[] erc1271Policies;
-    }
-
-    struct EnableSession {
-        uint8 chainDigestIndex;
-        ChainDigest[] hashesAndChainIds;
-        Session sessionToEnable;
-    }
-
-    struct PolicyData {
-        address policy;
-        bytes initData;
-    }
-
-    struct Session {
-        address sessionValidator;
-        bytes sessionValidatorInitData;
-        bytes32 salt;
-        ActionData[] actions;
-        PolicyData[] claimPolicies;
-        ERC7739Data erc7739Policies;
-    }
-
-    struct SmartSessionEmissaryConfig {
-        Scope scope;
-        ResetPeriod resetPeriod;
-        address allocator;
-        PermissionId permissionId;
-    }
-
-    struct SmartSessionEmissaryDisable {
-        bytes allocatorSig;
-        bytes userSig;
-        uint256 expires;
-        DisableSession session;
-    }
-
-    struct SmartSessionEmissaryEnable {
-        bytes allocatorSig;
-        bytes userSig;
-        uint256 expires;
-        EnableSession session;
-    }
 
     error ChainIdMismatch(uint64 providedChainId);
     error ForbiddenValidationData();
@@ -106,19 +40,15 @@ interface Interface {
     error IncorrectType();
     error InvalidActionId();
     error InvalidAllocatorSignature();
-    error InvalidAllocatorSignature();
     error InvalidDataLength();
-    error InvalidEmissaryDisableData();
     error InvalidEmissaryEnableData();
     error InvalidISessionValidator(address sessionValidator);
     error InvalidNonce();
     error InvalidPermissionId(PermissionId permissionId);
     error InvalidPermissionId(PermissionId permissionId);
     error InvalidSelfCall();
-    error InvalidSession(PermissionId permissionId);
     error InvalidSignature();
     error InvalidTarget();
-    error InvalidUserSignature();
     error InvalidUserSignature();
     error NoExecutionsInBatch();
     error NoPoliciesSet(PermissionId permissionId);
@@ -129,13 +59,13 @@ interface Interface {
     error UnauthorizedSource();
     error UnsafeFallbackNotAllowed();
     error UnsupportedPolicy(address policy);
+    error UnsupportedSmartSessionMode(SmartSessionMode mode);
 
     event EmissaryConfigUpdated(address indexed account, address indexed validator, bytes12 indexed lockTag);
     event PolicyEnabled(PermissionId permissionId, PolicyType policyType, address policy, address smartAccount);
-    event SessionValidatorDisabled(PermissionId permissionId, address sessionValidator, address smartAccount);
     event SessionValidatorEnabled(PermissionId permissionId, address sessionValidator, address smartAccount);
-    event SmartSessionEmissaryConfigUpdated(
-        address indexed account, PermissionId permissionId, bytes12 indexed lockTag, bool enabled
+    event SmartSessionEmissaryConfigEnabled(
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
     );
 
     fallback() external;
@@ -163,20 +93,10 @@ interface Interface {
         external
         view
         returns (bytes4 result);
-    function removeConfig(
-        address account,
-        SmartSessionEmissaryConfig memory config,
-        SmartSessionEmissaryDisable memory disableData
-    ) external;
     function setConfig(
         address account,
         IEmissary.EmissaryConfig memory config,
         IEmissary.EmissaryEnable memory enableData
-    ) external;
-    function setConfig(
-        address account,
-        SmartSessionEmissaryConfig memory config,
-        SmartSessionEmissaryEnable memory enableData
     ) external;
     function verifyClaim(address sponsor, bytes32 digest, bytes32, bytes memory emissaryData, bytes12 lockTag)
         external

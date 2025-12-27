@@ -190,18 +190,21 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         // Extract mode from first byte of emissaryData
         EmissaryMode mode = emissaryData.decodeEmissaryMode();
 
+        // Get the actual emissary data without mode byte
+        bytes calldata actualEmissaryData = emissaryData[1:];
+
         // Mode-based dispatch for claim verification
         if (mode == EMISSARY_VANILLA) {
             // Validate using vanilla emissary signature validation
             return _validateSignature({
-                sponsor: sponsor, digest: digest, emissaryData: emissaryData[1:], lockTag: lockTag
+                sponsor: sponsor, digest: digest, emissaryData: actualEmissaryData, lockTag: lockTag
             })
                 ? this.verifyClaim.selector
                 : INVALID_SIGNATURE;
         } else if (mode == EMISSARY_SMART_SESSION) {
             // Validate using SmartSession verification
             return _verifyClaimSmartSession({
-                sponsor: sponsor, digest: digest, emissaryData: emissaryData[1:], lockTag: lockTag
+                sponsor: sponsor, digest: digest, emissaryData: actualEmissaryData, lockTag: lockTag
             });
         }
 
@@ -230,7 +233,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes4)
     {
         return _verifyExecutionSmartSession({
-            account: sponsor, digest: digest, emissaryData: emissaryData[1:], executions: executions
+            account: sponsor, digest: digest, emissaryData: emissaryData, executions: executions
         });
     }
 
