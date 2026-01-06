@@ -294,7 +294,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// @notice Returns the whitelisted tokenIn entries for a chain
     /// @param configId The configuration ID
     /// @param account The account to query
-    /// @param chainId The chain ID (typically 0 for origin chain)
+    /// @param chainId The chain ID
     /// @return tokens Array of token addresses
     function getTokenInWhitelist(
         ConfigId configId,
@@ -305,7 +305,8 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         view
         returns (address[] memory tokens)
     {
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         EnumerableSetLib.Bytes32Set storage tokenSet = $.tokenInSet[chainId];
 
         uint256 length = tokenSet.length();
@@ -318,7 +319,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
     /// @notice Checks if a token is whitelisted
     /// @param configId The configuration ID
     /// @param account The account to query
-    /// @param chainId The chain ID (typically 0 for origin chain)
+    /// @param chainId The chain ID
     /// @param token The token address
     /// @return True if the token is whitelisted
     function isTokenInWhitelisted(
@@ -331,7 +332,8 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.tokenInSet[chainId].contains(bytes32(bytes20(token)));
     }
 
