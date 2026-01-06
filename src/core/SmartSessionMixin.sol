@@ -249,7 +249,7 @@ abstract contract SmartSessionMixin is
     ///      3. Checks the ERC-1271 policy with the remaining policy data
     ///      4. Validates the signature using ISessionValidator
     /// @dev Signature format:
-    /// [permissionId(32)][sigLength(32)][validatorSig(sigLength)][policyData]
+    /// [permissionId(32)][policyDataOffset(32)][validatorSig(sigLength)][policyData]
     /// @param digest The digest of the data to be signed
     /// @param signature The signature to be validated
     /// @param sponsor The address of the account for which the signature is being validated
