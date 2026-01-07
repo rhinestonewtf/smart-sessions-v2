@@ -467,7 +467,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization overwrites recipient config
-    function test_initializeWithMultiplexer_recipientStorage_revertsWHen_overwrites() external {
+    function test_initializeWithMultiplexer_recipientStorage_revertsWhen_overwrites() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
