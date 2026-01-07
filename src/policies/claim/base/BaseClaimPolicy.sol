@@ -199,6 +199,9 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
 
         // ------------------ POLICY CONFIG ------------------ //
 
+        // Make sure config is not already initialized
+        require($.modeConfig == EMPTY_CONFIG, ConfigurationAlreadyExists());
+
         // Decode and initialize policy mode configuration
         (PolicyConfig modeConfig, bytes calldata data) = $.initializeModeConfig(initData);
 

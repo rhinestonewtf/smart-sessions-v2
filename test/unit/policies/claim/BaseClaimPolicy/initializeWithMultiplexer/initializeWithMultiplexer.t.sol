@@ -197,7 +197,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization adds to arbiter set
-    function test_initializeWithMultiplexer_arbiterStorage_additive() external {
+    function test_initializeWithMultiplexer_arbiterStorage_revertsWhen_additive() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE);
         address[] memory arbiters1 = new address[](1);
@@ -211,11 +211,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
         bytes memory initData2 = abi.encodePacked(modeConfig, _encodeArbiterConfig(arbiters2));
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        assertTrue(policy.isArbiterWhitelisted(configId, account, arbiter1));
-        assertTrue(policy.isArbiterWhitelisted(configId, account, arbiter2));
     }
 
     /// @notice Test reverts when arbiter data is incomplete
@@ -315,7 +312,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization overwrites expiry config
-    function test_initializeWithMultiplexer_expiryStorage_overwrites() external {
+    function test_initializeWithMultiplexer_expiryStorage_revertsWhen_overwrites() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_EXPIRY, MODE_CHECK_STORAGE);
         bytes memory initData1 = abi.encodePacked(modeConfig, _encodeExpiryConfig(100, 200));
@@ -325,12 +322,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
         bytes memory initData2 = abi.encodePacked(modeConfig, _encodeExpiryConfig(300, 400));
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        (uint128 min, uint128 max) = policy.getExpiryBounds(configId, account);
-        assertEq(min, 300);
-        assertEq(max, 400);
     }
 
     /// @notice Test reverts when expiry min > max
@@ -453,8 +446,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
         assertEq(policy.getRecipient(configId, account, type(uint256).max), recipient1);
     }
 
-    /// @notice Test overwrites when same chainId appears twice
-    function test_initializeWithMultiplexer_recipientStorage_overwritesSameChainId() external {
+    /// @notice Test deduplicates when same chainId appears twice
+    function test_initializeWithMultiplexer_recipientStorage_deduplicates_SameChainId() external {
         // Arrange
         uint32 modeConfig = _buildModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](2);
@@ -474,7 +467,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization overwrites recipient config
-    function test_initializeWithMultiplexer_recipientStorage_overwrites() external {
+    function test_initializeWithMultiplexer_recipientStorage_revertsWHen_overwrites() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -491,10 +484,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
             abi.encodePacked(modeConfig, _encodeRecipientConfig(chainIds, recipients));
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        assertEq(policy.getRecipient(configId, account, chainId1), recipient2);
     }
 
     /// @notice Test reverts when recipient data is incomplete
@@ -613,7 +604,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization overwrites fill expiry config
-    function test_initializeWithMultiplexer_fillExpiryStorage_overwrites() external {
+    function test_initializeWithMultiplexer_fillExpiryStorage_revertsWhen_overwrites() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_FILL_EXPIRY, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -633,12 +624,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
             abi.encodePacked(modeConfig, _encodeFillExpiryConfig(chainIds, mins, maxs));
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        (uint128 min, uint128 max) = policy.getFillExpiryBounds(configId, account, chainId1);
-        assertEq(min, 300);
-        assertEq(max, 400);
     }
 
     /// @notice Test reverts when fill expiry min > max
@@ -773,7 +760,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization adds to tokenOut set
-    function test_initializeWithMultiplexer_tokenOutStorage_additive() external {
+    function test_initializeWithMultiplexer_tokenOutStorage_revertsWhen_additive() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_TOKEN_OUT, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -790,11 +777,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
             abi.encodePacked(modeConfig, _encodeTokenOutConfig(chainIds, tokens));
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        assertTrue(policy.isTokenOutWhitelisted(configId, account, chainId1, token1));
-        assertTrue(policy.isTokenOutWhitelisted(configId, account, chainId1, token2));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -877,7 +861,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization overwrites originOps config
-    function test_initializeWithMultiplexer_originOpsStorage_overwrites() external {
+    function test_initializeWithMultiplexer_originOpsStorage_revertsWhen_overwrites() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_ORIGIN_OPS, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -894,10 +878,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
             abi.encodePacked(modeConfig, _encodeOriginOpsConfig(chainIds, required));
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        assertFalse(policy.getOriginOpsRequired(configId, account, chainId1));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -980,7 +962,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization overwrites destOps config
-    function test_initializeWithMultiplexer_destOpsStorage_overwrites() external {
+    function test_initializeWithMultiplexer_destOpsStorage_revertsWhen_overwrites() external {
         // Arrange - first init
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -997,10 +979,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
             abi.encodePacked(modeConfig, _encodeDestOpsConfig(chainIds, required));
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        assertFalse(policy.getDestOpsRequired(configId, account, chainId1));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -1131,7 +1111,7 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test re-initialization overwrites subPolicy config
-    function test_initializeWithMultiplexer_subPolicyStorage_overwrites() external {
+    function test_initializeWithMultiplexer_subPolicyStorage_revertsWhen_overwrites() external {
         // Arrange - first init
         MockSubPolicy mockSubPolicy2 = new MockSubPolicy();
         uint32 modeConfig = _buildModeConfig(FIELD_ARBITER, MODE_CHECK_SUBPOLICY);
@@ -1146,10 +1126,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
         );
 
         // Act
+        vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
-
-        // Assert
-        assertEq(policy.getSubPolicy(configId, account, FIELD_ARBITER), address(mockSubPolicy2));
     }
 
     /// @notice Test reverts when subpolicy is address(0)
