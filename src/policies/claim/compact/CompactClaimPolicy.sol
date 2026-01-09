@@ -435,7 +435,8 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         returns (bytes32[] memory tokens)
     {
         // Get storage reference
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         EnumerableSetLib.Bytes32Set storage tokenSet = $.tokenInSet[chainId];
 
         // Retrieve all tokens
@@ -465,8 +466,9 @@ contract CompactClaimPolicy is BaseClaimPolicy {
         returns (bool)
     {
         // Get storage reference
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
-        // Pack token + lockTag
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
+        // Pack lockTag + token
         bytes32 packed = bytes32(lockTag.asUint256() | token.asUint256());
         // Check if whitelisted
         return $.tokenInSet[chainId].contains(packed);
