@@ -210,7 +210,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ReentrancyGuardTra
                         REENTRANCY GUARD OVERRIDE
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Always use transient reentrancy guard only on mainnet
+    /// @notice Always use transient reentrancy guard
     function _useTransientReentrancyGuardOnlyOnMainnet()
         internal
         view
