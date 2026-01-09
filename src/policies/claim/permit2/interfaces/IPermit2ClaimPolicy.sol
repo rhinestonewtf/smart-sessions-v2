@@ -17,7 +17,7 @@ interface IPermit2ClaimPolicy is IBaseClaimPolicy {
     /// @notice Returns the whitelisted tokenIn entries for a chain
     /// @param configId The configuration ID
     /// @param account The account to query
-    /// @param chainId The chain ID (typically 0 for origin chain)
+    /// @param chainId The chain ID
     /// @return tokens Array of whitelisted token addresses
     function getTokenInWhitelist(
         ConfigId configId,
@@ -31,7 +31,7 @@ interface IPermit2ClaimPolicy is IBaseClaimPolicy {
     /// @notice Checks if a token is whitelisted
     /// @param configId The configuration ID
     /// @param account The account to query
-    /// @param chainId The chain ID (typically 0 for origin chain)
+    /// @param chainId The chain ID
     /// @param token The token address
     /// @return True if the token is whitelisted
     function isTokenInWhitelisted(
