@@ -73,11 +73,11 @@ bytes32 constant SESSION_TYPEHASH =
 
 /// @dev ChainSession(uint64 chainId, SignedSession session)
 bytes32 constant CHAIN_SESSION_TYPEHASH =
-    0x4d94aa2cf2bdd9e8d19e24098494aa33b99daae6d24ee7af0a7b1e1cb064135a;
+    0xabc350ff4773ba356e85e2d2ee58d7d7511767acdb108b59058f5b4a5afc074b;
 
 /// @dev MultiChainSession(ChainSession[] sessionsAndChainIds)
 bytes32 constant MULTICHAIN_SESSION_TYPEHASH =
-    0xb831fde4c1f21deaff0779fc176b4bb03ac54077b7e8aff5c4c97442bbbc7672;
+    0xb4323194e4ca3723804b96dc7a0960bde1afff2b080b8b288fdc264c82e21357;
 
 /// @dev keccak256("EIP712Domain(string name,string version)")
 bytes32 constant _MULTICHAIN_DOMAIN_TYPEHASH =
@@ -103,11 +103,11 @@ bytes32 constant SIGNED_PERMISSION_DISABLE_TYPEHASH =
 
 /// @dev ChainDisable(uint64 chainId, SignedPermissionDisable disable)
 bytes32 constant CHAIN_DISABLE_TYPEHASH =
-    0xc2d600ef39f4496d7e886215ef487d03062b7942ebe522d1fbea1869b06707fd;
+    0x9e9bdba2de9bed6a73d19a18981bf116fe2fdb59357e77d23e8699b81267e5f6;
 
 /// @dev MultiChainDisable(ChainDisable[] disablesAndChainIds)
 bytes32 constant MULTICHAIN_DISABLE_TYPEHASH =
-    0x497a6c209205a92306c5909da736f801e9889788372e07d5c5376b9e4c63a52f;
+    0x6a9faa6216b7d82d297b22f3c509ce7c0148d5f4a342101e5026a65caaa845a2;
 
 /// @title HashLibV2
 /// @notice Extended version of HashLib from SmartSessions for the Emissary system

@@ -75,14 +75,15 @@ contract CalculateTypehashes is Script {
         console2.log("=== Chain Types ===\n");
 
         // ChainSession
-        string memory chainSession = "ChainSession(uint64 chainId,bytes32 sessionDigest)";
+        string memory chainSession =
+            "ChainSession(uint64 chainId,SignedSession session)ActionData(bytes4 actionTargetSelector,address actionTarget,PolicyData[] actionPolicies)ERC7739Context(bytes32 appDomainSeparator,string[] contentName)ERC7739Data(ERC7739Context[] allowedERC7739Content,PolicyData[] erc1271Policies)LockTagData(bytes12 lockTag,PolicyData[] claimPolicies)PolicyData(address policy,bytes initData)SignedPermissions(ActionData[] actions,ERC7739Data erc7739Policies,LockTagData lockTagPolicies,bool permitGenericPolicy)SignedSession(address account,uint256 expires,uint256 nonce,SignedPermissions permissions,bytes32 salt,address sessionValidator,bytes sessionValidatorInitData,address smartSessionEmissary)";
         console2.log("CHAIN_SESSION_TYPEHASH:");
         console2.logBytes32(keccak256(bytes(chainSession)));
         console2.log("");
 
         // MultiChainSession
         string memory multiChainSession =
-            "MultiChainSession(ChainSession[] sessionsAndChainIds)ChainSession(uint64 chainId,bytes32 sessionDigest)";
+            "MultiChainSession(ChainSession[] sessionsAndChainIds)ActionData(bytes4 actionTargetSelector,address actionTarget,PolicyData[] actionPolicies)ChainSession(uint64 chainId,SignedSession session)ERC7739Context(bytes32 appDomainSeparator,string[] contentName)ERC7739Data(ERC7739Context[] allowedERC7739Content,PolicyData[] erc1271Policies)LockTagData(bytes12 lockTag,PolicyData[] claimPolicies)PolicyData(address policy,bytes initData)SignedPermissions(ActionData[] actions,ERC7739Data erc7739Policies,LockTagData lockTagPolicies,bool permitGenericPolicy)SignedSession(address account,uint256 expires,uint256 nonce,SignedPermissions permissions,bytes32 salt,address sessionValidator,bytes sessionValidatorInitData,address smartSessionEmissary)";
         console2.log("MULTICHAIN_SESSION_TYPEHASH:");
         console2.logBytes32(keccak256(bytes(multiChainSession)));
         console2.log("");
@@ -101,14 +102,15 @@ contract CalculateTypehashes is Script {
         console2.log("");
 
         // ChainDisable
-        string memory chainDisable = "ChainDisable(uint64 chainId,bytes32 disableDigest)";
+        string memory chainDisable =
+            "ChainDisable(uint64 chainId,SignedPermissionDisable disable)SignedPermissionDisable(address account,bytes32 permissionId,bytes12 lockTag,uint256 expires,uint256 nonce)";
         console2.log("CHAIN_DISABLE_TYPEHASH:");
         console2.logBytes32(keccak256(bytes(chainDisable)));
         console2.log("");
 
         // MultiChainDisable
         string memory multiChainDisable =
-            "MultiChainDisable(ChainDisable[] disablesAndChainIds)ChainDisable(uint64 chainId,bytes32 disableDigest)";
+            "MultiChainDisable(ChainDisable[] disablesAndChainIds)ChainDisable(uint64 chainId,SignedPermissionDisable disable)SignedPermissionDisable(address account,bytes32 permissionId,bytes12 lockTag,uint256 expires,uint256 nonce)";
         console2.log("MULTICHAIN_DISABLE_TYPEHASH:");
         console2.logBytes32(keccak256(bytes(multiChainDisable)));
         console2.log("");
