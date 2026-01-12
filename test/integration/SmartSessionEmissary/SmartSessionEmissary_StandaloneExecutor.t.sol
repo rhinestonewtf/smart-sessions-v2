@@ -109,7 +109,7 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         Base_Test.setUp();
 
         // Redeploy SmartSessionEmissary with intentExecutor
-        smartSessionEmissary = new SmartSessionEmissary(address(env.intentExecutor));
+        smartSessionEmissary = new SmartSessionEmissary(address(ADDRESSBOOK));
 
         // Setup lockTag
         testLockTag = env.lockTag;

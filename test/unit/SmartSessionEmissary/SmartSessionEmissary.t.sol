@@ -7,6 +7,7 @@ import { Solarray } from "solarray/Solarray.sol";
 
 // Contracts
 import { SmartSessionEmissaryMock } from "@test/mock/SmartSessionEmissaryMock.sol";
+import { AddressBook } from "@mocks/MockAddressBook.sol";
 
 // Interfaces
 import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
@@ -63,7 +64,8 @@ contract SmartSessionEmissary_Unit_Test is Base_Test {
         // Define the mock intent executor address.
         MOCK_INTENT_EXECUTOR = makeAddr("MockIntentExecutor");
         // Deploy the SmartSessionEmissary contract.
-        smartSessionEmissary = new SmartSessionEmissaryMock(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary =
+            new SmartSessionEmissaryMock(address(new AddressBook(MOCK_INTENT_EXECUTOR)));
         // Label the contract for better readability in traces.
         vm.label(address(smartSessionEmissary), "SmartSessionEmissary");
     }
