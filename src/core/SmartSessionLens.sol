@@ -162,7 +162,7 @@ contract SmartSessionLens is SmartSessionManager, ISmartSessionLens {
         // Get the lockTag currently enabled for this permissionId and account
         bytes12 existingLockTag = $enabledLockTag[permissionId][account];
 
-        // Check a lockTag is already enabled for this permissionId.
+        // Check if a lockTag is already enabled for this permissionId.
         // - First enable (isInit=false): Only user signature required
         // - Subsequent enables (isInit=true): Both user AND allocator signatures required
         //
