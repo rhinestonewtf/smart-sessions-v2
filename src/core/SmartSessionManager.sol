@@ -113,14 +113,21 @@ abstract contract SmartSessionManager is SmartSessionStorage, ReentrancyGuardTra
         // Ensure the permissionId matches the config
         require(permissionId == config.permissionId, InvalidPermissionId(config.permissionId));
 
-        // Check if this lockTag is already enabled for this permissionId.
+        // Get the lockTag currently enabled for this permissionId and account
+        bytes12 existingLockTag = $enabledLockTag[permissionId][account];
+
+        // Check a lockTag is already enabled for this permissionId.
         // - First enable (isInit=false): Only user signature required
         // - Subsequent enables (isInit=true): Both user AND allocator signatures required
         //
         // Note: When allocator == address(0) (no allocator / NO_LOCKTAG flow),
         // the allocator signature check is always skipped regardless of isInit.
-        bool isInit =
-            $enabledLockTags[permissionId].contains({ account: account, value: bytes32(lockTag) });
+        bool isInit = existingLockTag != NO_LOCKTAG;
+
+        // Revert if trying to set a different lockTag for the same permissionId
+        if (isInit && existingLockTag != lockTag) {
+            revert InvalidPermissionId(permissionId);
+        }
 
         // Verify the user and allocator signatures
         hash.verifySignatures({
@@ -199,8 +206,8 @@ abstract contract SmartSessionManager is SmartSessionStorage, ReentrancyGuardTra
         // Add permissionId to enabled sessions
         $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });
 
-        // Add lockTag to this permissionId
-        $enabledLockTags[permissionId].add({ account: account, value: bytes32(lockTag) });
+        // Set the lockTag for this permissionId and account
+        $enabledLockTag[permissionId][account] = lockTag;
 
         // Emit event
         emit SmartSessionEmissaryConfigEnabled(account, permissionId, lockTag);

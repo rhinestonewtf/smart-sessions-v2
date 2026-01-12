@@ -529,8 +529,40 @@ contract SmartSessionLens_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test 
                        MULTIPLE LOCKTAGS TESTS
     //////////////////////////////////////////////////////////////*/
 
+    function test_setConfig_revertsWhen_differentLockTagForSamePermissionId() public {
+        // First enable with ChainSpecific scope (testLockTag from setUp)
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        // Now try to enable same permissionId with Multichain scope (different lockTag)
+        testConfig.scope = Scope.Multichain;
+        bytes12 differentLockTag =
+            testConfig.allocator.deriveLockTag(Scope.Multichain, testConfig.resetPeriod);
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](1);
+        chainDigests[0] = ChainDigest({
+            chainId: uint64(block.chainid),
+            sessionDigest: _lens()
+                .getSessionDigest(instance.account, testSession, differentLockTag, testExpires)
+        });
+
+        SmartSessionEmissaryEnable memory newEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
+            userSig: ""
+        });
+
+        // Act & Assert
+        vm.expectRevert(abi.encodeWithSelector(InvalidPermissionId.selector, testPermissionId));
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, newEnableData);
+    }
+
     /// @notice Test setConfig with multiple lockTags for same permissionId
-    function test_setConfig_multipleLockTags() public {
+    function test_setConfig_revertsWhen_multipleLockTags() public {
         // Arrange - first enable
         vm.prank(instance.account);
         _lens().setConfig(instance.account, testConfig, testEnableData);
@@ -563,15 +595,15 @@ contract SmartSessionLens_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test 
 
         // Act
         vm.prank(instance.account);
+        vm.expectRevert(abi.encodeWithSelector(InvalidPermissionId.selector, testPermissionId));
         _lens().setConfig(instance.account, secondConfig, secondEnableData);
 
-        // Assert - both lockTags enabled for same permissionId
+        // Assert - first lockTag still enabled
         assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
     }
 
     /// @notice Test setConfig with different allocators derives unique lockTags
-    function test_setConfig_differentAllocators_uniqueLockTags() public {
+    function test_setConfig_differentAllocators_revertsWhen_uniqueLockTags() public {
         // Arrange - first allocator
         vm.prank(instance.account);
         _lens().setConfig(instance.account, testConfig, testEnableData);
@@ -612,11 +644,11 @@ contract SmartSessionLens_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test 
 
         // Act
         vm.prank(instance.account);
+        vm.expectRevert(abi.encodeWithSelector(InvalidPermissionId.selector, testPermissionId));
         _lens().setConfig(instance.account, secondConfig, secondEnableData);
 
-        // Assert - both lockTags enabled independently for same permissionId
+        // Assert - first lockTag still enabled
         assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -754,60 +786,6 @@ contract SmartSessionLens_setConfig_Unit_Test is SmartSessionEmissary_Unit_Test 
         vm.expectRevert(InvalidAllocatorSignature.selector);
         vm.prank(instance.account);
         _lens().setConfig(instance.account, testConfig, testEnableData);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                       NONCE MANAGEMENT TESTS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Test nonces are tracked independently per lockTag
-    function test_setConfig_noncesIndependentPerLockTag() public {
-        // Arrange - first lockTag
-        vm.prank(instance.account);
-        _lens().setConfig(instance.account, testConfig, testEnableData);
-
-        uint256 firstLockTagNonce = _lens().getNonce(instance.account, testLockTag);
-        assertEq(firstLockTagNonce, 1);
-
-        // Create second config with different scope (different lockTag)
-        bytes12 secondLockTag =
-            address(allocatorContract).deriveLockTag(Scope.Multichain, testResetPeriod);
-
-        uint256 secondLockTagNonceBefore = _lens().getNonce(instance.account, secondLockTag);
-        assertEq(secondLockTagNonceBefore, 0);
-
-        SmartSessionEmissaryConfig memory secondConfig = SmartSessionEmissaryConfig({
-            permissionId: testPermissionId,
-            allocator: address(allocatorContract),
-            scope: Scope.Multichain,
-            resetPeriod: testResetPeriod
-        });
-
-        ChainDigest[] memory chainDigests = new ChainDigest[](1);
-        chainDigests[0] = ChainDigest({
-            chainId: uint64(block.chainid),
-            sessionDigest: _getSessionDigest(testSession, secondLockTag, testExpires)
-        });
-
-        SmartSessionEmissaryEnable memory secondEnableData = SmartSessionEmissaryEnable({
-            session: EnableSession({
-                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
-            }),
-            expires: testExpires,
-            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
-            userSig: ""
-        });
-
-        // Act
-        vm.prank(instance.account);
-        _lens().setConfig(instance.account, secondConfig, secondEnableData);
-
-        // Assert - each lockTag has independent nonce
-        uint256 firstLockTagNonceAfter = _lens().getNonce(instance.account, testLockTag);
-        uint256 secondLockTagNonceAfter = _lens().getNonce(instance.account, secondLockTag);
-
-        assertEq(firstLockTagNonceAfter, 1);
-        assertEq(secondLockTagNonceAfter, 1);
     }
 
     /*//////////////////////////////////////////////////////////////

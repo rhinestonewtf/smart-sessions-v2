@@ -159,14 +159,21 @@ contract SmartSessionLens is SmartSessionManager, ISmartSessionLens {
         // Ensure the permissionId matches the config
         require(permissionId == config.permissionId, InvalidPermissionId(config.permissionId));
 
-        // Check if this lockTag is already enabled for this permissionId.
+        // Get the lockTag currently enabled for this permissionId and account
+        bytes12 existingLockTag = $enabledLockTag[permissionId][account];
+
+        // Check a lockTag is already enabled for this permissionId.
         // - First enable (isInit=false): Only user signature required
         // - Subsequent enables (isInit=true): Both user AND allocator signatures required
         //
         // Note: When allocator == address(0) (no allocator / NO_LOCKTAG flow),
         // the allocator signature check is always skipped regardless of isInit.
-        bool isInit =
-            $enabledLockTags[permissionId].contains({ account: account, value: bytes32(lockTag) });
+        bool isInit = existingLockTag != NO_LOCKTAG;
+
+        // Revert if trying to set a different lockTag for the same permissionId
+        if (isInit && existingLockTag != lockTag) {
+            revert InvalidPermissionId(permissionId);
+        }
 
         // Verify the user and allocator signatures
         hash.verifySignatures({
@@ -248,7 +255,7 @@ contract SmartSessionLens is SmartSessionManager, ISmartSessionLens {
         $enabledSessions.remove({ account: account, value: PermissionId.unwrap(permissionId) });
 
         // Remove the lockTag from this permissionId
-        $enabledLockTags[permissionId].remove({ account: account, value: bytes32(lockTag) });
+        $enabledLockTag[permissionId][account] = NO_LOCKTAG;
     }
 
     /// @notice Disables sessions for an account after verifying required signatures
@@ -359,8 +366,7 @@ contract SmartSessionLens is SmartSessionManager, ISmartSessionLens {
         view
         returns (bool)
     {
-        return
-            $enabledLockTags[permissionId].contains({ account: account, value: bytes32(lockTag) });
+        return $enabledLockTag[permissionId][account] == lockTag;
     }
 
     /*//////////////////////////////////////////////////////////////

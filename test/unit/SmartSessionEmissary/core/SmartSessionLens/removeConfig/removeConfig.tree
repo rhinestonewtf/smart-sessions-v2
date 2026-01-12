@@ -39,15 +39,11 @@ SmartSessionLens::removeConfig
 │   │   └── it should derive lockTag with OneSecond resetPeriod
 │   └── when resetPeriod is OneMinute
 │       └── it should derive lockTag with OneMinute resetPeriod
-├── given nonce management
-│   └── it should track nonces independently per lockTag
 ├── given lockTag isolation
 │   ├── when removing lockTag from one permissionId
 │   │   └── it should not affect same lockTag on different permissionId
 │   └── when removing one lockTag from permissionId with multiple lockTags
 │       └── it should only remove the specified lockTag
-├── given multiple lockTags for same permissionId
-│   └── it should only remove the specified lockTag, leaving others intact
 ├── given multichain disable data
 │   ├── when chainDigestIndex points to current chain
 │   │   └── it should succeed

@@ -137,33 +137,6 @@ contract SmartSessionLens_isLockTagEnabled_Test is SmartSessionLens_Unit_Test {
         assertTrue(isEnabled2, "Lock tag 2 should be enabled");
     }
 
-    function test_isLockTagEnabled_ReturnsTrue_SamePermission_MultipleLockTags() public {
-        // Arrange - same session, different lockTags
-        Session memory session = _createActionSession(
-            ISessionValidator(address(yesSessionValidator)),
-            keccak256("testSalt"),
-            target,
-            bytes4(keccak256("transfer()")),
-            address(sudoPolicy)
-        );
-
-        PermissionId permissionId = _enableSession(session, TEST_LOCK_TAG);
-
-        // Enable again with different lockTag (same permissionId)
-        vm.prank(instance.account);
-        Session[] memory sessions = new Session[](1);
-        sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions, TEST_LOCK_TAG_2);
-
-        // Act
-        bool isEnabled1 = _lens().isLockTagEnabled(instance.account, permissionId, TEST_LOCK_TAG);
-        bool isEnabled2 = _lens().isLockTagEnabled(instance.account, permissionId, TEST_LOCK_TAG_2);
-
-        // Assert
-        assertTrue(isEnabled1, "Lock tag 1 should be enabled");
-        assertTrue(isEnabled2, "Lock tag 2 should be enabled");
-    }
-
     function test_isLockTagEnabled_ReturnsTrue_ForNoLockTag() public {
         // Arrange
         Session memory session = _createActionSession(
@@ -206,34 +179,5 @@ contract SmartSessionLens_isLockTagEnabled_Test is SmartSessionLens_Unit_Test {
         // Assert
         assertTrue(isEnabledForOriginal, "Should be enabled for original permissionId");
         assertFalse(isEnabledForDifferent, "Should NOT be enabled for different permissionId");
-    }
-
-    /// @notice Test same permissionId can have multiple lockTags
-    function test_isLockTagEnabled_ReturnsTrue_SamePermissionId_MultipleLockTags() public {
-        // Arrange
-        Session memory session = _createActionSession(
-            ISessionValidator(address(yesSessionValidator)),
-            keccak256("testSalt"),
-            target,
-            bytes4(keccak256("transfer()")),
-            address(sudoPolicy)
-        );
-
-        // Enable same session with two different lockTags
-        PermissionId permissionId = _enableSession(session, TEST_LOCK_TAG);
-
-        // Enable again with different lockTag (same permissionId)
-        vm.prank(instance.account);
-        Session[] memory sessions = new Session[](1);
-        sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions, TEST_LOCK_TAG_2);
-
-        // Act
-        bool isEnabled1 = _lens().isLockTagEnabled(instance.account, permissionId, TEST_LOCK_TAG);
-        bool isEnabled2 = _lens().isLockTagEnabled(instance.account, permissionId, TEST_LOCK_TAG_2);
-
-        // Assert
-        assertTrue(isEnabled1, "Lock tag 1 should be enabled");
-        assertTrue(isEnabled2, "Lock tag 2 should be enabled");
     }
 }

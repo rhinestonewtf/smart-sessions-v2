@@ -442,82 +442,72 @@ contract SmartSessionLens_removeConfig_Unit_Test is SmartSessionEmissary_Unit_Te
 
     /// @notice Test removeConfig with NO_LOCKTAG does not require allocator sig
     function test_removeConfig_withNoLockTag_noAllocatorSigRequired() public {
-        // Arrange - setup with NO_LOCKTAG
-        testConfig.allocator = address(0);
-        testLockTag = NO_LOCKTAG;
-        _rebuildEnableData();
-        testEnableData.allocatorSig = "";
+        // Create FRESH session for NO_LOCKTAG flow (different permissionId)
+        Session memory freshSession = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("noLockTagSalt"),
+            sessionValidatorInitData: "noLockTagInitData",
+            erc7739Policies: testSession.erc7739Policies,
+            claimPolicies: testSession.claimPolicies,
+            actions: testSession.actions
+        });
 
-        // Enable first
-        vm.prank(instance.account);
-        _lens().setConfig(instance.account, testConfig, testEnableData);
+        PermissionId freshPermissionId = freshSession.toPermissionIdMemory();
 
-        // Build disable data without allocator sig
-        _buildDisableData();
-        testDisableData.allocatorSig = "";
-
-        // Act
-        vm.prank(instance.account);
-        _lens().removeConfig(instance.account, testConfig, testDisableData);
-
-        // Assert
-        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
-        assertFalse(isEnabled);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                       NONCE MANAGEMENT TESTS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Test nonces are tracked independently per lockTag
-    function test_removeConfig_noncesIndependentPerLockTag() public {
-        // Arrange - setup second lockTag
-        bytes12 secondLockTag =
-            address(allocatorContract).deriveLockTag(Scope.Multichain, testResetPeriod);
-
-        SmartSessionEmissaryConfig memory secondConfig = SmartSessionEmissaryConfig({
-            permissionId: testPermissionId,
-            allocator: address(allocatorContract),
-            scope: Scope.Multichain,
+        SmartSessionEmissaryConfig memory freshConfig = SmartSessionEmissaryConfig({
+            permissionId: freshPermissionId,
+            allocator: address(0),
+            scope: testScope,
             resetPeriod: testResetPeriod
         });
 
-        // Enable second lockTag
+        // Build enable data for fresh session
         ChainDigest[] memory chainDigests = new ChainDigest[](1);
         chainDigests[0] = ChainDigest({
             chainId: uint64(block.chainid),
-            sessionDigest: _getSessionDigest(testSession, secondLockTag, testExpires)
+            sessionDigest: _lens()
+                .getSessionDigest(instance.account, freshSession, NO_LOCKTAG, testExpires)
         });
 
-        SmartSessionEmissaryEnable memory secondEnableData = SmartSessionEmissaryEnable({
+        SmartSessionEmissaryEnable memory freshEnableData = SmartSessionEmissaryEnable({
             session: EnableSession({
-                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+                sessionToEnable: freshSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
-            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
+            allocatorSig: "",
             userSig: ""
         });
 
+        // Enable fresh session
         vm.prank(instance.account);
-        _lens().setConfig(instance.account, secondConfig, secondEnableData);
+        _lens().setConfig(instance.account, freshConfig, freshEnableData);
 
-        // Get nonces before
-        uint256 firstLockTagNonceBefore = _lens().getNonce(instance.account, testLockTag);
-        uint256 secondLockTagNonceBefore = _lens().getNonce(instance.account, secondLockTag);
+        // Build disable data without allocator sig
+        uint256 currentNonce = _lens().getNonce(instance.account, NO_LOCKTAG);
+        bytes32 disableDigest = HashLibV2.disableDigest(
+            freshPermissionId, instance.account, currentNonce, testExpires, NO_LOCKTAG
+        );
 
-        // Remove only the first config
-        _buildDisableData();
+        ChainDigest[] memory disableChainDigests = new ChainDigest[](1);
+        disableChainDigests[0] =
+            ChainDigest({ chainId: uint64(block.chainid), sessionDigest: disableDigest });
+
+        SmartSessionEmissaryDisable memory freshDisableData = SmartSessionEmissaryDisable({
+            session: DisableSession({
+                hashesAndChainIds: disableChainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: "",
+            userSig: ""
+        });
 
         // Act
         vm.prank(instance.account);
-        _lens().removeConfig(instance.account, testConfig, testDisableData);
+        _lens().removeConfig(instance.account, freshConfig, freshDisableData);
 
-        // Assert - only first lockTag nonce incremented
-        uint256 firstLockTagNonceAfter = _lens().getNonce(instance.account, testLockTag);
-        uint256 secondLockTagNonceAfter = _lens().getNonce(instance.account, secondLockTag);
-
-        assertEq(firstLockTagNonceAfter, firstLockTagNonceBefore + 1);
-        assertEq(secondLockTagNonceAfter, secondLockTagNonceBefore);
+        // Assert
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, freshPermissionId);
+        assertFalse(isEnabled);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -597,100 +587,146 @@ contract SmartSessionLens_removeConfig_Unit_Test is SmartSessionEmissary_Unit_Te
 
     /// @notice Test removeConfig with Multichain scope
     function test_removeConfig_withMultichainScope() public {
-        // Arrange - setup with Multichain scope
-        testConfig.scope = Scope.Multichain;
-        testLockTag = testConfig.allocator.deriveLockTag(Scope.Multichain, testConfig.resetPeriod);
-        _rebuildEnableData();
+        // Create FRESH session with Multichain scope (different permissionId)
+        Session memory freshSession = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("multichainScopeSalt"), // Different salt = different permissionId
+            sessionValidatorInitData: "multichainScopeInitData",
+            erc7739Policies: testSession.erc7739Policies,
+            claimPolicies: testSession.claimPolicies,
+            actions: testSession.actions
+        });
 
-        // Enable with Multichain scope
-        vm.prank(instance.account);
-        _lens().setConfig(instance.account, testConfig, testEnableData);
-
-        // Build disable data
-        _buildDisableData();
-
-        // Act
-        vm.prank(instance.account);
-        _lens().removeConfig(instance.account, testConfig, testDisableData);
-
-        // Assert
-        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
-        assertFalse(isEnabled);
-    }
-
-    /// @notice Test removeConfig with different reset periods
-    function test_removeConfig_withOneSecondResetPeriod() public {
-        // Arrange - setup with OneSecond reset period
-        testConfig.resetPeriod = ResetPeriod.OneSecond;
-        testLockTag = testConfig.allocator.deriveLockTag(testConfig.scope, ResetPeriod.OneSecond);
-        _rebuildEnableData();
-
-        // Enable with OneSecond reset period
-        vm.prank(instance.account);
-        _lens().setConfig(instance.account, testConfig, testEnableData);
-
-        // Build disable data
-        _buildDisableData();
-
-        // Act
-        vm.prank(instance.account);
-        _lens().removeConfig(instance.account, testConfig, testDisableData);
-
-        // Assert
-        bool isEnabled = _lens().isPermissionEnabled(instance.account, testConfig.permissionId);
-        assertFalse(isEnabled);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                      MULTIPLE LOCKTAGS TESTS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Test removeConfig only removes specified lockTag, leaving others intact
-    function test_removeConfig_onlyRemovesSpecifiedLockTag() public {
-        // Arrange - setup second lockTag for SAME permissionId
-        bytes12 secondLockTag =
+        PermissionId freshPermissionId = freshSession.toPermissionIdMemory();
+        bytes12 freshLockTag =
             address(allocatorContract).deriveLockTag(Scope.Multichain, testResetPeriod);
 
-        SmartSessionEmissaryConfig memory secondConfig = SmartSessionEmissaryConfig({
-            permissionId: testPermissionId,
+        SmartSessionEmissaryConfig memory freshConfig = SmartSessionEmissaryConfig({
+            permissionId: freshPermissionId,
             allocator: address(allocatorContract),
             scope: Scope.Multichain,
             resetPeriod: testResetPeriod
         });
 
-        // Enable second lockTag
+        // Build enable data for fresh session
         ChainDigest[] memory chainDigests = new ChainDigest[](1);
         chainDigests[0] = ChainDigest({
             chainId: uint64(block.chainid),
-            sessionDigest: _getSessionDigest(testSession, secondLockTag, testExpires)
+            sessionDigest: _lens()
+                .getSessionDigest(instance.account, freshSession, freshLockTag, testExpires)
         });
 
-        SmartSessionEmissaryEnable memory secondEnableData = SmartSessionEmissaryEnable({
+        SmartSessionEmissaryEnable memory freshEnableData = SmartSessionEmissaryEnable({
             session: EnableSession({
-                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+                sessionToEnable: freshSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
             }),
             expires: testExpires,
             allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
             userSig: ""
         });
 
+        // Enable fresh session
         vm.prank(instance.account);
-        _lens().setConfig(instance.account, secondConfig, secondEnableData);
+        _lens().setConfig(instance.account, freshConfig, freshEnableData);
 
-        // Verify both are enabled for same permissionId
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
+        // Build disable data for fresh session
+        uint256 currentNonce = _lens().getNonce(instance.account, freshLockTag);
+        bytes32 disableDigest = HashLibV2.disableDigest(
+            freshPermissionId, instance.account, currentNonce, testExpires, freshLockTag
+        );
 
-        // Remove only first lockTag
-        _buildDisableData();
+        ChainDigest[] memory disableChainDigests = new ChainDigest[](1);
+        disableChainDigests[0] =
+            ChainDigest({ chainId: uint64(block.chainid), sessionDigest: disableDigest });
+
+        SmartSessionEmissaryDisable memory freshDisableData = SmartSessionEmissaryDisable({
+            session: DisableSession({
+                hashesAndChainIds: disableChainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(this.multichainDigest(disableChainDigests)),
+            userSig: ""
+        });
 
         // Act
         vm.prank(instance.account);
-        _lens().removeConfig(instance.account, testConfig, testDisableData);
+        _lens().removeConfig(instance.account, freshConfig, freshDisableData);
 
-        // Assert - first removed, second still enabled (same permissionId)
-        assertFalse(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
+        // Assert
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, freshPermissionId);
+        assertFalse(isEnabled);
+    }
+
+    /// @notice Test removeConfig with OneSecond reset period
+    function test_removeConfig_withOneSecondResetPeriod() public {
+        // Create FRESH session with OneSecond reset period (different permissionId)
+        Session memory freshSession = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("oneSecondResetPeriodSalt"),
+            sessionValidatorInitData: "oneSecondResetPeriodInitData",
+            erc7739Policies: testSession.erc7739Policies,
+            claimPolicies: testSession.claimPolicies,
+            actions: testSession.actions
+        });
+
+        PermissionId freshPermissionId = freshSession.toPermissionIdMemory();
+        bytes12 freshLockTag =
+            address(allocatorContract).deriveLockTag(testScope, ResetPeriod.OneSecond);
+
+        SmartSessionEmissaryConfig memory freshConfig = SmartSessionEmissaryConfig({
+            permissionId: freshPermissionId,
+            allocator: address(allocatorContract),
+            scope: testScope,
+            resetPeriod: ResetPeriod.OneSecond
+        });
+
+        // Build enable data for fresh session
+        ChainDigest[] memory chainDigests = new ChainDigest[](1);
+        chainDigests[0] = ChainDigest({
+            chainId: uint64(block.chainid),
+            sessionDigest: _lens()
+                .getSessionDigest(instance.account, freshSession, freshLockTag, testExpires)
+        });
+
+        SmartSessionEmissaryEnable memory freshEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: freshSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
+            userSig: ""
+        });
+
+        // Enable fresh session
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, freshConfig, freshEnableData);
+
+        // Build disable data for fresh session
+        uint256 currentNonce = _lens().getNonce(instance.account, freshLockTag);
+        bytes32 disableDigest = HashLibV2.disableDigest(
+            freshPermissionId, instance.account, currentNonce, testExpires, freshLockTag
+        );
+
+        ChainDigest[] memory disableChainDigests = new ChainDigest[](1);
+        disableChainDigests[0] =
+            ChainDigest({ chainId: uint64(block.chainid), sessionDigest: disableDigest });
+
+        SmartSessionEmissaryDisable memory freshDisableData = SmartSessionEmissaryDisable({
+            session: DisableSession({
+                hashesAndChainIds: disableChainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(this.multichainDigest(disableChainDigests)),
+            userSig: ""
+        });
+
+        // Act
+        vm.prank(instance.account);
+        _lens().removeConfig(instance.account, freshConfig, freshDisableData);
+
+        // Assert
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, freshPermissionId);
+        assertFalse(isEnabled);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -750,53 +786,6 @@ contract SmartSessionLens_removeConfig_Unit_Test is SmartSessionEmissary_Unit_Te
         // Assert - first permissionId's lockTag removed, second's intact
         assertFalse(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
         assertTrue(_lens().isLockTagEnabled(instance.account, secondPermissionId, testLockTag));
-    }
-
-    /// @notice Test removing one lockTag doesn't affect other lockTags for same permissionId
-    function test_removeConfig_lockTagRemovalIsolatedPerLockTag() public {
-        // Arrange - setup second lockTag for SAME permissionId
-        bytes12 secondLockTag =
-            address(allocatorContract).deriveLockTag(Scope.Multichain, testResetPeriod);
-
-        SmartSessionEmissaryConfig memory secondConfig = SmartSessionEmissaryConfig({
-            permissionId: testPermissionId,
-            allocator: address(allocatorContract),
-            scope: Scope.Multichain,
-            resetPeriod: testResetPeriod
-        });
-
-        ChainDigest[] memory chainDigests = new ChainDigest[](1);
-        chainDigests[0] = ChainDigest({
-            chainId: uint64(block.chainid),
-            sessionDigest: _getSessionDigest(testSession, secondLockTag, testExpires)
-        });
-
-        SmartSessionEmissaryEnable memory secondEnableData = SmartSessionEmissaryEnable({
-            session: EnableSession({
-                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
-            }),
-            expires: testExpires,
-            allocatorSig: _signAllocator(this.multichainDigest(chainDigests)),
-            userSig: ""
-        });
-
-        vm.prank(instance.account);
-        _lens().setConfig(instance.account, secondConfig, secondEnableData);
-
-        // Verify both lockTags enabled for same permissionId
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
-
-        // Remove only first lockTag
-        _buildDisableData();
-
-        // Act
-        vm.prank(instance.account);
-        _lens().removeConfig(instance.account, testConfig, testDisableData);
-
-        // Assert - first lockTag removed, second intact (same permissionId)
-        assertFalse(_lens().isLockTagEnabled(instance.account, testPermissionId, testLockTag));
-        assertTrue(_lens().isLockTagEnabled(instance.account, testPermissionId, secondLockTag));
     }
 
     /*//////////////////////////////////////////////////////////////
