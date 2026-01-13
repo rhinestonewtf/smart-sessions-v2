@@ -366,7 +366,7 @@ contract SmartSessionLens is SmartSessionManager, ISmartSessionLens {
         view
         returns (bool)
     {
-        return $enabledLockTag[permissionId][account] == lockTag;
+        return lockTag != NO_LOCKTAG && $enabledLockTag[permissionId][account] == lockTag;
     }
 
     /*//////////////////////////////////////////////////////////////
