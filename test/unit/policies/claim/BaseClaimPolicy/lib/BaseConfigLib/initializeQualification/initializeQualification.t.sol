@@ -70,7 +70,7 @@ contract BaseConfigLib_initializeQualification_Unit_Test is BaseConfigLib_Unit_T
         external
         returns (bytes memory)
     {
-        BasePolicyStorage storage $ = _configId.getStorage(_account);
+        BasePolicyStorage storage $ = _configId.getStorage(_account, msg.sender);
         bytes calldata _remaining = $.initializeQualification(_initData);
         return _remaining;
     }
@@ -139,7 +139,8 @@ contract BaseConfigLib_initializeQualification_Unit_Test is BaseConfigLib_Unit_T
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.qualificationConfig[chainId1][arbiter1].rules.rules.length, 1);
         assertEq($.qualificationConfig[chainId1][arbiter1].rules.packedNodes.length, 1);
     }
@@ -158,7 +159,8 @@ contract BaseConfigLib_initializeQualification_Unit_Test is BaseConfigLib_Unit_T
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.qualificationConfig[chainId1][arbiter1].rules.rules.length, 1);
         assertEq($.qualificationConfig[chainId2][arbiter2].rules.rules.length, 1);
     }

@@ -29,20 +29,23 @@ abstract contract CompactConfigLib_Unit_Test is CompactClaimPolicy_Unit_Test {
 
     /// @notice Initializes tokenIn and returns remaining calldata length
     function initializeTokenIn(bytes calldata initData) external returns (uint256 remainingLength) {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         bytes calldata remaining = $.initializeTokenIn(initData);
         return remaining.length;
     }
 
     /// @notice Checks if a token is in the set
     function containsTokenIn(uint256 chainId, bytes32 id) external view returns (bool) {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.tokenInSet[chainId].contains(id);
     }
 
     /// @notice Returns the length of the tokenIn set for a chain
     function tokenInSetLength(uint256 chainId) external view returns (uint256) {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.tokenInSet[chainId].length();
     }
 }

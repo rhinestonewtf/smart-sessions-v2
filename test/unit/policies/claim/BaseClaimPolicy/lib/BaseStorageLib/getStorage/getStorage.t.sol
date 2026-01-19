@@ -30,10 +30,10 @@ contract BaseStorageLib_getStorage_Unit_Test is BaseStorageLib_Unit_Test {
         address account
     )
         external
-        pure
+        view
         returns (bytes32 slot)
     {
-        BasePolicyStorage storage $ = BaseStorageLib.getStorage(id, account);
+        BasePolicyStorage storage $ = BaseStorageLib.getStorage(id, account, msg.sender);
         assembly {
             slot := $.slot
         }
@@ -41,13 +41,13 @@ contract BaseStorageLib_getStorage_Unit_Test is BaseStorageLib_Unit_Test {
 
     /// @notice External wrapper to write modeConfig to storage
     function writeModeConfigExternal(ConfigId id, address account, uint32 value) external {
-        BasePolicyStorage storage $ = BaseStorageLib.getStorage(id, account);
+        BasePolicyStorage storage $ = BaseStorageLib.getStorage(id, account, msg.sender);
         $.modeConfig = PolicyConfig.wrap(value);
     }
 
     /// @notice External wrapper to read modeConfig from storage
     function readModeConfigExternal(ConfigId id, address account) external view returns (uint32) {
-        BasePolicyStorage storage $ = BaseStorageLib.getStorage(id, account);
+        BasePolicyStorage storage $ = BaseStorageLib.getStorage(id, account, msg.sender);
         return PolicyConfig.unwrap($.modeConfig);
     }
 

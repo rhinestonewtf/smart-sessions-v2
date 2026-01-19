@@ -433,7 +433,7 @@ contract MockSpendingLimitPolicy_Integration_Test is ActionPolicy_Integration_Te
         bytes memory initData = abi.encode(_targetContract, allowedSelector, 1 ether, uint256(0));
 
         // Create two different sessions
-        PermissionId pid1 = enableActionSession(
+        enableActionSession(
             account, address(policy), initData, alice.addr, _targetContract, allowedSelector
         );
 

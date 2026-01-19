@@ -34,10 +34,10 @@ contract BaseStorageLib_calculateSlot_Unit_Test is BaseStorageLib_Unit_Test {
         address account
     )
         external
-        pure
+        view
         returns (bytes32)
     {
-        return BaseStorageLib.calculateSlot(_baseSlot, id, account);
+        return BaseStorageLib.calculateSlot(_baseSlot, id, account, msg.sender);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -66,7 +66,8 @@ contract BaseStorageLib_calculateSlot_Unit_Test is BaseStorageLib_Unit_Test {
         resultSlot = this.calculateSlotExternal(baseSlot, configId1, account1);
 
         // Assert - compute expected value manually
-        bytes32 expected = keccak256(abi.encode(baseSlot, ConfigId.unwrap(configId1), account1));
+        bytes32 expected =
+            keccak256(abi.encode(baseSlot, address(this), ConfigId.unwrap(configId1), account1));
         assertEq(resultSlot, expected);
     }
 
@@ -134,7 +135,8 @@ contract BaseStorageLib_calculateSlot_Unit_Test is BaseStorageLib_Unit_Test {
         resultSlot = this.calculateSlotExternal(zeroBaseSlot, zeroConfigId, zeroAccount);
 
         // Assert - should still return a valid (non-zero due to keccak) slot
-        bytes32 expected = keccak256(abi.encode(zeroBaseSlot, bytes32(0), zeroAccount));
+        bytes32 expected =
+            keccak256(abi.encode(zeroBaseSlot, address(this), bytes32(0), zeroAccount));
         assertEq(resultSlot, expected);
     }
 
@@ -173,7 +175,7 @@ contract BaseStorageLib_calculateSlot_Unit_Test is BaseStorageLib_Unit_Test {
         resultSlot = this.calculateSlotExternal(_baseSlot, id, _account);
 
         // Assert
-        bytes32 expected = keccak256(abi.encode(_baseSlot, _configId, _account));
+        bytes32 expected = keccak256(abi.encode(_baseSlot, address(this), _configId, _account));
         assertEq(resultSlot, expected);
     }
 

@@ -223,7 +223,7 @@ library Permit2ValidationLib {
         valid = I1271Policy(subPolicy)
             .check1271SignedAction({
                 id: configId,
-                requestSender: msg.sender,
+                requestSender: address(0),
                 account: account,
                 hash: hash,
                 signature: tokenInData

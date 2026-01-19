@@ -10,6 +10,7 @@ import {
 } from "@mocks/SmartSessionEmissaryMock.sol";
 import { OwnableValidator } from "@mocks/MockOwnableValidator.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
+import { AddressBook } from "@mocks/MockAddressBook.sol";
 
 // Interfaces
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
@@ -66,7 +67,8 @@ abstract contract SmartSessionEmissary_Integration_Base_Test is Base_Test {
         super.setUp();
 
         // Deploy SmartSessionEmissary with mock intent executor
-        smartSessionEmissary = new SmartSessionEmissary(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary =
+            new SmartSessionEmissary(address(new AddressBook(MOCK_INTENT_EXECUTOR)));
 
         // Deploy ownable validator
         ownableValidator = new OwnableValidator();

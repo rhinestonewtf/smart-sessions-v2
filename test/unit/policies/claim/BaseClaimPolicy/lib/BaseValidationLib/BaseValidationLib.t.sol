@@ -154,7 +154,7 @@ contract BaseValidationLib_Unit_Test is Base_Test {
 
     /// @notice Gets storage pointer for current configId and account
     function _getStorage() internal view returns (BasePolicyStorage storage) {
-        return configId.getStorage(account);
+        return configId.getStorage({ account: account, multiplexer: address(this) });
     }
 
     /// @notice Sets up arbiter in storage

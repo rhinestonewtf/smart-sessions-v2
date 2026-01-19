@@ -139,7 +139,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
             }
 
             // Enable the ISessionValidator for this session
-            if (!_isISessionValidatorSet(permissionId, account)) {
+            if (address($sessionValidators[permissionId][account].sessionValidator) == address(0)) {
                 $sessionValidators.enable({
                     permissionId: permissionId,
                     sessionValidator: session.sessionValidator,
@@ -149,8 +149,24 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
             }
             permissionIds[i] = permissionId;
 
+            // Get the lockTag currently enabled for this permissionId and account
+            bytes12 existingLockTag = $enabledLockTag[permissionId][account];
+
+            // Check a lockTag is already enabled for this permissionId.
+            // - First enable (isInit=false): Only user signature required
+            // - Subsequent enables (isInit=true): Both user AND allocator signatures required
+            //
+            // Note: When allocator == address(0) (no allocator / NO_LOCKTAG flow),
+            // the allocator signature check is always skipped regardless of isInit.
+            bool isInit = existingLockTag != NO_LOCKTAG;
+
+            // Revert if trying to set a different lockTag for the same permissionId
+            if (isInit && existingLockTag != lockTag) {
+                revert InvalidPermissionId(permissionId);
+            }
+
             // Add the lockTag to the enabled lockTags for the account
-            $enabledLockTags[permissionId].add({ account: account, value: bytes32(lockTag) });
+            $enabledLockTag[permissionId][account] = lockTag;
 
             // Add to enabled sessions
             $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });

@@ -31,9 +31,9 @@ abstract contract SmartSessionStorage {
     /// @notice Set of enabled permission IDs per smart account
     EnumerableSet.Bytes32Set internal $enabledSessions;
 
-    /// @notice Maps permissionId => set of enabled lockTags per account
-    mapping(PermissionId permissionId => EnumerableSet.Bytes32Set lockTags) internal
-        $enabledLockTags;
+    /// @notice Maps permission IDs and smart accounts to their corresponding lockTags
+    mapping(PermissionId permissionId => mapping(address smartAccount => bytes12 lockTag)) internal
+        $enabledLockTag;
 
     /*//////////////////////////////////////////////////////////////
                                 POLICIES

@@ -194,9 +194,13 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         virtual
     {
         // Load storage pointer for configId/account pair
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
 
         // ------------------ POLICY CONFIG ------------------ //
+
+        // Make sure config is not already initialized
+        require($.modeConfig == EMPTY_CONFIG, ConfigurationAlreadyExists());
 
         // Decode and initialize policy mode configuration
         (PolicyConfig modeConfig, bytes calldata data) = $.initializeModeConfig(initData);
@@ -322,7 +326,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         returns (bool)
     {
         // Load storage pointer for configId/account pair
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
 
         // Load mode configuration
         PolicyConfig modeConfig = $.modeConfig;
@@ -366,7 +371,9 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (PolicyConfig)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ = configId.getStorage({
+            account: account, multiplexer: msg.sender
+        });
         return $.modeConfig;
     }
 
@@ -382,7 +389,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (address[] memory arbiters)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         uint256 length = $.arbiterConfig.length();
         arbiters = new address[](length);
         for (uint256 i = 0; i < length; i++) {
@@ -404,7 +412,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.arbiterConfig.contains(arbiter);
     }
 
@@ -421,7 +430,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (uint128 minExpiry, uint128 maxExpiry)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         (minExpiry, maxExpiry) = BaseConfigLib.unpackUint128($.expiryConfig);
     }
 
@@ -439,7 +449,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (address)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.recipientConfig[chainId];
     }
 
@@ -457,7 +468,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (address)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.subPolicies[fieldId];
     }
 
@@ -476,7 +488,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (uint128 minFillExpiry, uint128 maxFillExpiry)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         (minFillExpiry, maxFillExpiry) = BaseConfigLib.unpackUint128($.fillExpiryConfig[chainId]);
     }
 
@@ -494,7 +507,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (address[] memory tokens)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         uint256 length = $.tokenOutSet[chainId].length();
         tokens = new address[](length);
         for (uint256 i = 0; i < length; i++) {
@@ -518,7 +532,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.tokenOutSet[chainId].contains(token);
     }
 
@@ -536,7 +551,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.originOpsConfig[chainId];
     }
 
@@ -554,7 +570,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.destOpsConfig[chainId];
     }
 
@@ -574,7 +591,8 @@ abstract contract BaseClaimPolicy is IBaseClaimPolicy, I1271Policy {
         view
         returns (QualificationRulesStorage memory rules)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return $.qualificationConfig[chainId][arbiter];
     }
 

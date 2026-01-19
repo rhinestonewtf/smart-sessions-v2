@@ -69,7 +69,7 @@ contract BaseConfigLib_initializeRecipient_Unit_Test is BaseConfigLib_Unit_Test 
         external
         returns (bytes memory)
     {
-        BasePolicyStorage storage $ = _configId.getStorage(_account);
+        BasePolicyStorage storage $ = _configId.getStorage(_account, msg.sender);
         bytes calldata _remaining = $.initializeRecipient(_initData);
         return _remaining;
     }
@@ -102,7 +102,8 @@ contract BaseConfigLib_initializeRecipient_Unit_Test is BaseConfigLib_Unit_Test 
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.recipientConfig[chainId1], recipient1);
     }
 
@@ -118,7 +119,8 @@ contract BaseConfigLib_initializeRecipient_Unit_Test is BaseConfigLib_Unit_Test 
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.recipientConfig[chainId1], recipient1);
         assertEq($.recipientConfig[chainId2], recipient2);
     }
@@ -149,7 +151,8 @@ contract BaseConfigLib_initializeRecipient_Unit_Test is BaseConfigLib_Unit_Test 
         assertEq(remaining.length, 0);
 
         // Verify storage
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: address(this) });
         assertEq($.recipientConfig[_chainId], _recipient);
     }
 }

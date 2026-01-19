@@ -20,6 +20,10 @@ interface IBaseClaimPolicy {
     /// @notice Thrown when policy initialization fails due to invalid configuration data
     error InvalidConfigurationData();
 
+    /// @notice Thrown when attempting to initialize a policy that already exists for an account and
+    ///         config ID
+    error ConfigurationAlreadyExists();
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/

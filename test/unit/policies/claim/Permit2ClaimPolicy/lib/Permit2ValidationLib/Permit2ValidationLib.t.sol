@@ -38,20 +38,23 @@ abstract contract Permit2ValidationLib_Unit_Test is Permit2ClaimPolicy_Unit_Test
         view
         returns (bool valid, bytes32 tokenInHash, uint256 newOffset)
     {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return
             Permit2ValidationLib.validateTokenIn(configId, data, account, offset, config, $, HASH);
     }
 
     /// @notice Adds a token to the whitelist
     function addTokenToWhitelist(uint256 chainId, address token) external {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         $.tokenInSet[chainId].add(bytes32(bytes20(token)));
     }
 
     /// @notice Sets a subpolicy for a field
     function setSubPolicy(uint8 fieldId, address subPolicy) external {
-        BasePolicyStorage storage $ = configId.getStorage(account);
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         $.subPolicies[fieldId] = subPolicy;
     }
 }

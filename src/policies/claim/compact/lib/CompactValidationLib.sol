@@ -120,7 +120,7 @@ library CompactValidationLib {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates tokenIn against storage whitelist
-    /// @dev Packs token+lockTag and checks membership in Bytes32Set
+    /// @dev Packs lockTag+token and checks membership in Bytes32Set
     /// @param baseStorage Base storage pointer
     /// @param data The calldata containing tokenIn
     /// @param offset Current offset in calldata
@@ -159,7 +159,7 @@ library CompactValidationLib {
 
         // Validate each entry
         for (uint8 i = 0; i < length; i++) {
-            // Reject if not in set (packed token+lockTag)
+            // Reject if not in set (packed lockTag+token)
             if (!tokenSet.contains(bytes32(tokenIn[i][0]))) {
                 return (false, bytes32(0), 0);
             }
@@ -215,7 +215,7 @@ library CompactValidationLib {
         valid = I1271Policy(subPolicy)
             .check1271SignedAction({
                 id: configId,
-                requestSender: msg.sender,
+                requestSender: address(0),
                 account: account,
                 hash: hash,
                 signature: tokenInData

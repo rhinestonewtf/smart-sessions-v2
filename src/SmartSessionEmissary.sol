@@ -7,6 +7,7 @@ import { SmartSessionMixin } from "@core/SmartSessionMixin.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
+import { IAddressBook } from "@rhinestone/compact-utils/src/common/AddressBook/IAddressBook.sol";
 
 // Libraries
 import {
@@ -22,6 +23,7 @@ import {
 // Types
 import { INVALID_SIGNATURE } from "@types/DataTypes.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
+import { Constants } from "@rhinestone/compact-utils/src/types/Constants.sol";
 
 // forgefmt: disable-start
 ///
@@ -72,10 +74,11 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Constructor to initialize the Smart Session Emissary
-    /// @param intentExecutor The address of the Intent Executor contract
-    /// @param lens The address of the SmartSessionLens contract for view function delegation
-    constructor(address intentExecutor, address lens) {
-        INTENT_EXECUTOR = intentExecutor;
+    /// @param addressBook The address of the AddressBook contract that provides addresses for
+    /// dependencies @param lens The address of the SmartSessionLens contract for view function
+    /// delegation
+    constructor(address addressBook, address lens) {
+        INTENT_EXECUTOR = IAddressBook(addressBook).getAddress(Constants.INTENT_EXECUTOR_ID);
         LENS = lens;
     }
 
@@ -190,18 +193,21 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         // Extract mode from first byte of emissaryData
         EmissaryMode mode = emissaryData.decodeEmissaryMode();
 
+        // Get the actual emissary data without mode byte
+        bytes calldata actualEmissaryData = emissaryData[1:];
+
         // Mode-based dispatch for claim verification
         if (mode == EMISSARY_VANILLA) {
             // Validate using vanilla emissary signature validation
             return _validateSignature({
-                sponsor: sponsor, digest: digest, emissaryData: emissaryData, lockTag: lockTag
+                sponsor: sponsor, digest: digest, emissaryData: actualEmissaryData, lockTag: lockTag
             })
                 ? this.verifyClaim.selector
                 : INVALID_SIGNATURE;
         } else if (mode == EMISSARY_SMART_SESSION) {
             // Validate using SmartSession verification
             return _verifyClaimSmartSession({
-                sponsor: sponsor, digest: digest, emissaryData: emissaryData[1:], lockTag: lockTag
+                sponsor: sponsor, digest: digest, emissaryData: actualEmissaryData, lockTag: lockTag
             });
         }
 
@@ -230,7 +236,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         returns (bytes4)
     {
         return _verifyExecutionSmartSession({
-            account: sponsor, digest: digest, emissaryData: emissaryData[1:], executions: executions
+            account: sponsor, digest: digest, emissaryData: emissaryData, executions: executions
         });
     }
 

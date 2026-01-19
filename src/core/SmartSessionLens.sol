@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 // Contracts
-import { SmartSessionStorage } from "@core/SmartSessionStorage.sol";
+import { SmartSessionManager } from "@core/SmartSessionManager.sol";
 
 // Interfaces
 import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
@@ -11,8 +11,13 @@ import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
 import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
 import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
 import { HashLib } from "@smartsessions/lib/HashLib.sol";
-import { HashLibV2 } from "@lib/HashLibV2.sol";
+import { HashLibV2Calldata } from "@lib/HashLibV2Calldata.sol";
 import { IdLibV2 } from "@lib/IdLibV2.sol";
+import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
+import { SignatureLib } from "@lib/SignatureLib.sol";
+import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
+import { IdLib } from "@smartsessions/lib/IdLib.sol";
+import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
 
 // Types
 import {
@@ -20,24 +25,37 @@ import {
     ActionId,
     SignerConf,
     ERC7739ContextHashes,
-    ERC7579_MODULE_TYPE_VALIDATOR
+    ERC7579_MODULE_TYPE_VALIDATOR,
+    EMPTY_PERMISSIONID,
+    PolicyType
 } from "@smartsessions/DataTypes.sol";
-import { Session } from "@types/DataTypes.sol";
+import {
+    Session,
+    SmartSessionEmissaryDisable,
+    SmartSessionEmissaryConfig,
+    SmartSessionEmissaryEnable,
+    NO_LOCKTAG
+} from "@types/DataTypes.sol";
 
 /// @title SmartSessionLens
 /// @notice Helper contract for reading SmartSession state and managing nonces
 /// @dev Added to mitigate contract size limit, called via delegatecall from SmartSessionEmissary
 ///      fallback. This contract inherits SmartSessionStorage to ensure identical storage layout.
-contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
+contract SmartSessionLens is SmartSessionManager, ISmartSessionLens {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using EnumerableSet for *;
     using FlatBytesLib for *;
-    using HashLib for string;
-    using HashLibV2 for Session;
-    using IdLibV2 for Session;
+    using HashLib for *;
+    using HashLibV2Calldata for *;
+    using ConfigLib for *;
+    using ConfigLibV2 for *;
+    using IdLib for *;
+    using IdLibV2 for *;
+    using PolicyLibV2 for *;
+    using SignatureLib for *;
 
     /*//////////////////////////////////////////////////////////////
                                   7579
@@ -82,6 +100,209 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
     function revokeNonce(bytes12 lockTag) external {
         uint256 nonce = ++$emissaryNonce[msg.sender][lockTag];
         emit NonceIterated(lockTag, msg.sender, nonce);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                SET CONFIG
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Sets the Smart Session Emissary configuration for a specific account
+    /// @param account The address of the account for which the configuration is being set
+    /// @param config The Smart Session Emissary configuration
+    /// @param enableData The Emissary enable data
+    function setConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryEnable calldata enableData
+    )
+        external
+    {
+        // Derive lockTag from allocator, scope, resetPeriod
+        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
+
+        // Verify data expires after current block timestamp
+        require(enableData.expires > block.timestamp, InvalidEmissaryEnableData());
+
+        // Enable session
+        _enableSession({
+            account: account, enableData: enableData, config: config, lockTag: lockTag
+        });
+    }
+
+    /// @notice Enables a session for an account after verifying required signatures
+    /// @dev Performs the following:
+    ///      1. Increments nonce to prevent replay attacks
+    ///      2. Verifies allocator and user signatures
+    ///      3. Enables all associated policies (ERC7739, ERC1271, action, claim)
+    ///      4. Configures the session validator
+    /// @param account The address of the account for which policies are being enabled
+    /// @param enableData The data containing session and policy information to be enabled
+    /// @param config The Smart Session Emissary configuration
+    function _enableSession(
+        address account,
+        SmartSessionEmissaryEnable calldata enableData,
+        SmartSessionEmissaryConfig calldata config,
+        bytes12 lockTag
+    )
+        internal
+    {
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
+        bytes32 hash = enableData.session
+            .getAndVerifyDigest({
+                account: account, nonce: nonce, expires: enableData.expires, lockTag: lockTag
+            });
+
+        // Calculate the permissionId
+        PermissionId permissionId = enableData.session.sessionToEnable.toPermissionId();
+
+        // Ensure the permissionId matches the config
+        require(permissionId == config.permissionId, InvalidPermissionId(config.permissionId));
+
+        // Get the lockTag currently enabled for this permissionId and account
+        bytes12 existingLockTag = $enabledLockTag[permissionId][account];
+
+        // Check if a lockTag is already enabled for this permissionId.
+        // - First enable (isInit=false): Only user signature required
+        // - Subsequent enables (isInit=true): Both user AND allocator signatures required
+        //
+        // Note: When allocator == address(0) (no allocator / NO_LOCKTAG flow),
+        // the allocator signature check is always skipped regardless of isInit.
+        bool isInit = existingLockTag != NO_LOCKTAG;
+
+        // Revert if trying to set a different lockTag for the same permissionId
+        if (isInit && existingLockTag != lockTag) {
+            revert InvalidPermissionId(permissionId);
+        }
+
+        // Verify the user and allocator signatures
+        hash.verifySignatures({
+            allocator: config.allocator,
+            user: account,
+            allocatorSignature: enableData.allocatorSig,
+            userSignature: enableData.userSig,
+            isInit: isInit
+        });
+
+        // Enable session policies
+        _enablePolicies({
+            account: account,
+            permissionId: permissionId,
+            lockTag: lockTag,
+            session: enableData.session.sessionToEnable
+        });
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             REMOVE CONFIG
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Removes a Smart Session Emissary configuration for a specific account
+    /// @param account The address of the account for which the configuration is being removed
+    /// @param config The Smart Session Emissary configuration to be removed
+    /// @param disableData The disable data containing the allocatorSignature, user signature,
+    ///                    disable session data, and expiration time
+    function removeConfig(
+        address account,
+        SmartSessionEmissaryConfig calldata config,
+        SmartSessionEmissaryDisable calldata disableData
+    )
+        external
+    {
+        // Disable session
+        _disableSessions({ account: account, disableData: disableData, config: config });
+    }
+
+    /// @notice Removes a session and all its associated policies from storage
+    /// @dev Cleans up in order: ERC1271 → Action → Claim → ERC7739 → Validator → Session
+    /// @param permissionId The unique identifier for the session to be removed
+    /// @param account The account address associated with the session
+    /// @param lockTag The lock tag used to identify the session
+    function _disablePolicies(
+        PermissionId permissionId,
+        address account,
+        bytes12 lockTag
+    )
+        internal
+    {
+        if (permissionId == EMPTY_PERMISSIONID) revert InvalidSession(permissionId);
+
+        // Remove all ERC1271 policies for this session
+        $erc1271Policies.policyList[permissionId].removeAll(account);
+
+        // Remove all Action policies for this session
+        uint256 actionLength = $actionPolicies.enabledActionIds[permissionId].length(account);
+        for (uint256 i; i < actionLength; i++) {
+            ActionId actionId = ActionId.wrap(
+                $actionPolicies.enabledActionIds[permissionId].at({ account: account, index: i })
+            );
+            $actionPolicies.actionPolicies[actionId].policyList[permissionId].removeAll(account);
+        }
+
+        // removing all stored actionIds
+        $actionPolicies.enabledActionIds[permissionId].removeAll(account);
+
+        // Remove all claim policies for this session
+        $claimPolicies[lockTag].policyList[permissionId].removeAll(account);
+
+        // Remove the enabled erc7739 config for this session
+        $enabledERC7739.removeAll({ permissionId: permissionId, smartAccount: account });
+
+        // Disable the session validator
+        $sessionValidators.disable({ permissionId: permissionId, smartAccount: account });
+
+        // Remove the permissionId from enabled sessions
+        $enabledSessions.remove({ account: account, value: PermissionId.unwrap(permissionId) });
+
+        // Remove the lockTag from this permissionId
+        $enabledLockTag[permissionId][account] = NO_LOCKTAG;
+    }
+
+    /// @notice Disables sessions for an account after verifying required signatures
+    /// @dev Verifies signatures then delegates to _removeSession for cleanup
+    /// @param account The address of the account for which policies are being disabled
+    /// @param disableData The data containing session disable information
+    /// @param config The Smart Session Emissary configuration
+    function _disableSessions(
+        address account,
+        SmartSessionEmissaryDisable calldata disableData,
+        SmartSessionEmissaryConfig calldata config
+    )
+        internal
+    {
+        // Derive lockTag from allocator, scope, resetPeriod
+        bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
+
+        // Verify data expires after current block timestamp
+        require(disableData.expires > block.timestamp, InvalidEmissaryDisableData());
+
+        // Increment nonce to prevent replay attacks
+        uint256 nonce = $emissaryNonce[account][lockTag]++;
+
+        // Get the hash for the disable operation
+        bytes32 hash = disableData.session
+            .getAndVerifyDigest({
+                permissionId: config.permissionId,
+                account: account,
+                nonce: nonce,
+                expires: disableData.expires,
+                lockTag: lockTag
+            });
+
+        // Verify the user and allocator signatures
+        hash.verifySignatures({
+            allocator: config.allocator,
+            user: account,
+            allocatorSignature: disableData.allocatorSig,
+            userSignature: disableData.userSig,
+            isInit: true // Disabling always requires both signatures if allocator is set
+        });
+
+        // Remove the session policies from the smart session config
+        _disablePolicies({ permissionId: config.permissionId, account: account, lockTag: lockTag });
+
+        // Emit event if the session is removed
+        emit SmartSessionEmissaryConfigDisabled(account, config.permissionId, lockTag);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -145,8 +366,7 @@ contract SmartSessionLens is SmartSessionStorage, ISmartSessionLens {
         view
         returns (bool)
     {
-        return
-            $enabledLockTags[permissionId].contains({ account: account, value: bytes32(lockTag) });
+        return lockTag != NO_LOCKTAG && $enabledLockTag[permissionId][account] == lockTag;
     }
 
     /*//////////////////////////////////////////////////////////////

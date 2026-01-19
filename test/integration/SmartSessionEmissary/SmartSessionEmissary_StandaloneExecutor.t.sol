@@ -38,7 +38,13 @@ import {
 // Types
 import { Execution } from "modulekit/integrations/ERC7579Exec.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
-import { PolicyData, ActionData, PermissionId, ERC7739Data } from "@smartsessions/DataTypes.sol";
+import {
+    PolicyData,
+    ActionData,
+    PermissionId,
+    ERC7739Data,
+    SmartSessionMode
+} from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
 import { EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 import { Constants } from "@compact-utils/types/Constants.sol";
@@ -103,7 +109,7 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         Base_Test.setUp();
 
         // Redeploy SmartSessionEmissary with intentExecutor
-        smartSessionEmissary = new SmartSessionEmissary(address(env.intentExecutor));
+        smartSessionEmissary = new SmartSessionEmissary(address(ADDRESSBOOK));
 
         // Setup lockTag
         testLockTag = env.lockTag;
@@ -441,7 +447,7 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         bytes memory validatorSig = abi.encodePacked(r, s, v);
 
         return abi.encodePacked(
-            EMISSARY_SMART_SESSION,
+            SmartSessionMode.USE,
             permissionId,
             uint256(validatorSig.length) + 64, // policyDataOffset
             validatorSig,

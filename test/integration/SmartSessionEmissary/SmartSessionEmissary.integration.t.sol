@@ -31,7 +31,13 @@ import {
 } from "@compact-utils/types/TheCompactStructs.sol";
 import { Execution } from "modulekit/integrations/ERC7579Exec.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
-import { PolicyData, ActionData, PermissionId, ERC7739Data } from "@smartsessions/DataTypes.sol";
+import {
+    PolicyData,
+    ActionData,
+    PermissionId,
+    ERC7739Data,
+    SmartSessionMode
+} from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
 import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
 
@@ -124,7 +130,7 @@ contract SmartSessionEmissary_Integration_Test is
         Base_Test.setUp();
 
         // Redeploy SmartSessionEmissary with intentExecutor in constructor
-        smartSessionEmissary = new SmartSessionEmissary(address(env.intentExecutor));
+        smartSessionEmissary = new SmartSessionEmissary(address(ADDRESSBOOK));
 
         // Setup lockTag
         testLockTag = env.lockTag;
@@ -225,8 +231,6 @@ contract SmartSessionEmissary_Integration_Test is
         Types.Order memory order = _getOrder($intent.compact, 0);
         vm.chainId(order.notarizedChainId);
 
-        $intent.userEmissarySig = _createSmartSessionSignature("");
-
         (, bytes memory allocatorSig) =
             _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
 
@@ -240,7 +244,10 @@ contract SmartSessionEmissary_Integration_Test is
                 MockAdapter.mock_compact_handleClaim,
                 (MockAdapter.ClaimDataCompact({
                         order: order,
-                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        userSigs: Types.Signatures(
+                            _createSmartSessionSignature(""),
+                            _createVerifyExecutionSmartSessionSignature("")
+                        ),
                         otherElements: otherElements,
                         allocatorData: allocatorSig,
                         elementIndex: 0
@@ -266,7 +273,8 @@ contract SmartSessionEmissary_Integration_Test is
 
         // Use wrong permissionId
         PermissionId wrongPermissionId = PermissionId.wrap(bytes32(uint256(99_999)));
-        $intent.userEmissarySig = _createSmartSessionSignatureWithPermission(wrongPermissionId, "");
+        $intent.userEmissarySig =
+            _createVerifyExecutionSmartSessionSignatureWithPermission(wrongPermissionId, "");
 
         (, bytes memory allocatorSig) =
             _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
@@ -304,7 +312,7 @@ contract SmartSessionEmissary_Integration_Test is
         Types.Order memory order = _getOrder($intent.compact, 0);
         vm.chainId(order.notarizedChainId);
 
-        $intent.userEmissarySig = _createSmartSessionSignature("");
+        $intent.userEmissarySig = _createVerifyExecutionSmartSessionSignature("");
 
         (, bytes memory allocatorSig) =
             _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
@@ -319,7 +327,10 @@ contract SmartSessionEmissary_Integration_Test is
                 MockAdapter.mock_compact_handleClaim,
                 (MockAdapter.ClaimDataCompact({
                         order: order,
-                        userSigs: Types.Signatures($intent.userEmissarySig, ""),
+                        userSigs: Types.Signatures(
+                            _createSmartSessionSignature(""),
+                            _createVerifyExecutionSmartSessionSignature("")
+                        ),
                         otherElements: otherElements,
                         allocatorData: allocatorSig,
                         elementIndex: 0
@@ -521,12 +532,45 @@ contract SmartSessionEmissary_Integration_Test is
         return _createSmartSessionSignatureWithPermission(defaultPermissionId, policyData);
     }
 
+    function _createVerifyExecutionSmartSessionSignature(bytes memory policyData)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return _createVerifyExecutionSmartSessionSignatureWithPermission(
+            defaultPermissionId, policyData
+        );
+    }
+
+    function _createVerifyExecutionSmartSessionSignatureWithPermission(
+        PermissionId permissionId,
+        bytes memory policyData
+    )
+        internal
+        pure
+        returns (bytes memory)
+    {
+        bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
+        bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
+        uint8 v = 27;
+
+        bytes memory sessionValidatorSignature = abi.encodePacked(r, s, v);
+
+        return abi.encodePacked(
+            SmartSessionMode.USE,
+            permissionId,
+            uint256(sessionValidatorSignature.length) + 64,
+            sessionValidatorSignature,
+            policyData
+        );
+    }
+
     function _createSmartSessionSignatureWithPermission(
         PermissionId permissionId,
         bytes memory policyData
     )
         internal
-        view
+        pure
         returns (bytes memory)
     {
         bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);

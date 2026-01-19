@@ -23,7 +23,7 @@ contract Deploy is Script {
     address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     /// @notice CREATE2 salt for deterministic deployment
-    bytes32 constant SALT = bytes32(uint256(0x1));
+    bytes32 constant SALT = bytes32(uint256(0x2));
 
     /*//////////////////////////////////////////////////////////////
                                  STATE

@@ -1,4 +1,4 @@
-SmartSessionMixin::setConfig
+SmartSessionLens::setConfig
 ├── given valid configuration and enable data
 │   ├── when caller is the account
 │   │   ├── it should emit SmartSessionEmissaryConfigUpdated event
@@ -38,10 +38,11 @@ SmartSessionMixin::setConfig
 │   ├── when called on subsequent calls
 │   │   └── it should not require allocator signature
 │   └── it should skip claim policy enablement but still enable action policies
-├── given multiple lockTags for same permissionId
-│   └── it should enable both lockTags independently
-├── given different allocators
-│   └── it should derive unique lockTags per allocator
+├── given lockTag already set for permissionId
+│   ├── when trying to enable with different lockTag
+│   │   └── it should revert with InvalidPermissionId
+│   └── when trying to enable with same lockTag
+│       └── it should succeed and require allocator signature
 ├── given lockTag isolation
 │   ├── when same lockTag used by different permissionIds
 │   │   └── it should isolate lockTags per permissionId
@@ -50,14 +51,12 @@ SmartSessionMixin::setConfig
 ├── given init vs subsequent calls
 │   ├── when lockTag is not yet enabled (init)
 │   │   ├── it should not require allocator signature
-│   │   └── it should add lockTag to enabledLockTags for this permissionId
+│   │   └── it should set lockTag for this permissionId
 │   └── when lockTag is already enabled (subsequent)
 │       ├── given valid allocator signature
 │       │   └── it should succeed
 │       └── given invalid allocator signature
 │           └── it should revert with InvalidAllocatorSignature
-├── given nonce management
-│   └── it should track nonces independently per lockTag
 ├── given session validator
 │   ├── when called on init
 │   │   └── it should set session validator and config

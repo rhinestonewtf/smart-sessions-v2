@@ -20,7 +20,8 @@ import {
     PolicyData,
     ActionData,
     ERC7739Data,
-    ERC7739Context
+    ERC7739Context,
+    SmartSessionMode
 } from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
 import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
@@ -232,9 +233,8 @@ abstract contract ActionPolicy_Integration_Test is SmartSessionEmissary_Integrat
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // Build emissary data: [mode (1)] [permissionId (32)] [signature]
-        bytes memory emissaryData =
-            abi.encodePacked(EMISSARY_SMART_SESSION, permissionId, signature);
+        // Build emissary data: [mode (1)][permissionId (32)] [signature]
+        bytes memory emissaryData = abi.encodePacked(SmartSessionMode.USE, permissionId, signature);
 
         // Call verifyExecution
         vm.prank(MOCK_INTENT_EXECUTOR);

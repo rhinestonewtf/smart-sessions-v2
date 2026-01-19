@@ -16,9 +16,9 @@ import {
 //////////////////////////////////////////////////////////////
 
 The BaseClaimPolicy uses a storage pattern with unique
-slot calculation per (configId, account) pair.
+slot calculation per (multiplexer, configId, account) pair.
 
-Storage slot = keccak256(BASE_SLOT, configId, account)
+Storage slot = keccak256(BASE_SLOT, multiplexer, configId, account)
 
 This provides:
 • Isolated storage per configuration
@@ -128,7 +128,7 @@ struct BasePolicyStorage {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice TokenIn whitelist per chain
-    /// @dev Compact: Bytes32Set where we store packed bytes32(token+lockTag)
+    /// @dev Compact: Bytes32Set where we store packed bytes32(lockTag, token)
     /// @dev Permit2: Bytes32Set where we store bytes32(bytes20(token))
     ///      chainId = 0 is reserved for catch-all (MODE_CHECK_CATCHALL)
     ///
@@ -208,17 +208,19 @@ library BaseStorageLib {
     /// @notice Returns the storage pointer for BasePolicyStorage
     /// @param id ConfigId for the policy configuration
     /// @param account Account address for the policy configuration
+    /// @param multiplexer Address of the msg.sender
     /// @return $ Storage pointer to the BasePolicyStorage struct
     function getStorage(
         ConfigId id,
-        address account
+        address account,
+        address multiplexer
     )
         internal
         pure
         returns (BasePolicyStorage storage $)
     {
         // Calculate the unique storage slot and cast to the storage struct
-        bytes32 slot = calculateSlot(STORAGE_POSITION, id, account);
+        bytes32 slot = calculateSlot(STORAGE_POSITION, id, account, multiplexer);
         // solhint-disable-next-line no-inline-assembly
         assembly {
             $.slot := slot
@@ -229,11 +231,12 @@ library BaseStorageLib {
                             SLOT CALCULATION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Calculates the storage slot for a given ConfigId and account
+    /// @notice Calculates the storage slot for a given ConfigId, account, and multiplexer
     function calculateSlot(
         bytes32 baseSlot,
         ConfigId id,
-        address account
+        address account,
+        address multiplexer
     )
         internal
         pure
@@ -241,16 +244,18 @@ library BaseStorageLib {
     {
         // solhint-disable-next-line no-inline-assembly
         assembly {
-            // Get the free memory pointer
+            // Load free memory pointer
             let ptr := mload(0x40)
-            // Store baseSlot,id,account
+            // Store baseSlot, id, account, multiplexer in memory
             mstore(0x00, baseSlot)
-            mstore(0x20, id)
-            mstore(0x40, account)
-            // Compute keccak256 hash of the 96 bytes from 0x00 to 0x60
-            slot := keccak256(0x00, 0x60)
-            // Restore the free memory pointer
+            mstore(0x20, multiplexer)
+            mstore(0x40, id)
+            mstore(0x60, account)
+            // Compute keccak256 hash of the 4 words to get the unique slot
+            slot := keccak256(0x00, 0x80)
+            // Restore both free memory pointer and zero slot
             mstore(0x40, ptr)
+            mstore(0x60, 0x00)
         }
     }
 }
