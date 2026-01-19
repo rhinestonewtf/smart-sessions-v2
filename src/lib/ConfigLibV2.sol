@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
-import { ModuleType } from "@smartsessions/interfaces/IRegistry.sol";
 import { ISmartSession } from "@smartsessions/ISmartSession.sol";
 import { IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
 
@@ -18,7 +17,6 @@ import { HashLib } from "@smartsessions/lib/HashLib.sol";
 import {
     PermissionId,
     SignerConf,
-    registry,
     ERC7579_MODULE_TYPE_STATELESS_VALIDATOR,
     EnumerableActionPolicy,
     ActionData,
@@ -28,7 +26,9 @@ import {
     PolicyType,
     Policy,
     ConfigId,
-    PolicyData
+    PolicyData,
+    EnumerableERC7739Config,
+    ERC7739Context
 } from "@smartsessions/DataTypes.sol";
 
 /// @dev Extended ConfigLib library from SmartSessions to allow passing an address instead of
@@ -51,12 +51,12 @@ library ConfigLibV2 {
 
     /// @dev Adjusted enable from ConfigLib to work with address instead of msg.sender
     function enable(
-        mapping(PermissionId permissionId => mapping(address smartAccount => SignerConf conf))
-            storage $sessionValidators,
+        mapping(
+            PermissionId permissionId => mapping(address smartAccount => SignerConf conf)
+        ) storage $sessionValidators,
         PermissionId permissionId,
         ISessionValidator sessionValidator,
         bytes memory sessionValidatorConfig,
-        bool useRegistry,
         address account
     )
         internal
@@ -67,15 +67,6 @@ library ConfigLibV2 {
                 || !sessionValidator.isModuleType(ERC7579_MODULE_TYPE_STATELESS_VALIDATOR)
         ) {
             revert ISmartSession.InvalidISessionValidator(sessionValidator);
-        }
-
-        // this will revert if the policy is not attested to
-        if (useRegistry) {
-            registry.checkForAccount({
-                smartAccount: account,
-                module: address(sessionValidator),
-                moduleType: ModuleType.wrap(ERC7579_MODULE_TYPE_STATELESS_VALIDATOR)
-            });
         }
 
         // Get the storage reference for the signer configuration
@@ -93,7 +84,6 @@ library ConfigLibV2 {
         EnumerableActionPolicy storage $self,
         PermissionId permissionId,
         ActionData[] memory actionPolicyDatas,
-        bool useRegistry,
         address account
     )
         internal
@@ -124,9 +114,8 @@ library ConfigLibV2 {
             $self.actionPolicies[actionId].enable({
                 policyType: PolicyType.ACTION,
                 permissionId: permissionId,
-                configId: permissionId.toConfigId(actionId),
+                configId: permissionId.toConfigId(actionId, account),
                 policyDatas: actionPolicyData.actionPolicies,
-                useRegistry: useRegistry,
                 account: account
             });
 
@@ -142,7 +131,6 @@ library ConfigLibV2 {
         PermissionId permissionId,
         ConfigId configId,
         PolicyData[] memory policyDatas,
-        bool useRegistry,
         address account
     )
         internal
@@ -154,23 +142,45 @@ library ConfigLibV2 {
 
             policy.requirePolicyType(policyType);
 
-            // this will revert if the policy is not attested to
-            if (useRegistry) {
-                registry.checkForAccount({ smartAccount: account, module: policy });
-            }
-
             // Add the policy to the list for the given permission and smart account
             $policy.policyList[permissionId].add({ account: account, value: policy });
 
             // Initialize the policy with the provided configuration
             // overwrites the config
-            IPolicy(policy).initializeWithMultiplexer({
-                account: account,
-                configId: configId,
-                initData: policyDatas[i].initData
-            });
+            IPolicy(policy)
+                .initializeWithMultiplexer({
+                    account: account, configId: configId, initData: policyDatas[i].initData
+                });
 
             emit ISmartSession.PolicyEnabled(permissionId, policyType, policy, account);
+        }
+    }
+
+    /// @dev Adjusted enable from ConfigLib to work with address instead of msg.sender
+    function enable(
+        EnumerableERC7739Config storage $enabledERC7739,
+        ERC7739Context[] memory contexts,
+        PermissionId permissionId,
+        address account
+    )
+        internal
+    {
+        uint256 length = contexts.length;
+        for (uint256 i; i < length; i++) {
+            bytes32 appDomainSeparator = contexts[i].appDomainSeparator;
+
+            uint256 contentNamesLength = contexts[i].contentNames.length;
+            if (contentNamesLength != 0) {
+                $enabledERC7739.enabledDomainSeparators[permissionId].add(
+                    account, appDomainSeparator
+                );
+            }
+            for (uint256 y; y < contentNamesLength; y++) {
+                bytes32 contentHash = contexts[i].contentNames[y].hashERC7739Content();
+                $enabledERC7739.enabledContentNames[permissionId][appDomainSeparator].add(
+                    account, contentHash
+                );
+            }
         }
     }
 }

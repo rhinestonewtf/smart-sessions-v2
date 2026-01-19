@@ -1,0 +1,15 @@
+BaseConfigLib::setFieldMode
+├── given empty config (all zeros)
+│   ├── given setting ARBITER to STORAGE
+│   │   └── it should set bits 0-1 to 01
+│   ├── given setting RECIPIENT to CATCHALL
+│   │   └── it should set bits 6-7 to 10
+│   └── given setting RECIPIENT_IS_SPONSOR to SUBPOLICY
+│       └── it should set bits 18-19 to 11
+├── given existing config
+│   ├── given overwriting existing mode
+│   │   └── it should replace the old mode
+│   └── given setting different field
+│       └── it should preserve other fields
+└── given setting mode to SKIP (0)
+    └── it should clear the bits for that field

@@ -1,0 +1,47 @@
+SmartSessionEmissary::verifyExecution
+├── given USE mode
+│   ├── given single call execution
+│   │   ├── it returns verifyExecution selector
+│   │   └── when session validator rejects signature
+│   │       └── it returns INVALID_SIGNATURE
+│   ├── given batch call execution
+│   │   ├── it returns verifyExecution selector
+│   │   └── when one action in batch is not enabled
+│   │       └── it reverts
+│   ├── given cache behavior
+│   │   ├── it caches digest after successful validation
+│   │   ├── it returns success from cache on second call
+│   │   ├── it isolates cache per account
+│   │   └── it isolates cache per permissionId
+│   ├── when caller is not intent executor
+│   │   └── it reverts with UnauthorizedSource
+│   ├── when permissionId is invalid
+│   │   └── it reverts with InvalidPermissionId
+│   ├── when action selector is not enabled
+│   │   └── it reverts
+│   ├── when target is not enabled
+│   │   └── it reverts
+│   ├── when emissary data is empty
+│   │   └── it reverts
+│   └── given isolation
+│       ├── it isolates action policies per account
+│       ├── it isolates action policies per permissionId
+│       ├── it isolates action policies per actionId
+│       └── it isolates action policies per target
+├── given ENABLE mode
+│   ├── it enables session and returns verifyExecution selector
+│   ├── when enable data is expired
+│   │   └── it reverts with InvalidEmissaryEnableData
+│   ├── when permissionId does not match config
+│   │   └── it reverts with InvalidPermissionId
+│   ├── when user signature is invalid
+│   │   └── it reverts with InvalidUserSignature
+│   ├── given re-enable (session already enabled)
+│   │   ├── when allocator signature is valid
+│   │   │   └── it returns verifyExecution selector
+│   │   └── when allocator signature is invalid
+│   │       └── it reverts with InvalidAllocatorSignature
+│   └── given NO_LOCKTAG flow
+│       └── it enables session without allocator signature
+└── given unsupported mode (UNSAFE_ENABLE)
+    └── it reverts with UnsupportedSmartSessionMode

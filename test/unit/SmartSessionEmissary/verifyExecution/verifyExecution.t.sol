@@ -1,896 +1,837 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.27;
 
+// Contracts
+import { SudoPolicy } from "@smartsessions/external/policies/SudoPolicy.sol";
+
 // Dependencies
-import { SmartSessionEmissary_Unit_Test } from
-    "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
+import {
+    SmartSessionEmissary_Unit_Test
+} from "@test/unit/SmartSessionEmissary/SmartSessionEmissary.t.sol";
 
 // Interfaces
 import { ISmartSessionEmissary } from "@interfaces/ISmartSessionEmissary.sol";
 import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
-import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
-import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
+import { ISmartSessionLens } from "@interfaces/ISmartSessionLens.sol";
 
 // Libraries
-import { ExecutionLib, Execution } from "@smartsessions/lib/ExecutionLib.sol";
-import { HashLib } from "@smartsessions/lib/HashLib.sol";
+import { HashLibV2 } from "@lib/HashLibV2.sol";
+import { IdLibV2 } from "@lib/IdLibV2.sol";
 import { ModuleKitHelpers } from "@modulekit/ModuleKit.sol";
 import { LibZip } from "solady/utils/LibZip.sol";
-import { WebAuthn } from "@webauthn/WebAuthn.sol";
+import { SmartExecutionLib, Execution } from "@compact-utils/common/SmartExecutionLib.sol";
+import { IdLib as CompactIdLib } from "@the-compact/lib/IdLib.sol";
+
+// Mocks
+import { MockERC1271 } from "@mocks/MockERC1271.sol";
 
 // Types
 import {
     PolicyData,
     ActionData,
-    FALLBACK_TARGET_FLAG,
-    FALLBACK_TARGET_SELECTOR_FLAG,
     PermissionId,
     ActionId,
-    EnableSession
+    ERC7739Data,
+    ERC7739Context,
+    SmartSessionMode
 } from "@smartsessions/DataTypes.sol";
+import { Session, EnableSession, ChainDigest, NO_LOCKTAG } from "@types/DataTypes.sol";
 import {
-    ExecType,
-    CallType,
-    CALLTYPE_BATCH,
-    CALLTYPE_SINGLE,
-    EXECTYPE_DEFAULT,
-    EXECTYPE_TRY,
-    CALLTYPE_DELEGATECALL,
-    ModeCode,
-    ModeLib,
-    ModePayload,
-    MODE_DEFAULT
-} from "erc7579/lib/ModeLib.sol";
-import {
-    EmissaryMode,
-    EMISSARY_SMART_SESSION,
-    EMISSARY_STATELESS_VALIDATOR,
-    EMISSARY_ECDSA,
-    EMISSARY_PASSKEY
-} from "@lib/ModeLib.sol";
-import { MODULE_TYPE_VALIDATOR } from "erc7579/interfaces/IERC7579Module.sol";
-import { Session } from "@types/DataTypes.sol";
+    SmartSessionEmissaryConfig,
+    SmartSessionEmissaryEnable
+} from "@interfaces/ISmartSessionEmissary.sol";
+import { EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
+import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
+import { Vm } from "@forge-std/Vm.sol";
+import { Scope } from "@the-compact/types/Scope.sol";
+import { ResetPeriod } from "@the-compact/types/ResetPeriod.sol";
 
-contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_Test {
+/// @title SmartSessionEmissary.verifyExecution Unit Tests
+/// @notice Unit tests for the verifyExecution function
+contract SmartSessionEmissary_verifyExecution_Unit_Test is SmartSessionEmissary_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
     using ModuleKitHelpers for *;
     using LibZip for bytes;
-    using HashLib for *;
+    using HashLibV2 for *;
+    using IdLibV2 for *;
+    using CompactIdLib for *;
+    using SmartExecutionLib for *;
 
     /*//////////////////////////////////////////////////////////////
-                                 VARIABLES
+                                 STATE
     //////////////////////////////////////////////////////////////*/
 
     PermissionId testPermissionId;
-    bytes mockSignature;
-    Execution[] mockExecData;
-    bytes32 TEST_HASH;
+    bytes12 testLockTag;
+    Scope testScope;
+    ResetPeriod testResetPeriod;
+    uint256 testExpires;
+
+    Vm.Wallet allocatorOwner;
+    MockERC1271 allocatorContract;
+
+    SmartSessionEmissaryConfig testConfig;
+    SmartSessionEmissaryEnable testEnableData;
+    Session testSession;
+
+    bytes32 testHash;
     bytes4 mockTargetSelector;
-    address testValidator;
-    bytes12 testLockTag = bytes12(keccak256("mockLockTag"));
+    Types.Operation mockExecData;
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event SmartSessionEmissaryConfigUpdated(
+        address indexed account, PermissionId permissionId, bytes12 indexed lockTag, bool enabled
+    );
+
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    error InvalidEmissaryEnableData();
+    error InvalidAllocatorSignature();
+    error InvalidUserSignature();
+    error InvalidPermissionId(PermissionId permissionId);
+    error UnsupportedSmartSessionMode(SmartSessionMode mode);
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
 
     function setUp() public virtual override {
-        // Call the base setup function.
+        // Setup base
         super.setUp();
 
-        // Init variables
-        mockSignature = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
-        TEST_HASH = keccak256("testHash");
-
-        // Setup mock execution data for a single call
-        mockTargetSelector = bytes4(keccak256("testFunction()"));
-        bytes memory callData = abi.encodeWithSelector(mockTargetSelector);
-        Execution[] memory executions = new Execution[](1);
-        executions[0] = Execution({ target: target, value: value, callData: callData });
-        mockExecData = executions;
-
-        // Setup testValidator as default validator
-        testValidator = address(instance.defaultValidator);
-
-        // Deploy the account instance
+        // Deploy account instance
         instance.deployAccount();
+
+        // Setup allocator
+        allocatorOwner = vm.createWallet("allocatorOwner");
+        allocatorContract = new MockERC1271(allocatorOwner.addr);
+
+        // Setup test parameters
+        testScope = Scope.ChainSpecific;
+        testResetPeriod = ResetPeriod.OneMinute;
+        testExpires = block.timestamp + 3600;
+        testHash = keccak256("testHash");
+        mockTargetSelector = bytes4(keccak256("testFunction()"));
+
+        _setupTestSession();
+        _setupTestConfiguration();
+        _setupMockExecData();
     }
 
     /*//////////////////////////////////////////////////////////////
-                               STATELESS
+                     USE MODE - SINGLE EXECUTION
     //////////////////////////////////////////////////////////////*/
 
-    function test_verifyExecution_StatelessValidator_Success() public {
-        // Arrange
-        address validator = address(yesSessionValidator);
-        uint8 configId = 1;
-        bytes memory validatorConfig = hex"1234";
-        bytes memory validatorSig = hex"abcdef";
+    /// @notice Test verifyExecution with USE mode single call succeeds
+    function test_verifyExecution_UseMode_SingleCall_success() public {
+        // Arrange - enable session first
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
-        // Setup stateless validator config
-        smartSessionEmissary.setupStatelessValidatorConfig(
-            instance.account, configId, testLockTag, IStatelessValidator(validator), validatorConfig
-        );
-
-        bytes memory data =
-            abi.encodePacked(EMISSARY_STATELESS_VALIDATOR, validator, configId, validatorSig);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
 
         // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
 
         // Assert
-        assertEq(
-            result,
-            ISmartSessionEmissary.verifyExecution.selector,
-            "Should return successful verification selector for stateless validator"
-        );
+        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
     }
 
-    function test_verifyExecution_StatelessValidator_RevertsWhen_InvalidSignature() public {
-        // Arrange
-        address validator = address(noSessionValidator);
-        uint8 configId = 1;
-        bytes memory validatorConfig = hex"1234";
-        bytes memory validatorSig = hex"abcdef";
+    /// @notice Test verifyExecution with USE mode returns invalid signature when validator rejects
+    function test_verifyExecution_UseMode_SingleCall_invalidSignature() public {
+        // Arrange - enable session with failing validator
+        testSession.sessionValidator = ISessionValidator(address(noSessionValidator));
+        testPermissionId = testSession.toPermissionIdMemory();
+        testConfig.permissionId = testPermissionId;
+        _rebuildEnableData();
 
-        // Setup stateless validator config
-        smartSessionEmissary.setupStatelessValidatorConfig(
-            instance.account, configId, testLockTag, IStatelessValidator(validator), validatorConfig
-        );
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
-        bytes memory data =
-            abi.encodePacked(EMISSARY_STATELESS_VALIDATOR, validator, configId, validatorSig);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
 
         // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
 
         // Assert
-        assertEq(result, bytes4(0xFFFFFFFF), "Should return failure for invalid signature");
-    }
-
-    function test_verifyExecution_StatelessValidator_RevertsWhen_NoConfig() public {
-        // Arrange
-        address validator = address(yesSessionValidator);
-        uint8 configId = 99; // Non-existent config
-        bytes memory validatorSig = hex"abcdef";
-
-        bytes memory data =
-            abi.encodePacked(EMISSARY_STATELESS_VALIDATOR, validator, configId, validatorSig);
-
-        // Act & Assert
-        vm.expectRevert(ISmartSessionEmissary.InvalidEmissaryConfig.selector);
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
+        assertEq(result, INVALID_SIGNATURE);
     }
 
     /*//////////////////////////////////////////////////////////////
-                                 ECDSA
+                     USE MODE - BATCH EXECUTION
     //////////////////////////////////////////////////////////////*/
 
-    function test_verifyExecution_ECDSA_Success() public {
-        // Arrange
-        uint8 configId = 1;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
+    /// @notice Test verifyExecution with USE mode batch call succeeds
+    function test_verifyExecution_UseMode_BatchCall_success() public {
+        // Arrange - enable session with multiple actions
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
 
-        // Setup ECDSA config with threshold and owners
-        address[] memory owners = new address[](1);
-        owners[0] = signer;
-        uint256 threshold = 1;
+        bytes4 selector1 = bytes4(keccak256("testFunction()"));
+        bytes4 selector2 = bytes4(keccak256("anotherFunction()"));
 
-        smartSessionEmissary.setupECDSAConfig(
-            instance.account, configId, testLockTag, threshold, owners
-        );
+        ActionData[] memory actions = new ActionData[](2);
+        actions[0] = ActionData({
+            actionTarget: target, actionTargetSelector: selector1, actionPolicies: policyDatas
+        });
+        actions[1] = ActionData({
+            actionTarget: address(0x123),
+            actionTargetSelector: selector2,
+            actionPolicies: policyDatas
+        });
 
-        // Create signature
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, TEST_HASH);
-        bytes memory signature = abi.encodePacked(r, s, v);
+        testSession.actions = actions;
+        testPermissionId = testSession.toPermissionIdMemory();
+        testConfig.permissionId = testPermissionId;
+        _rebuildEnableData();
 
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, signature);
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(
-            result,
-            ISmartSessionEmissary.verifyExecution.selector,
-            "Should return successful verification selector for ECDSA"
-        );
-    }
-
-    function test_verifyExecution_ECDSA_RevertsWhen_InvalidSignature() public {
-        // Arrange
-        uint8 configId = 1;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
-
-        // Setup ECDSA config
-        address[] memory owners = new address[](1);
-        owners[0] = signer;
-        uint256 threshold = 1;
-
-        smartSessionEmissary.setupECDSAConfig(
-            instance.account, configId, testLockTag, threshold, owners
-        );
-
-        // Create wrong signature (sign different hash)
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, keccak256("wrong"));
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, signature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xFFFFFFFF), "Should return failure for wrong signature");
-    }
-
-    function test_verifyExecution_ECDSA_RevertsWhen_ThresholdNotMet() public {
-        // Arrange
-        uint8 configId = 1;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
-
-        // Setup ECDSA config with threshold 2 but only 1 signer
-        address[] memory owners = new address[](2);
-        owners[0] = signer;
-        owners[1] = address(0x9999);
-        uint256 threshold = 2;
-
-        smartSessionEmissary.setupECDSAConfig(
-            instance.account, configId, testLockTag, threshold, owners
-        );
-
-        // Create signature from only one signer
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, TEST_HASH);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, signature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xFFFFFFFF), "Should return failure when threshold not met");
-    }
-
-    function test_verifyExecution_ECDSA_RevertsWhen_NoConfig() public {
-        // Arrange
-        uint8 configId = 99; // Non-existent config
-        bytes memory signature = hex"1234567890";
-
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, signature);
-
-        // Act & Assert
-        vm.expectRevert(ISmartSessionEmissary.InvalidEmissaryConfig.selector);
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                PASSKEY
-    //////////////////////////////////////////////////////////////*/
-
-    function test_verifyExecution_Passkey_RevertsWhen_NoConfig() public {
-        // Arrange
-        uint8 configId = 99; // Non-existent config
-        bytes memory passkeySignature = hex"fedcba";
-
-        bytes memory data = abi.encodePacked(EMISSARY_PASSKEY, configId, passkeySignature);
-
-        // Act & Assert
-        vm.expectRevert(ISmartSessionEmissary.InvalidEmissaryConfig.selector);
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                             SMART SESSION
-    //////////////////////////////////////////////////////////////*/
-
-    function test_verifyExecution_SmartSession_Success() public withEnabledSudoSession {
-        // Arrange
-        bytes memory data = packData(EMISSARY_SMART_SESSION, testPermissionId, mockSignature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(
-            result,
-            ISmartSessionEmissary.verifyExecution.selector,
-            "Should return successful verification selector"
-        );
-    }
-
-    function test_verifyExecution_SmartSession_RevertsWhen_InvalidPermissionId() public {
-        // Arrange
-        PermissionId invalidPermissionId = PermissionId.wrap(keccak256("invalid"));
-        bytes memory data = packData(EMISSARY_SMART_SESSION, invalidPermissionId, mockSignature);
-
-        // Act/Assert
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ISmartSessionEmissary.InvalidPermissionId.selector, invalidPermissionId
-            )
-        );
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-    }
-
-    function test_verifyExecution_SmartSession_BatchCall_Success()
-        public
-        withEnabledBatchSudoSession
-    {
-        // Arrange
-        bytes memory data = packData(EMISSARY_SMART_SESSION, testPermissionId, mockSignature);
-
-        // Create mock batch execution data
+        // Build batch execution
         Execution[] memory executions = new Execution[](2);
+        executions[0] = Execution({
+            target: target, value: value, callData: abi.encodeWithSelector(selector1)
+        });
+        executions[1] = Execution({
+            target: address(0x123), value: 0, callData: abi.encodeWithSelector(selector2)
+        });
 
+        Types.Operation memory batchExecData = SmartExecutionLib.SigMode.EMISSARY.encode(executions);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // Act
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, testHash, data, batchExecData);
+
+        // Assert
+        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
+    }
+
+    /// @notice Test verifyExecution with USE mode batch call reverts when one action not enabled
+    function test_verifyExecution_UseMode_BatchCall_revertsWhen_oneActionNotEnabled() public {
+        // Arrange - enable session with only one action
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        // Build batch with second action NOT enabled
+        Execution[] memory executions = new Execution[](2);
         executions[0] = Execution({
             target: target,
             value: value,
+            callData: abi.encodeWithSelector(mockTargetSelector) // enabled
+        });
+        executions[1] = Execution({
+            target: target,
+            value: 0,
+            callData: abi.encodeWithSelector(bytes4(keccak256("notEnabled()"))) // NOT enabled
+        });
+
+        Types.Operation memory batchExecData = SmartExecutionLib.SigMode.EMISSARY.encode(executions);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, batchExecData);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          USE MODE - CACHE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test verifyExecution caches digest after successful validation
+    function test_verifyExecution_UseMode_cachesDigest() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // First call - validates and caches
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result1 =
+            smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+        assertEq(result1, ISmartSessionEmissary.verifyExecution.selector);
+
+        // Verify cache was populated
+        bool isCached = smartSessionEmissary.isDigestCachedSmartSession(
+            instance.account, testHash, testPermissionId, testLockTag
+        );
+        assertTrue(isCached);
+    }
+
+    /// @notice Test verifyExecution returns success from cache on second call
+    function test_verifyExecution_UseMode_cacheHit() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // First call
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+
+        // Second call - should hit cache even with different signature
+        bytes memory data2 = _packUseData(testPermissionId, "differentSig");
+
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result =
+            smartSessionEmissary.verifyExecution(instance.account, testHash, data2, mockExecData);
+
+        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
+    }
+
+    /// @notice Test cache is isolated per account
+    function test_verifyExecution_UseMode_cacheIsolatedPerAccount() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // First call - validates and caches for instance.account
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+
+        // Verify cache was populated for instance.account
+        bool isCachedForOriginal = smartSessionEmissary.isDigestCachedSmartSession(
+            instance.account, testHash, testPermissionId, testLockTag
+        );
+        assertTrue(isCachedForOriginal, "Should be cached for original account");
+
+        // Verify cache is NOT populated for different account
+        address differentAccount = makeAddr("differentAccount");
+        bool isCachedForDifferent = smartSessionEmissary.isDigestCachedSmartSession(
+            differentAccount, testHash, testPermissionId, testLockTag
+        );
+        assertFalse(isCachedForDifferent, "Should NOT be cached for different account");
+    }
+
+    /// @notice Test cache is isolated per permissionId
+    function test_verifyExecution_UseMode_cacheIsolatedPerPermissionId() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // First call - validates and caches
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+
+        // Verify cache was populated for testPermissionId
+        bool isCachedForOriginal = smartSessionEmissary.isDigestCachedSmartSession(
+            instance.account, testHash, testPermissionId, testLockTag
+        );
+        assertTrue(isCachedForOriginal, "Should be cached for original permissionId");
+
+        // Verify cache is NOT populated for different permissionId
+        PermissionId differentPermissionId = PermissionId.wrap(keccak256("different"));
+        bool isCachedForDifferent = smartSessionEmissary.isDigestCachedSmartSession(
+            instance.account, testHash, differentPermissionId, testLockTag
+        );
+        assertFalse(isCachedForDifferent, "Should NOT be cached for different permissionId");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                     USE MODE - ACCESS CONTROL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test verifyExecution reverts when caller is not intent executor
+    function test_verifyExecution_UseMode_revertsWhen_callerNotIntentExecutor() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+        address notIntentExecutor = makeAddr("notIntentExecutor");
+
+        // Act & Assert
+        vm.expectRevert(ISmartSessionEmissary.UnauthorizedSource.selector);
+        vm.prank(notIntentExecutor);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+    }
+
+    /// @notice Test verifyExecution reverts when permissionId is invalid
+    function test_verifyExecution_UseMode_revertsWhen_invalidPermissionId() public {
+        // Arrange - don't enable any session
+        PermissionId invalidPermissionId = PermissionId.wrap(keccak256("invalid"));
+        bytes memory data = _packUseData(invalidPermissionId, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert(abi.encodeWithSelector(InvalidPermissionId.selector, invalidPermissionId));
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+    }
+
+    /// @notice Test verifyExecution reverts when action selector is not enabled
+    function test_verifyExecution_UseMode_revertsWhen_actionNotEnabled() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        bytes4 unauthSelector = bytes4(keccak256("unauthorizedFunction()"));
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({
+            target: target, value: 0, callData: abi.encodeWithSelector(unauthSelector)
+        });
+
+        Types.Operation memory unauthExecData =
+            SmartExecutionLib.SigMode.EMISSARY.encode(executions);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, unauthExecData);
+    }
+
+    /// @notice Test verifyExecution reverts when target is not enabled
+    function test_verifyExecution_UseMode_revertsWhen_targetNotEnabled() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        address unauthorizedTarget = makeAddr("unauthorizedTarget");
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({
+            target: unauthorizedTarget,
+            value: 0,
             callData: abi.encodeWithSelector(mockTargetSelector)
         });
 
-        executions[1] = Execution({
-            target: address(0x123),
-            value: 0,
-            callData: abi.encodeWithSelector(bytes4(keccak256("anotherFunction()")))
-        });
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, executions, testLockTag
-        );
-
-        // Assert
-        assertEq(
-            result,
-            ISmartSessionEmissary.verifyExecution.selector,
-            "Should return successful verification selector for batch execution"
-        );
-    }
-
-    function test_verifyExecution_SmartSession_InvalidSignature()
-        public
-        withEnabledSessionWithFailingValidator
-    {
-        // Arrange
-        bytes memory data = packData(EMISSARY_SMART_SESSION, testPermissionId, mockSignature);
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xFFFFFFFF), "Should return failure code for invalid signature");
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                 CACHE
-    //////////////////////////////////////////////////////////////*/
-
-    function test_verifyExecution_CacheHit_StatelessValidator() public {
-        // Arrange
-        address validator = address(yesSessionValidator);
-        uint8 configId = 1;
-        bytes memory validatorConfig = hex"1234";
-        bytes memory validatorSig = hex"abcdef";
-
-        smartSessionEmissary.setupStatelessValidatorConfig(
-            instance.account, configId, testLockTag, IStatelessValidator(validator), validatorConfig
-        );
-
-        bytes memory data =
-            abi.encodePacked(EMISSARY_STATELESS_VALIDATOR, validator, configId, validatorSig);
-
-        // First call - validates and caches
-        bytes4 result1 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-        assertEq(result1, ISmartSessionEmissary.verifyExecution.selector);
-
-        // Check cache was populated
-        bool isCached = smartSessionEmissary.isDigestCachedStateless(
-            instance.account, TEST_HASH, validator, configId, testLockTag
-        );
-        assertTrue(isCached, "Digest should be cached after first verification");
-
-        // Second call - should hit cache (no validation called)
-        // We can verify by mocking the validator to fail, but cache should still return success
-        vm.mockCall(
-            validator,
-            abi.encodeWithSelector(IStatelessValidator.validateSignatureWithData.selector),
-            abi.encode(false) // Mock to return false
-        );
-
-        bytes4 result2 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-        assertEq(
-            result2,
-            ISmartSessionEmissary.verifyExecution.selector,
-            "Should succeed from cache even with mocked failure"
-        );
-    }
-
-    function test_verifyExecution_CacheHit_ECDSA() public {
-        // Arrange
-        uint8 configId = 1;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
-
-        address[] memory owners = new address[](1);
-        owners[0] = signer;
-
-        smartSessionEmissary.setupECDSAConfig(instance.account, configId, testLockTag, 1, owners);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, TEST_HASH);
-        bytes memory signature = abi.encodePacked(r, s, v);
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, signature);
-
-        // First call - validates and caches
-        bytes4 result1 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-        assertEq(result1, ISmartSessionEmissary.verifyExecution.selector);
-
-        // Check cache was populated
-        bool isCached = smartSessionEmissary.isDigestCachedECDSA(
-            instance.account, TEST_HASH, configId, testLockTag
-        );
-        assertTrue(isCached, "Digest should be cached after first verification");
-
-        // Second call with invalid signature - should still succeed due to cache
-        bytes memory wrongSig = abi.encodePacked(r, s, uint8(v + 1)); // Invalid v value
-        bytes memory wrongData = abi.encodePacked(EMISSARY_ECDSA, configId, wrongSig);
-
-        bytes4 result2 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, wrongData, mockExecData, testLockTag
-        );
-        assertEq(
-            result2,
-            ISmartSessionEmissary.verifyExecution.selector,
-            "Should succeed from cache even with wrong signature"
-        );
-    }
-
-    function test_verifyExecution_CacheHit_SmartSession() public withEnabledSudoSession {
-        // Arrange
-        bytes memory data = packData(EMISSARY_SMART_SESSION, testPermissionId, mockSignature);
-
-        // First call - validates and caches
-        bytes4 result1 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-        assertEq(result1, ISmartSessionEmissary.verifyExecution.selector);
-
-        // Check cache was populated
-        bool isCached = smartSessionEmissary.isDigestCachedSmartSession(
-            instance.account, TEST_HASH, testPermissionId, testLockTag
-        );
-        assertTrue(isCached, "Digest should be cached after first verification");
-
-        // Second call - should hit cache (no validation called)
-        // We can verify by mocking the validator to fail, but cache should still return success
-        vm.mockCall(
-            address(yesSessionValidator),
-            abi.encodeWithSelector(IStatelessValidator.validateSignatureWithData.selector),
-            abi.encode(false) // Mock to return false
-        );
-
-        // Second call - should hit cache
-        bytes4 result2 = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-        assertEq(result2, ISmartSessionEmissary.verifyExecution.selector);
-    }
-
-    function test_verifyExecution_NoCacheForDifferentDigest() public {
-        // Arrange
-        uint8 configId = 1;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
-
-        address[] memory owners = new address[](1);
-        owners[0] = signer;
-
-        smartSessionEmissary.setupECDSAConfig(instance.account, configId, testLockTag, 1, owners);
-
-        // First digest
-        bytes32 digest1 = keccak256("digest1");
-        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(privateKey, digest1);
-        bytes memory sig1 = abi.encodePacked(r1, s1, v1);
-        bytes memory data1 = abi.encodePacked(EMISSARY_ECDSA, configId, sig1);
-
-        // Second digest
-        bytes32 digest2 = keccak256("digest2");
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(privateKey, digest2);
-        bytes memory sig2 = abi.encodePacked(r2, s2, v2);
-        bytes memory data2 = abi.encodePacked(EMISSARY_ECDSA, configId, sig2);
-
-        // Verify first digest
-        bytes4 result1 = smartSessionEmissary.verifyExecution(
-            instance.account, digest1, data1, mockExecData, testLockTag
-        );
-        assertEq(result1, ISmartSessionEmissary.verifyExecution.selector);
-
-        // Check first digest is cached
-        assertTrue(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, digest1, configId, testLockTag
-            ),
-            "First digest should be cached"
-        );
-
-        // Check second digest is NOT cached
-        assertFalse(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, digest2, configId, testLockTag
-            ),
-            "Second digest should not be cached yet"
-        );
-
-        // Verify second digest (should not use cache)
-        bytes4 result2 = smartSessionEmissary.verifyExecution(
-            instance.account, digest2, data2, mockExecData, testLockTag
-        );
-        assertEq(result2, ISmartSessionEmissary.verifyExecution.selector);
-
-        // Now both should be cached
-        assertTrue(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, digest1, configId, testLockTag
-            ),
-            "First digest should still be cached"
-        );
-        assertTrue(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, digest2, configId, testLockTag
-            ),
-            "Second digest should now be cached"
-        );
-    }
-
-    function test_verifyExecution_NoCacheForDifferentConfigId() public {
-        // Arrange
-        uint8 configId1 = 1;
-        uint8 configId2 = 2;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
-
-        address[] memory owners = new address[](1);
-        owners[0] = signer;
-
-        // Setup both configs
-        smartSessionEmissary.setupECDSAConfig(instance.account, configId1, testLockTag, 1, owners);
-        smartSessionEmissary.setupECDSAConfig(instance.account, configId2, testLockTag, 1, owners);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, TEST_HASH);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        bytes memory data1 = abi.encodePacked(EMISSARY_ECDSA, configId1, signature);
-        bytes memory data2 = abi.encodePacked(EMISSARY_ECDSA, configId2, signature);
-
-        // Verify with first config
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data1, mockExecData, testLockTag
-        );
-
-        // Check cache for config1
-        assertTrue(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, TEST_HASH, configId1, testLockTag
-            ),
-            "Config1 digest should be cached"
-        );
-
-        // Check cache for config2 (should not be cached)
-        assertFalse(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, TEST_HASH, configId2, testLockTag
-            ),
-            "Config2 digest should not be cached yet"
-        );
-    }
-
-    function test_verifyExecution_CacheNotPopulatedOnFailure() public {
-        // Arrange
-        uint8 configId = 1;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
-
-        address[] memory owners = new address[](1);
-        owners[0] = signer;
-
-        smartSessionEmissary.setupECDSAConfig(instance.account, configId, testLockTag, 1, owners);
-
-        // Sign wrong hash
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, keccak256("wrong"));
-        bytes memory signature = abi.encodePacked(r, s, v);
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, signature);
-
-        // Verify (should fail)
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-        assertEq(result, bytes4(0xFFFFFFFF), "Should fail verification");
-
-        // Check cache was NOT populated
-        assertFalse(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, TEST_HASH, configId, testLockTag
-            ),
-            "Digest should not be cached after failed verification"
-        );
-    }
-
-    function test_verifyExecution_PreCachedDigest() public {
-        // Arrange - set up config
-        uint8 configId = 1;
-        address[] memory owners = new address[](1);
-        owners[0] = address(0x1234);
-
-        smartSessionEmissary.setupECDSAConfig(instance.account, configId, testLockTag, 1, owners);
-
-        // Pre-cache the digest without actually validating
-        bytes32 cacheKey = keccak256(abi.encodePacked(configId, testLockTag));
-        smartSessionEmissary.setDigestCacheECDSA(instance.account, TEST_HASH, configId, testLockTag);
-
-        // Create data with invalid signature (should pass due to cache)
-        bytes memory invalidSig = hex"deadbeef";
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, invalidSig);
-
-        // Act - should succeed even with invalid signature due to cache
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(
-            result,
-            ISmartSessionEmissary.verifyExecution.selector,
-            "Should succeed from pre-cached digest even with invalid signature"
-        );
-    }
-
-    function test_verifyExecution_CacheClearedMidTransaction() public {
-        // Arrange
-        uint8 configId = 1;
-        uint256 privateKey = 0x1234567890123456789012345678901234567890123456789012345678901234;
-        address signer = vm.addr(privateKey);
-
-        address[] memory owners = new address[](1);
-        owners[0] = signer;
-        smartSessionEmissary.setupECDSAConfig(instance.account, configId, testLockTag, 1, owners);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, TEST_HASH);
-        bytes memory signature = abi.encodePacked(r, s, v);
-        bytes memory data = abi.encodePacked(EMISSARY_ECDSA, configId, signature);
-
-        // First verification - populates cache
-        smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Clear the cache
-        smartSessionEmissary.clearDigestCacheECDSA(
-            instance.account, TEST_HASH, configId, testLockTag
-        );
-
-        // Verify cache was cleared
-        assertFalse(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, TEST_HASH, configId, testLockTag
-            ),
-            "Cache should be cleared"
-        );
-
-        // Second verification - should need to validate again
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
-        assertTrue(
-            smartSessionEmissary.isDigestCachedECDSA(
-                instance.account, TEST_HASH, configId, testLockTag
-            ),
-            "Cache should be repopulated after second verification"
-        );
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                  EDGE
-    //////////////////////////////////////////////////////////////*/
-
-    function test_verifyExecution_InvalidMode() public {
-        // Arrange
-        bytes memory data = abi.encodePacked(
-            bytes1(0xFF), // Invalid mode
-            testPermissionId,
-            mockSignature
-        );
-
-        // Act
-        bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, data, mockExecData, testLockTag
-        );
-
-        // Assert
-        assertEq(result, bytes4(0xFFFFFFFF), "Should return failure code for invalid mode");
-    }
-
-    function test_verifyExecution_EmptyData() public {
-        // Expect revert
+        Types.Operation memory unauthExecData =
+            SmartExecutionLib.SigMode.EMISSARY.encode(executions);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // Act & Assert
         vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, unauthExecData);
+    }
+
+    /// @notice Test verifyExecution reverts when emissary data is empty
+    function test_verifyExecution_UseMode_revertsWhen_emptyData() public {
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, "", mockExecData);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                       USE MODE - ISOLATION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test action policies are isolated per account
+    function test_verifyExecution_UseMode_isolatedPerAccount() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+        address differentAccount = makeAddr("differentAccount");
+
+        // Act & Assert - should fail because session not enabled for different account
+        vm.expectRevert(abi.encodeWithSelector(InvalidPermissionId.selector, testPermissionId));
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(differentAccount, testHash, data, mockExecData);
+    }
+
+    /// @notice Test action policies are isolated per permissionId
+    function test_verifyExecution_UseMode_isolatedPerPermissionId() public {
+        // Arrange - enable first session
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        // Create second session with different salt (different permissionId)
+        Session memory session2 = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("differentSalt"),
+            sessionValidatorInitData: "differentInitData",
+            erc7739Policies: testSession.erc7739Policies,
+            claimPolicies: testSession.claimPolicies,
+            actions: _createDifferentActions() // Different selector
+        });
+
+        PermissionId permissionId2 = session2.toPermissionIdMemory();
+
+        SmartSessionEmissaryConfig memory config2 = SmartSessionEmissaryConfig({
+            permissionId: permissionId2,
+            allocator: address(allocatorContract),
+            scope: testScope,
+            resetPeriod: testResetPeriod
+        });
+
+        ChainDigest[] memory chainDigests2 = new ChainDigest[](1);
+        chainDigests2[0] = ChainDigest({
+            chainId: uint64(block.chainid),
+            sessionDigest: _getSessionDigest(session2, testLockTag, testExpires)
+        });
+
+        SmartSessionEmissaryEnable memory enableData2 = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: session2, hashesAndChainIds: chainDigests2, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(this.multichainDigest(chainDigests2)),
+            userSig: ""
+        });
+
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, config2, enableData2);
+
+        // Try to execute mockTargetSelector (from first session) using permissionId2
+        bytes memory data = _packUseData(permissionId2, "sessionKeySig");
+
+        // Act & Assert - should fail because mockTargetSelector not enabled for permissionId2
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
+    }
+
+    /// @notice Test action policies are isolated per actionId (target + selector combo)
+    function test_verifyExecution_UseMode_isolatedPerActionId() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        // Same target, different selector
+        bytes4 wrongSelector = bytes4(keccak256("wrongFunction()"));
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({
+            target: target, value: 0, callData: abi.encodeWithSelector(wrongSelector)
+        });
+
+        Types.Operation memory wrongExecData = SmartExecutionLib.SigMode.EMISSARY.encode(executions);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, wrongExecData);
+    }
+
+    /// @notice Test action policies are isolated per target
+    function test_verifyExecution_UseMode_isolatedPerTarget() public {
+        // Arrange
+        vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
+
+        // Different target, same selector
+        address wrongTarget = makeAddr("wrongTarget");
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({
+            target: wrongTarget, value: 0, callData: abi.encodeWithSelector(mockTargetSelector)
+        });
+
+        Types.Operation memory wrongExecData = SmartExecutionLib.SigMode.EMISSARY.encode(executions);
+        bytes memory data = _packUseData(testPermissionId, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, wrongExecData);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                       ENABLE MODE - SUCCESS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test verifyExecution with ENABLE mode enables session and succeeds
+    function test_verifyExecution_EnableMode_success() public {
+        // Arrange - build enable mode data (session not pre-enabled)
+        bytes memory enableModeData = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+
+        // Verify session is NOT enabled before
+        bool isEnabledBefore = _lens().isPermissionEnabled(instance.account, testPermissionId);
+        assertFalse(isEnabledBefore);
+
         // Act
+        vm.prank(MOCK_INTENT_EXECUTOR);
         bytes4 result = smartSessionEmissary.verifyExecution(
-            instance.account, TEST_HASH, "", mockExecData, testLockTag
+            instance.account, testHash, enableModeData, mockExecData
+        );
+
+        // Assert
+        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
+
+        // Verify session is now enabled
+        bool isEnabledAfter = _lens().isPermissionEnabled(instance.account, testPermissionId);
+        assertTrue(isEnabledAfter);
+    }
+
+    /// @notice Test verifyExecution with ENABLE mode reverts when enable data expired
+    function test_verifyExecution_EnableMode_revertsWhen_expired() public {
+        // Arrange - create enable data with expired timestamp
+        testEnableData.expires = block.timestamp - 1;
+
+        bytes memory enableModeData = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert(InvalidEmissaryEnableData.selector);
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, testHash, enableModeData, mockExecData
+        );
+    }
+
+    /// @notice Test verifyExecution with ENABLE mode reverts when permissionId mismatch
+    function test_verifyExecution_EnableMode_revertsWhen_permissionIdMismatch() public {
+        // Arrange - config has wrong permissionId
+        testConfig.permissionId = PermissionId.wrap(keccak256("wrong_permission_id"));
+
+        bytes memory enableModeData = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(InvalidPermissionId.selector, testConfig.permissionId)
+        );
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, testHash, enableModeData, mockExecData
+        );
+    }
+
+    /// @notice Test verifyExecution with ENABLE mode reverts when user signature invalid
+    function test_verifyExecution_EnableMode_revertsWhen_invalidUserSig() public {
+        // Arrange - enable from different caller with invalid user sig
+        address differentCaller = makeAddr("differentCaller");
+
+        ChainDigest[] memory chainDigests = new ChainDigest[](1);
+        chainDigests[0] = ChainDigest({
+            chainId: uint64(block.chainid),
+            sessionDigest: _getSessionDigest(testSession, testLockTag, testExpires)
+        });
+
+        testEnableData.session.hashesAndChainIds = chainDigests;
+        testEnableData.allocatorSig = _signAllocator(this.multichainDigest(chainDigests));
+        testEnableData.userSig = hex"deadbeef"; // Invalid
+
+        bytes memory enableModeData = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+
+        // Act & Assert
+        vm.expectRevert(InvalidUserSignature.selector);
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, testHash, enableModeData, mockExecData
         );
     }
 
     /*//////////////////////////////////////////////////////////////
-                               MODIFIERS
+                 ENABLE MODE - RE-ENABLE (WITH ALLOCATOR)
     //////////////////////////////////////////////////////////////*/
 
-    modifier withEnabledSudoSession() {
-        // Prank to account
+    /// @notice Test verifyExecution with ENABLE mode re-enable with valid allocator sig
+    function test_verifyExecution_EnableMode_reEnable_success() public {
+        // Arrange - first enable via setConfig
         vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
-        // Setup Sudo Policy
-        PolicyData[] memory policyDatas = new PolicyData[](1);
-        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
-        ActionData[] memory actions = new ActionData[](1);
-        actions[0] = ActionData({
-            actionTarget: target,
-            actionTargetSelector: mockTargetSelector,
-            actionPolicies: policyDatas
-        });
+        // Prepare second enable (re-enable requires allocator sig)
+        _rebuildEnableData();
 
-        // Create erc1271
+        bytes memory enableModeData = _packEnableData(testEnableData, testConfig, "sessionKeySig");
 
-        // Setup session
-        Session memory session = Session({
-            sessionValidator: ISessionValidator(address(yesSessionValidator)),
-            salt: keccak256("salt"),
-            sessionValidatorInitData: "mockInitData",
-            erc1271Policies: new PolicyData[](0),
-            actions: actions
-        });
+        // Act
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result = smartSessionEmissary.verifyExecution(
+            instance.account, keccak256("newHash"), enableModeData, mockExecData
+        );
 
-        // Enable session
-        Session[] memory sessions = new Session[](1);
-        sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
-
-        // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
-
-        // Continue with the test
-        _;
+        // Assert
+        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
     }
 
-    modifier withEnabledBatchSudoSession() {
-        // Prank to account
+    /// @notice Test verifyExecution with ENABLE mode re-enable reverts with invalid allocator sig
+    function test_verifyExecution_EnableMode_reEnable_revertsWhen_invalidAllocatorSig() public {
+        // Arrange - first enable via setConfig
         vm.prank(instance.account);
+        _lens().setConfig(instance.account, testConfig, testEnableData);
 
-        // Setup Sudo Policy for both actions
-        PolicyData[] memory policyDatas = new PolicyData[](1);
-        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+        // Prepare second enable with invalid allocator sig
+        _rebuildEnableData();
+        testEnableData.allocatorSig = hex"deadbeef";
 
-        // Create two action datas for batch execution
-        ActionData[] memory actions = new ActionData[](2);
-        actions[0] = ActionData({
-            actionTarget: target,
-            actionTargetSelector: mockTargetSelector,
-            actionPolicies: policyDatas
-        });
-        actions[1] = ActionData({
-            actionTarget: address(0x123), // Different target
-            actionTargetSelector: bytes4(keccak256("anotherFunction()")),
-            actionPolicies: policyDatas
-        });
+        bytes memory enableModeData = _packEnableData(testEnableData, testConfig, "sessionKeySig");
 
-        // Setup session
-        Session memory session = Session({
-            sessionValidator: ISessionValidator(address(yesSessionValidator)),
-            salt: keccak256("batchSalt"),
-            sessionValidatorInitData: "mockInitData",
-            erc1271Policies: new PolicyData[](0),
-            actions: actions
-        });
-
-        // Enable session
-        Session[] memory sessions = new Session[](1);
-        sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
-
-        // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
-
-        // Continue with the test
-        _;
+        // Act & Assert
+        vm.expectRevert(InvalidAllocatorSignature.selector);
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, keccak256("newHash"), enableModeData, mockExecData
+        );
     }
 
-    modifier withEnabledSessionWithFailingValidator() {
-        // Prank to account
-        vm.prank(instance.account);
+    /*//////////////////////////////////////////////////////////////
+                    ENABLE MODE - NO_LOCKTAG FLOW
+    //////////////////////////////////////////////////////////////*/
 
-        // Setup Sudo Policy
-        PolicyData[] memory policyDatas = new PolicyData[](1);
-        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
-        ActionData[] memory actions = new ActionData[](1);
-        actions[0] = ActionData({
-            actionTarget: target,
-            actionTargetSelector: mockTargetSelector,
-            actionPolicies: policyDatas
-        });
+    /// @notice Test verifyExecution with ENABLE mode NO_LOCKTAG succeeds without allocator
+    function test_verifyExecution_EnableMode_noLockTag_success() public {
+        // Arrange - config with no allocator (NO_LOCKTAG flow)
+        testConfig.allocator = address(0);
+        testLockTag = NO_LOCKTAG;
+        _rebuildEnableData();
+        testEnableData.allocatorSig = "";
 
-        // Setup session with failing validator
-        Session memory session = Session({
-            sessionValidator: ISessionValidator(address(noSessionValidator)),
-            salt: keccak256("failingSalt"),
-            sessionValidatorInitData: "mockInitData",
-            erc1271Policies: new PolicyData[](0),
-            actions: actions
-        });
+        bytes memory enableModeData = _packEnableData(testEnableData, testConfig, "sessionKeySig");
 
-        // Enable session
-        Session[] memory sessions = new Session[](1);
-        sessions[0] = session;
-        smartSessionEmissary.enableSessions(sessions, testLockTag, address(this));
+        // Act
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result = smartSessionEmissary.verifyExecution(
+            instance.account, testHash, enableModeData, mockExecData
+        );
 
-        // Generate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        // Assert
+        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
 
-        // Continue with the test
-        _;
+        // Verify session enabled
+        bool isEnabled = _lens().isPermissionEnabled(instance.account, testPermissionId);
+        assertTrue(isEnabled);
     }
 
-    modifier withNoValidator() {
-        // Prank to account
-        vm.prank(instance.account);
+    /*//////////////////////////////////////////////////////////////
+                        UNSUPPORTED MODE
+    //////////////////////////////////////////////////////////////*/
 
-        // Install NoValidator
-        instance.installModule(MODULE_TYPE_VALIDATOR, address(noValidator), "");
+    /// @notice Test verifyExecution reverts with unsupported mode (UNSAFE_ENABLE)
+    function test_verifyExecution_revertsWhen_unsupportedMode() public {
+        // Arrange - pack data with UNSAFE_ENABLE mode
+        bytes memory data = abi.encodePacked(
+            SmartSessionMode.UNSAFE_ENABLE,
+            testPermissionId,
+            "sessionKeySig17237123712737123717231723717237172317237172371371723"
+        );
 
-        // Set testValidator to noValidator
-        testValidator = address(noValidator);
-
-        // Continue with the test
-        _;
+        // Act & Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UnsupportedSmartSessionMode.selector, SmartSessionMode.UNSAFE_ENABLE
+            )
+        );
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, data, mockExecData);
     }
 
     /*//////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    function packData(
-        EmissaryMode emissaryMode,
+    /// @notice Sign hash with allocator owner's EOA key for ERC-1271 verification
+    function _signAllocator(bytes32 hash) internal returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(allocatorOwner, hash);
+        return abi.encodePacked(r, s, v);
+    }
+
+    /// @notice Sign hash for user's smart account via ERC-1271
+    function _signUser(bytes32 hash) internal view returns (bytes memory) {
+        return abi.encodePacked(address(instance.defaultValidator), hash);
+    }
+
+    /// @notice Get session digest from the emissary
+    function _getSessionDigest(
+        Session memory session,
+        bytes12 lockTag,
+        uint256 expires
+    )
+        internal
+        view
+        returns (bytes32)
+    {
+        return _lens().getSessionDigest(instance.account, session, lockTag, expires);
+    }
+
+    /// @notice Setup the base test session
+    function _setupTestSession() internal {
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        ActionData[] memory actions = new ActionData[](1);
+        actions[0] = ActionData({
+            actionTarget: target,
+            actionTargetSelector: mockTargetSelector,
+            actionPolicies: policyDatas
+        });
+
+        ERC7739Context[] memory emptyContent = new ERC7739Context[](0);
+        PolicyData[] memory emptyErc1271 = new PolicyData[](0);
+        ERC7739Data memory erc7739Data =
+            ERC7739Data({ allowedERC7739Content: emptyContent, erc1271Policies: emptyErc1271 });
+
+        PolicyData[] memory emptyClaimPolicies = new PolicyData[](0);
+
+        testSession = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256("verifyExecutionTestSalt"),
+            sessionValidatorInitData: "verifyExecutionTestInitData",
+            erc7739Policies: erc7739Data,
+            claimPolicies: emptyClaimPolicies,
+            actions: actions
+        });
+
+        testPermissionId = testSession.toPermissionIdMemory();
+    }
+
+    /// @notice Setup the test configuration
+    function _setupTestConfiguration() internal {
+        testLockTag = address(allocatorContract).deriveLockTag(testScope, testResetPeriod);
+
+        testConfig = SmartSessionEmissaryConfig({
+            permissionId: testPermissionId,
+            allocator: address(allocatorContract),
+            scope: testScope,
+            resetPeriod: testResetPeriod
+        });
+
+        _rebuildEnableData();
+    }
+
+    /// @notice Setup mock execution data
+    function _setupMockExecData() internal {
+        Execution[] memory executions = new Execution[](1);
+        executions[0] = Execution({
+            target: target, value: value, callData: abi.encodeWithSelector(mockTargetSelector)
+        });
+        mockExecData = SmartExecutionLib.SigMode.EMISSARY.encode(executions);
+    }
+
+    /// @notice Rebuild enable data with current session and config state
+    function _rebuildEnableData() internal {
+        ChainDigest[] memory chainDigests = new ChainDigest[](1);
+        chainDigests[0] = ChainDigest({
+            chainId: uint64(block.chainid),
+            sessionDigest: _getSessionDigest(testSession, testLockTag, testExpires)
+        });
+
+        bytes32 multichainDigest = this.multichainDigest(chainDigests);
+
+        testEnableData = SmartSessionEmissaryEnable({
+            session: EnableSession({
+                sessionToEnable: testSession, hashesAndChainIds: chainDigests, chainDigestIndex: 0
+            }),
+            expires: testExpires,
+            allocatorSig: _signAllocator(multichainDigest),
+            userSig: _signUser(multichainDigest)
+        });
+    }
+
+    /// @notice Pack USE mode data
+    function _packUseData(
         PermissionId permissionId,
         bytes memory signature
     )
@@ -898,34 +839,37 @@ contract SmartSessionEmissary_verifyExecution_Test is SmartSessionEmissary_Unit_
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(emissaryMode, permissionId, signature);
+        return abi.encodePacked(SmartSessionMode.USE, permissionId, signature);
     }
 
-    function packPermissionSig() internal view returns (bytes memory) {
-        return abi.encodePacked(testValidator, "");
+    /// @notice Pack ENABLE mode data with compression
+    function _packEnableData(
+        SmartSessionEmissaryEnable memory enableData,
+        SmartSessionEmissaryConfig memory config,
+        bytes memory usePermissionSig
+    )
+        internal
+        pure
+        returns (bytes memory)
+    {
+        bytes memory compressed = abi.encode(enableData, config, usePermissionSig).flzCompress();
+        return abi.encodePacked(SmartSessionMode.ENABLE, compressed);
     }
 
-    function createBasicSession() internal returns (Session memory session) {
-        // Setup Sudo Policy
+    /// @notice Create different actions for isolation test
+    function _createDifferentActions() internal view returns (ActionData[] memory) {
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        bytes4 differentSelector = bytes4(keccak256("differentFunction()"));
+
         ActionData[] memory actions = new ActionData[](1);
         actions[0] = ActionData({
             actionTarget: target,
-            actionTargetSelector: mockTargetSelector,
+            actionTargetSelector: differentSelector,
             actionPolicies: policyDatas
         });
 
-        // Create a basic session
-        session = Session({
-            sessionValidator: ISessionValidator(address(yesSessionValidator)),
-            salt: keccak256("enableSalt"),
-            sessionValidatorInitData: "mockInitData",
-            erc1271Policies: new PolicyData[](0),
-            actions: actions
-        });
-
-        // Calculate the permission ID
-        testPermissionId = smartSessionEmissary.getPermissionId(session);
+        return actions;
     }
 }

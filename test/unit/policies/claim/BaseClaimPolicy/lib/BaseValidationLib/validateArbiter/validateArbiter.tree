@@ -1,0 +1,20 @@
+BaseValidationLib::validateArbiter
+├── given mode is SKIP
+│   └── it should return true
+├── given mode is STORAGE
+│   ├── given arbiter is in whitelist
+│   │   └── it should return true
+│   └── given arbiter is not in whitelist
+│       └── it should return false
+├── given mode is CATCHALL
+│   ├── given arbiter is in whitelist
+│   │   └── it should return true
+│   └── given arbiter is not in whitelist
+│       └── it should return false
+├── given mode is SUBPOLICY
+│   ├── given sub-policy returns true
+│   │   └── it should return true
+│   └── given sub-policy returns false
+│       └── it should return false
+└── given mode is unknown
+    └── it should return false

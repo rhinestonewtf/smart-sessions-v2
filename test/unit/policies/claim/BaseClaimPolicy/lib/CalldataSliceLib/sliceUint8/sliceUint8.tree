@@ -1,0 +1,12 @@
+CalldataSliceLib::sliceUint8
+├── given zero value
+│   ├── it should return 0
+│   └── it should return offset + 1
+├── given max value (255)
+│   ├── it should return 255
+│   └── it should return offset + 1
+├── given value in middle of data
+│   ├── it should read from correct offset
+│   └── it should return offset + 1
+└── given sequential reads
+    └── it should read each byte correctly with advancing offset

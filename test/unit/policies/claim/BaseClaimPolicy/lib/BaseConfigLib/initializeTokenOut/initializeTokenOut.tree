@@ -1,0 +1,14 @@
+BaseConfigLib::initializeTokenOut
+├── given zero entries
+│   └── it should return remaining data unchanged
+├── given single entry
+│   ├── it should add token to storage set for chainId
+│   └── it should return remaining calldata
+├── given multiple entries same chain
+│   ├── it should add all tokens to same chainId set
+│   └── it should return remaining calldata
+├── given multiple entries different chains
+│   ├── it should add tokens to respective chainId sets
+│   └── it should return remaining calldata
+└── given extra data after entries
+    └── it should return extra data as remaining

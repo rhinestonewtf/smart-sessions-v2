@@ -27,3 +27,11 @@ number_underscore = "thousands"
 quote_style = "double"
 tab_width = 4
 wrap_comments = true
+
+[lint]
+lint_on_build = false
+
+[invariant]
+runs = 256          # Number of runs
+depth = 15          # Number of calls per run
+fail_on_revert = false

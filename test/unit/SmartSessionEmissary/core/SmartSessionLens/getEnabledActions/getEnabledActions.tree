@@ -1,0 +1,9 @@
+SmartSessionLens::getEnabledActions
+├── when no session exists
+│   └── it returns empty array
+├── when one action is enabled
+│   └── it returns single action id
+├── when multiple actions are enabled
+│   └── it returns all action ids
+└── when session has only claim policies
+    └── it returns empty array

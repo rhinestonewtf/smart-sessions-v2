@@ -1,0 +1,7 @@
+SmartSessionLens::getEnabledERC7739Content
+├── when no session exists
+│   └── it returns empty array
+├── when session has only action policies
+│   └── it returns empty array
+└── when ERC7739 content is enabled
+    └── it returns context hashes with domain and content names

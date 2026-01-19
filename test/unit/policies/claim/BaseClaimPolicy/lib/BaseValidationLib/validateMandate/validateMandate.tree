@@ -1,0 +1,34 @@
+BaseValidationLib::validateMandate
+├── given no mandate checks enabled
+│   └── it should read pre-computed mandateHash from calldata
+├── given hasAnyTargetCheck is true
+│   ├── given target validation passes
+│   │   └── it should continue to validate other fields
+│   └── given target validation fails
+│       └── it should return valid = false
+├── given hasAnyTargetCheck is false
+│   └── it should read pre-computed targetHash and targetChainId from calldata
+├── given ORIGIN_OPS is enabled
+│   ├── given originOps validation passes
+│   │   └── it should include originOpsHash in mandateHash
+│   └── given originOps validation fails
+│       └── it should return valid = false
+├── given ORIGIN_OPS is not enabled
+│   └── it should read pre-computed originOpsHash from calldata
+├── given DEST_OPS is enabled
+│   ├── given destOps validation passes
+│   │   └── it should include destOpsHash in mandateHash
+│   └── given destOps validation fails
+│       └── it should return valid = false
+├── given DEST_OPS is not enabled
+│   └── it should read pre-computed destOpsHash from calldata
+├── given QUALIFICATION is enabled
+│   ├── given qualification validation passes
+│   │   └── it should include qualificationHash in mandateHash
+│   └── given qualification validation fails
+│       └── it should return valid = false
+├── given QUALIFICATION is not enabled
+│   └── it should read pre-computed qualificationHash from calldata
+├── given all fields enabled and passing
+│   └── it should compute correct mandateHash
+└── it should always read minGas from calldata for hash computation

@@ -1,14 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0 <0.9.0;
 
+// Contracts
 import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
+import { SmartSessionLens } from "@core/SmartSessionLens.sol";
 
 // Interfaces
 import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
 
 // Libraries
-import { Compressed } from "@compact-utils/common/CompressedStorageLib.sol";
 import { DigestCacheLib } from "@lib/DigestCacheLib.sol";
+import { EnumerableSet } from "@smartsessions/utils/EnumerableSet4337.sol";
+import { ConfigLib } from "@smartsessions/lib/ConfigLib.sol";
+import { ConfigLibV2 } from "@lib/ConfigLibV2.sol";
+import { IdLib } from "@smartsessions/lib/IdLib.sol";
+import { IdLibV2 } from "@lib/IdLibV2.sol";
+import { HashLibV2 } from "@lib/HashLibV2.sol";
+import { PolicyLib } from "@smartsessions/lib/PolicyLib.sol";
+import { PolicyLibV2 } from "@lib/PolicyLibV2.sol";
+import { FlatBytesLib } from "@flatbytes/BytesLib.sol";
+import { SignatureLib } from "@lib/SignatureLib.sol";
 
 // Types
 import {
@@ -21,15 +32,41 @@ import {
     EMPTY_PERMISSIONID,
     Policy
 } from "@smartsessions/DataTypes.sol";
-import { Session } from "@types/DataTypes.sol";
+import { Session, NO_LOCKTAG } from "@types/DataTypes.sol";
 
 /// @dev Extended SmartSessionEmissary with helpers for testing purposes.
 contract SmartSessionEmissaryMock is SmartSessionEmissary {
     /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when the provided data is invalid
+    error InvalidData();
+
+    /*//////////////////////////////////////////////////////////////
                                 LIBRARIES
     //////////////////////////////////////////////////////////////*/
 
-    using Compressed for *;
+    using EnumerableSet for *;
+    using ConfigLib for *;
+    using ConfigLibV2 for *;
+    using IdLib for *;
+    using IdLibV2 for *;
+    using HashLibV2 for *;
+    using PolicyLib for *;
+    using PolicyLibV2 for *;
+    using FlatBytesLib for *;
+    using SignatureLib for *;
+
+    /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Constructor to initialize the Smart Session Emissary Mock
+    /// @param intentExecutor The address of the Intent Executor contract
+    constructor(address intentExecutor)
+        SmartSessionEmissary(intentExecutor, address(new SmartSessionLens()))
+    { }
 
     /*//////////////////////////////////////////////////////////////
                            SESSION MANAGEMENT
@@ -38,132 +75,124 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
     /// @notice Enable multiple sessions with their associated policies
     function enableSessions(
         Session[] calldata sessions,
-        bytes12 lockTag,
-        address sender
+        bytes12 lockTag
     )
         external
         returns (PermissionId[] memory permissionIds)
     {
-        return _enableSessions(sessions, msg.sender, true, lockTag, sender);
+        return _enableSessions(sessions, msg.sender, lockTag);
+    }
+
+    /// TODO: CHECK IF THIS FUNCTION IS NEEDED ANYMORE
+    /// @notice Enable multiple sessions with their associated policies
+    /// @param sessions An array of Session structures to be enabled
+    /// @param account The account address associated with the sessions
+    /// @return permissionIds An array of PermissionId values corresponding to the enabled sessions
+    function _enableSessions(
+        Session[] calldata sessions,
+        address account,
+        bytes12 lockTag
+    )
+        internal
+        returns (PermissionId[] memory permissionIds)
+    {
+        uint256 length = sessions.length;
+        if (length == 0) revert InvalidData();
+
+        permissionIds = new PermissionId[](length);
+
+        for (uint256 i; i < length; i++) {
+            Session calldata session = sessions[i];
+            PermissionId permissionId = session.toPermissionId();
+
+            // Enable ERC7739 content
+            $enabledERC7739.enable({
+                contexts: session.erc7739Policies.allowedERC7739Content,
+                permissionId: permissionId, // TODO: Can we do this?
+                account: account
+            });
+
+            // Enable ERC1271 policies
+            $erc1271Policies.enable({
+                policyType: PolicyType.ERC1271,
+                permissionId: permissionId,
+                configId: permissionId.toErc1271PolicyId().toConfigId(account),
+                policyDatas: session.erc7739Policies.erc1271Policies,
+                account: account
+            });
+
+            // Enable action policies
+            $actionPolicies.enable({
+                permissionId: permissionId, actionPolicyDatas: session.actions, account: account
+            });
+
+            // Only enable claim and action policies if lockTag is not NO_LOCKTAG
+            if (lockTag != NO_LOCKTAG) {
+                // Enable claim policies
+                $claimPolicies[lockTag].enable({
+                    policyType: PolicyType.ERC1271,
+                    permissionId: permissionId,
+                    configId: permissionId.toErc1271PolicyId().toConfigId(account),
+                    policyDatas: session.claimPolicies,
+                    account: account
+                });
+            }
+
+            // Enable the ISessionValidator for this session
+            if (address($sessionValidators[permissionId][account].sessionValidator) == address(0)) {
+                $sessionValidators.enable({
+                    permissionId: permissionId,
+                    sessionValidator: session.sessionValidator,
+                    sessionValidatorConfig: session.sessionValidatorInitData,
+                    account: account
+                });
+            }
+            permissionIds[i] = permissionId;
+
+            // Get the lockTag currently enabled for this permissionId and account
+            bytes12 existingLockTag = $enabledLockTag[permissionId][account];
+
+            // Check a lockTag is already enabled for this permissionId.
+            // - First enable (isInit=false): Only user signature required
+            // - Subsequent enables (isInit=true): Both user AND allocator signatures required
+            //
+            // Note: When allocator == address(0) (no allocator / NO_LOCKTAG flow),
+            // the allocator signature check is always skipped regardless of isInit.
+            bool isInit = existingLockTag != NO_LOCKTAG;
+
+            // Revert if trying to set a different lockTag for the same permissionId
+            if (isInit && existingLockTag != lockTag) {
+                revert InvalidPermissionId(permissionId);
+            }
+
+            // Add the lockTag to the enabled lockTags for the account
+            $enabledLockTag[permissionId][account] = lockTag;
+
+            // Add to enabled sessions
+            $enabledSessions.add({ account: account, value: PermissionId.unwrap(permissionId) });
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
                         TEST HELPER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Helper to set up stateless validator config for testing
-    function setupStatelessValidatorConfig(
-        address account,
-        uint8 configId,
-        bytes12 lockTag,
-        IStatelessValidator validator,
-        bytes memory validatorConfig
-    )
-        external
-    {
-        $statelessValidatorConfig[account][configId][lockTag][validator].sstore(validatorConfig);
-    }
-
-    /// @notice Helper to set up ECDSA config for testing
-    function setupECDSAConfig(
-        address account,
-        uint8 configId,
-        bytes12 lockTag,
-        uint256 threshold,
-        address[] memory owners
-    )
-        external
-    {
-        bytes memory configData = abi.encode(threshold, owners);
-        $ecdsaPasskeyConfig[account][configId][lockTag].sstore(configData);
-    }
-
-    /// @notice Helper to set up Passkey config for testing
-    function setupPasskeyConfig(
-        address account,
-        uint8 configId,
-        bytes12 lockTag,
-        bytes memory passkeyConfigData
-    )
-        external
-    {
-        $ecdsaPasskeyConfig[account][configId][lockTag].sstore(passkeyConfigData);
-    }
-
     /*//////////////////////////////////////////////////////////////
                         CACHE HELPER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Check if ECDSA digest is cached
-    function isDigestCachedECDSA(
-        address account,
-        bytes32 digest,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        external
-        view
-        returns (bool)
-    {
-        return DigestCacheLib.isAlreadyVerified(digest, account, configId, lockTag);
-    }
-
-    /// @notice Set ECDSA digest cache
-    function setDigestCacheECDSA(
-        address account,
-        bytes32 digest,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        external
-    {
-        DigestCacheLib.markAsVerified(digest, account, configId, lockTag);
-    }
-
-    /// @notice Check if Stateless Validator digest is cached
-    function isDigestCachedStateless(
-        address account,
-        bytes32 digest,
-        address validator,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        external
-        view
-        returns (bool)
-    {
-        return DigestCacheLib.isAlreadyVerified(
-            digest, account, IStatelessValidator(validator), configId, lockTag
-        );
-    }
-
-    /// @notice Set Stateless Validator digest cache
-    function setDigestCacheStateless(
-        address account,
-        bytes32 digest,
-        address validator,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        external
-    {
-        DigestCacheLib.markAsVerified(
-            digest, account, IStatelessValidator(validator), configId, lockTag
-        );
-    }
 
     /// @notice Check if SmartSession digest is cached
     function isDigestCachedSmartSession(
         address account,
         bytes32 digest,
         PermissionId permissionId,
-        bytes12 lockTag
+        bytes12
     )
         external
         view
         returns (bool)
     {
-        return DigestCacheLib.isAlreadyVerified(digest, account, permissionId, lockTag);
+        return DigestCacheLib.isAlreadyVerified(digest, account, permissionId);
     }
 
     /// @notice Set SmartSession digest cache
@@ -171,57 +200,11 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         address account,
         bytes32 digest,
         PermissionId permissionId,
-        bytes12 lockTag
+        bytes12
     )
         external
     {
-        DigestCacheLib.markAsVerified(digest, account, permissionId, lockTag);
-    }
-
-    /// @notice Clear ECDSA digest cache
-    function clearDigestCacheECDSA(
-        address account,
-        bytes32 digest,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        external
-    {
-        bytes32 slot;
-        assembly {
-            let ptr := mload(0x40)
-            mstore(ptr, 0x468e535faa4b0ffe3d06) // TSTORE_BASE_SLOT
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), configId)
-            mstore(add(ptr, 0x80), lockTag)
-            slot := keccak256(ptr, 0xa0)
-            tstore(slot, 0)
-        }
-    }
-
-    /// @notice Clear Stateless Validator digest cache
-    function clearDigestCacheStateless(
-        address account,
-        bytes32 digest,
-        address validator,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        external
-    {
-        bytes32 slot;
-        assembly {
-            let ptr := mload(0x40)
-            mstore(ptr, 0x468e535faa4b0ffe3d06)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), validator)
-            mstore(add(ptr, 0x80), configId)
-            mstore(add(ptr, 0xa0), lockTag)
-            slot := keccak256(ptr, 0xc0)
-            tstore(slot, 0)
-        }
+        DigestCacheLib.markAsVerified(digest, account, permissionId);
     }
 
     /// @notice Clear SmartSession digest cache
@@ -229,7 +212,7 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
         address account,
         bytes32 digest,
         PermissionId permissionId,
-        bytes12 lockTag
+        bytes12
     )
         external
     {
@@ -240,9 +223,27 @@ contract SmartSessionEmissaryMock is SmartSessionEmissary {
             mstore(add(ptr, 0x20), account)
             mstore(add(ptr, 0x40), digest)
             mstore(add(ptr, 0x60), permissionId)
-            mstore(add(ptr, 0x80), lockTag)
-            slot := keccak256(ptr, 0xa0)
+            slot := keccak256(ptr, 0x80)
             tstore(slot, 0)
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            NONCE HELPER FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Increment nonce for testing (simulates what setConfig does)
+    function incrementNonce(address account, bytes12 lockTag) external {
+        $emissaryNonce[account][lockTag]++;
+    }
+
+    /// @notice Set nonce to specific value for testing
+    function setNonce(address account, bytes12 lockTag, uint256 nonce) external {
+        $emissaryNonce[account][lockTag] = nonce;
+    }
+
+    /// @notice Get nonce directly (for testing)
+    function getNonceDirect(address account, bytes12 lockTag) external view returns (uint256) {
+        return $emissaryNonce[account][lockTag];
     }
 }

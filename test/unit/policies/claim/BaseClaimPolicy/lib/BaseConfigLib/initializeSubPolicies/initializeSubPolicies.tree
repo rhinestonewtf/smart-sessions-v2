@@ -1,0 +1,21 @@
+BaseConfigLib::initializeSubPolicies
+├── given zero sub-policies
+│   └── it should return remaining data unchanged
+├── given single sub-policy with no init data
+│   ├── it should write sub-policy address to storage for fieldId
+│   ├── it should call initializeWithMultiplexer on sub-policy
+│   └── it should return remaining calldata
+├── given single sub-policy with init data
+│   ├── it should write sub-policy address to storage for fieldId
+│   ├── it should call initializeWithMultiplexer with init data
+│   └── it should return remaining calldata
+├── given multiple sub-policies
+│   ├── it should write all sub-policies to storage
+│   ├── it should call initializeWithMultiplexer on each
+│   └── it should return remaining calldata
+├── given extra data after sub-policies
+│   └── it should return extra data as remaining
+├── given configId and account are passed correctly
+│   └── it should pass configId and account to initializeWithMultiplexer
+└── given fieldId mode is not SUBPOLICY
+    └── it should revert with InvalidMode

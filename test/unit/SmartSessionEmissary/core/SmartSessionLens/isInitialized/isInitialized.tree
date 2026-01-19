@@ -1,0 +1,9 @@
+SmartSessionLens::isInitialized
+├── when no sessions are enabled
+│   └── it returns false
+├── when checking different account
+│   └── it returns false
+├── when one session is enabled
+│   └── it returns true
+└── when multiple sessions are enabled
+    └── it returns true

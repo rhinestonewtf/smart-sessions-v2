@@ -1,0 +1,24 @@
+CompactValidationLib::validateTokenIn
+├── given mode is SKIP
+│   └── it should return the pre-computed hash from calldata
+├── given mode is STORAGE
+│   ├── given token is whitelisted
+│   │   └── it should return valid and computed hash
+│   ├── given token is not whitelisted
+│   │   └── it should return invalid
+│   ├── given whitelist is empty
+│   │   └── it should return invalid
+│   ├── given multiple tokens all whitelisted
+│   │   └── it should return valid and computed hash
+│   └── given multiple tokens with one not whitelisted
+│       └── it should return invalid
+├── given mode is CATCHALL
+│   ├── given token is whitelisted at chainId 0
+│   │   └── it should return valid using catchall lookup
+│   └── given token is only whitelisted at actual chainId
+│       └── it should return invalid
+└── given mode is SUBPOLICY
+    ├── given subpolicy approves
+    │   └── it should return valid and computed hash
+    └── given subpolicy rejects
+        └── it should return invalid

@@ -3,114 +3,26 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IEmissary } from "@compact-utils/interfaces/IEmissary.sol";
-import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
 
 // Types
 import {
     SmartSessionEmissaryConfig,
-    EmissaryConfig,
-    SmartSessionEmissaryEnable
+    SmartSessionEmissaryEnable,
+    SmartSessionEmissaryDisable
 } from "@types/DataTypes.sol";
-import { PermissionId } from "@smartsessions/DataTypes.sol";
-import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
+import { PermissionId, SmartSessionMode } from "@smartsessions/DataTypes.sol";
+import { Types } from "@rhinestone/compact-utils/src/types/OrderTypes.sol";
 
 interface ISmartSessionEmissary is IEmissary {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Thrown when the sender is not a whitelisted source
+    /// @notice Thrown when the msg.sender is not the intent executor
     error UnauthorizedSource();
 
-    /// @notice Thrown when the calldata selector is not supported
-    error UnsupportedSelector();
-
-    /// @notice Thrown when the data is not valid
-    error InvalidData();
-
-    /// @notice Thrown when the session is not valid
-    error InvalidSession(PermissionId permissionId);
-
-    /// @notice Thrown when a permission ID is not valid
-    error InvalidPermissionId(PermissionId permissionId);
-
-    /// @notice Thrown when the execution type is not supported
-    error UnsupportedExecutionType();
-
-    /// @notice Thrown when the enable session signature is not valid
-    error InvalidEnableSignature(address account, bytes32 hash);
-
-    /// @notice Thrown when the Emissary enable data is not valid
-    error InvalidEmissaryEnableData();
-
-    /// @notice Thrown when the Emissary disable data is not valid
-    error InvalidEmissaryDisableData();
-
-    /// @notice Thrown when the Emissary configuration is not valid
-    error InvalidEmissaryConfig();
-
-    /// @notice Thrown when the Emissary enable data allocator signature is not valid
-    error InvalidAllocatorSignature();
-
-    /// @notice Thrown when the Emissary enable data user signature is not valid
-    error InvalidUserSignature();
-
-    /*//////////////////////////////////////////////////////////////
-                                 EVENTS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Emitted when a session is created
-    event SessionCreated(PermissionId permissionId, address account);
-
-    /// @notice Emitted when a session is removed
-    event SessionRemoved(PermissionId permissionId, address smartAccount);
-
-    /// @notice Emitted when an address whitelist status is updated
-    event WhitelistStatusUpdated(address source, bool status);
-
-    /// @notice Emitted when a new validator configuration is successfully set for an account and
-    ///         lock tag.
-    /// @param account The sponsor account whose configuration was updated.
-    /// @param validator The stateless validator address associated with the configuration.
-    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
-    event EmissaryConfigUpdated(
-        address indexed account, IStatelessValidator indexed validator, bytes12 indexed lockTag
-    );
-
-    /// @notice Emitted when a Smart Session Emissary configuration is successfully set for an
-    ///         account.
-    /// @param account The address of the account for which the configuration was set.
-    /// @param permissionId The permission ID associated with the Smart Session.
-    /// @param lockTag The lock tag derived from the allocator, scope, and reset period.
-    event SmartSessionEmissaryConfigUpdated(
-        address indexed account, PermissionId permissionId, bytes12 indexed lockTag
-    );
-
-    /*//////////////////////////////////////////////////////////////
-                                 CONFIG
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Sets the Smart Session Emissary configuration for a specific account.
-    /// @param account The address of the account for which the configuration is being set.
-    /// @param config The Smart Session Emissary configuration.
-    /// @param enable The Smart Session Emissary enable data.
-    function setConfig(
-        address account,
-        SmartSessionEmissaryConfig calldata config,
-        SmartSessionEmissaryEnable calldata enable
-    )
-        external;
-
-    /// @notice Sets the vanilla Emissary configuration for a specific account.
-    /// @param account The address of the account for which the configuration is being set.
-    /// @param config The Emissary configuration.
-    /// @param enable The Emissary enable data.
-    function setConfig(
-        address account,
-        EmissaryConfig calldata config,
-        EmissaryEnable calldata enable
-    )
-        external;
+    /// @notice Thrown when an unsupported smart session mode is provided during verifyExecution
+    error UnsupportedSmartSessionMode(SmartSessionMode mode);
 
     /*//////////////////////////////////////////////////////////////
                                  VERIFY
@@ -124,14 +36,12 @@ interface ISmartSessionEmissary is IEmissary {
     /// @param hash The hash of the user operation
     /// @param data Packed smart session data including mode, permissionId and signature
     /// @param executions The execution data for the user operation
-    /// @param lockTag The lock tag associated with the execution configuration
     /// @return bytes4 The function selector on success, or a specific failure code otherwise
     function verifyExecution(
         address account,
         bytes32 hash,
         bytes calldata data,
-        Execution[] calldata executions,
-        bytes12 lockTag
+        Types.Operation calldata executions
     )
         external
         returns (bytes4);

@@ -1,0 +1,11 @@
+SmartSessionLens::getClaimPolicies
+├── when no session exists
+│   └── it returns empty array
+├── when checking different lock tag
+│   └── it returns empty array
+├── when session has only action policies
+│   └── it returns empty array
+├── when one claim policy exists
+│   └── it returns single policy address
+└── when multiple claim policies exist
+    └── it returns all policy addresses

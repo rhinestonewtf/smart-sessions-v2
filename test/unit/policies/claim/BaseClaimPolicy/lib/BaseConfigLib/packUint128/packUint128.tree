@@ -1,0 +1,11 @@
+BaseConfigLib::packUint128
+├── given zero values
+│   └── it should return 0
+├── given only lower value set
+│   └── it should return lower in bits 0-127
+├── given only upper value set
+│   └── it should return upper in bits 128-255
+├── given both values set
+│   └── it should pack both correctly
+└── given max values
+    └── it should return type(uint256).max

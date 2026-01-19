@@ -1,0 +1,9 @@
+CalldataSliceLib::sliceBytesWithLength
+├── given zero length
+│   ├── it should return empty bytes
+│   └── it should return offset + 32
+├── given non-zero length
+│   ├── it should return correct bytes slice
+│   └── it should return offset + 32 + length
+└── given bytes at non-zero offset
+    └── it should read length and data from correct position

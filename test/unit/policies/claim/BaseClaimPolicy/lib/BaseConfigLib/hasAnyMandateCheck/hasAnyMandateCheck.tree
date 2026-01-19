@@ -1,0 +1,13 @@
+BaseConfigLib::hasAnyMandateCheck
+├── given no mandate fields enabled
+│   └── it should return false
+├── given only target field enabled (RECIPIENT)
+│   └── it should return true
+├── given only ORIGIN_OPS enabled
+│   └── it should return true
+├── given only DEST_OPS enabled
+│   └── it should return true
+├── given only QUALIFICATION enabled
+│   └── it should return true
+└── given multiple mandate fields enabled
+    └── it should return true

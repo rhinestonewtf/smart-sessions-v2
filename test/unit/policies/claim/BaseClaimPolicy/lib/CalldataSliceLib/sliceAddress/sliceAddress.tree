@@ -1,0 +1,11 @@
+CalldataSliceLib::sliceAddress
+├── given valid address at start
+│   ├── it should return correct address
+│   └── it should return offset + 20
+├── given address at offset
+│   ├── it should read from correct position
+│   └── it should return offset + 20
+├── given address followed by trailing data
+│   └── it should not include trailing bytes in result
+└── given sequential address reads
+    └── it should read each address correctly with advancing offset

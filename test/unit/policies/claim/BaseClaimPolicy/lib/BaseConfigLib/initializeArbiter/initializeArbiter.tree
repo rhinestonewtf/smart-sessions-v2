@@ -1,0 +1,11 @@
+BaseConfigLib::initializeArbiter
+├── given zero arbiters
+│   └── it should return remaining data unchanged
+├── given single arbiter
+│   ├── it should add arbiter to storage set
+│   └── it should return remaining calldata
+├── given multiple arbiters
+│   ├── it should add all arbiters to storage set
+│   └── it should return remaining calldata
+└── given extra data after arbiters
+    └── it should return extra data as remaining

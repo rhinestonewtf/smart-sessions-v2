@@ -1,0 +1,7 @@
+SmartSessionLens::isSessionValidatorSet
+├── when no session exists
+│   └── it returns false
+├── when checking different account
+│   └── it returns false
+└── when session is enabled
+    └── it returns true

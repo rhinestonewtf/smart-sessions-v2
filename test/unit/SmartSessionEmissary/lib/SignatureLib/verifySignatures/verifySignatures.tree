@@ -1,0 +1,35 @@
+SignatureLib::verifySignatures
+├── given init mode (isInit = true)
+│   ├── when user signature is valid EOA
+│   │   └── it succeeds (skips allocator check)
+│   ├── when user signature is valid smart account
+│   │   └── it succeeds (skips allocator check)
+│   └── when allocator signature is invalid
+│       └── it succeeds (allocator not checked in init mode)
+├── given non-init mode (isInit = false)
+│   ├── when msg.sender is user
+│   │   ├── when allocator is smart account with valid signature
+│   │   │   └── it succeeds (skips user check)
+│   │   └── when allocator is EOA
+│   │       └── it reverts
+│   ├── when msg.sender is not user
+│   │   ├── when both signatures are valid smart accounts
+│   │   │   └── it succeeds
+│   │   ├── when allocator is EOA and user is smart account
+│   │   │   └── it reverts
+│   │   ├── when allocator signature is invalid (wrong signer)
+│   │   │   └── it reverts with InvalidAllocatorSignature
+│   │   ├── when allocator signature is invalid (wrong hash)
+│   │   │   └── it reverts with InvalidAllocatorSignature
+│   │   ├── when user signature is invalid (wrong signer)
+│   │   │   └── it reverts with InvalidUserSignature
+│   │   ├── when user signature is invalid (wrong hash)
+│   │   │   └── it reverts with InvalidUserSignature
+│   │   ├── when allocator signature is malformed
+│   │   │   └── it reverts with InvalidAllocatorSignature
+│   │   └── when user wallet returns invalid
+│   │       └── it reverts with InvalidUserSignature
+│   └── when signatures are empty
+│       └── it reverts with InvalidUserSignature
+└── given allocator is zero address
+    └── it skips allocator signature check

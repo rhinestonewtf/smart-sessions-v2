@@ -1,0 +1,11 @@
+Permit2ClaimPolicy::getTokenInWhitelist
+├── given policy is not initialized
+│   └── it should return empty array
+├── given single token is whitelisted
+│   └── it should return array with one token
+├── given multiple tokens are whitelisted
+│   └── it should return array with all tokens
+├── given chainId has no tokens configured
+│   └── it should return empty array
+└── given different accounts
+    └── it should isolate storage per account

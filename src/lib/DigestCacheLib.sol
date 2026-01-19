@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.28;
 
-// Interfaces
-import { IStatelessValidator } from "@compact-utils/interfaces/IStatelessValidator.sol";
-
 // Types
 import { PermissionId } from "@smartsessions/DataTypes.sol";
 
 /// @title Digest Cache Library
 /// @notice Library for caching digests for account configurations to cache signature verification
-///         within a transaction
+/// within a transaction
 /// @dev Uses transient storage (TSTORE/TLOAD) to cache verification results that automatically
-///      clear after the transaction
+/// clear after the transaction
 library DigestCacheLib {
     /*//////////////////////////////////////////////////////////////
-                                CONSTANT
+                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
     /// @dev Constant for representing a verified state in transient storage
@@ -26,173 +23,77 @@ library DigestCacheLib {
     uint256 private constant TSTORE_BASE_SLOT = 0x468e535faa4b0ffe3d06;
 
     /*//////////////////////////////////////////////////////////////
-                             ECDSA/PASSKEY
+                                INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Checks if verified for ECDSA/Passkey mode
-    function isAlreadyVerified(
+    /// @notice Computes the transient storage slot for a given digest and session parameters
+    /// @dev Hashes the base slot with account, digest, permissionId to create
+    ///      a unique slot that avoids collisions across different sessions
+    /// @param digest The digest that was verified
+    /// @param account The account address associated with the verification
+    /// @param permissionId The SmartSession permission identifier
+    /// @return slot The computed transient storage slot
+    function _computeSlot(
         bytes32 digest,
         address account,
-        uint8 configId,
-        bytes12 lockTag
+        PermissionId permissionId
     )
-        internal
-        view
-        returns (bool isVerified)
+        private
+        pure
+        returns (bytes32 slot)
     {
-        bytes32 slot;
         assembly {
             // Get the free memory pointer
             let ptr := mload(0x40)
-            // Calculate the storage slot using keccak256 hash
-            mstore(ptr, TSTORE_BASE_SLOT)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), configId)
-            mstore(add(ptr, 0x80), lockTag)
-            slot := keccak256(ptr, 0xa0)
-            // Load the value from transient storage
-            isVerified := tload(slot)
-        }
-    }
 
-    /// @notice Marks as verified for ECDSA/Passkey mode
-    function markAsVerified(
-        bytes32 digest,
-        address account,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        internal
-    {
-        bytes32 slot;
-        assembly {
-            // Get the free memory pointer
-            let ptr := mload(0x40)
-            // Calculate the storage slot using keccak256 hash
-            mstore(ptr, TSTORE_BASE_SLOT)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), configId)
-            mstore(add(ptr, 0x80), lockTag)
-            slot := keccak256(ptr, 0xa0)
-            // Store the VERIFIED constant in transient storage
-            tstore(slot, VERIFIED)
-        }
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                           STATELESS VALIDATOR
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Checks if verified for Stateless Validator mode
-    function isAlreadyVerified(
-        bytes32 digest,
-        address account,
-        IStatelessValidator validator,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        internal
-        view
-        returns (bool isVerified)
-    {
-        bytes32 slot;
-        assembly {
-            // Get the free memory pointer
-            let ptr := mload(0x40)
-            // Calculate the storage slot using keccak256 hash
-            mstore(ptr, TSTORE_BASE_SLOT)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), validator)
-            mstore(add(ptr, 0x80), configId)
-            mstore(add(ptr, 0xa0), lockTag)
-            slot := keccak256(ptr, 0xc0)
-            // Load the value from transient storage
-            isVerified := tload(slot)
-        }
-    }
-
-    /// @notice Marks as verified for Stateless Validator mode
-    function markAsVerified(
-        bytes32 digest,
-        address account,
-        IStatelessValidator validator,
-        uint8 configId,
-        bytes12 lockTag
-    )
-        internal
-    {
-        bytes32 slot;
-        assembly {
-            // Get the free memory pointer
-            let ptr := mload(0x40)
-            // Calculate the storage slot using keccak256 hash
-            mstore(ptr, TSTORE_BASE_SLOT)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), validator)
-            mstore(add(ptr, 0x80), configId)
-            mstore(add(ptr, 0xa0), lockTag)
-            slot := keccak256(ptr, 0xc0)
-            // Store the VERIFIED constant in transient storage
-            tstore(slot, VERIFIED)
-        }
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                             SMART SESSION
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Checks if verified for SmartSession mode
-    function isAlreadyVerified(
-        bytes32 digest,
-        address account,
-        PermissionId permissionId,
-        bytes12 lockTag
-    )
-        internal
-        view
-        returns (bool isVerified)
-    {
-        bytes32 slot;
-        assembly {
-            // Get the free memory pointer
-            let ptr := mload(0x40)
-            // Calculate the storage slot using keccak256 hash
+            // Pack data for hashing: [baseSlot, account, digest, permissionId]
             mstore(ptr, TSTORE_BASE_SLOT)
             mstore(add(ptr, 0x20), account)
             mstore(add(ptr, 0x40), digest)
             mstore(add(ptr, 0x60), permissionId)
-            mstore(add(ptr, 0x80), lockTag)
-            slot := keccak256(ptr, 0xa0)
-            // Load the value from transient storage
+
+            // Compute the unique slot via keccak256
+            slot := keccak256(ptr, 0x80)
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                  GET
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Checks if a digest has already been verified for a SmartSession
+    /// @dev Computes a unique slot from the input parameters and checks transient storage
+    /// @param digest The digest that was verified
+    /// @param account The account address associated with the verification
+    /// @param permissionId The SmartSession permission identifier
+    /// @return isVerified True if the digest was already verified this transaction
+    function isAlreadyVerified(
+        bytes32 digest,
+        address account,
+        PermissionId permissionId
+    )
+        internal
+        view
+        returns (bool isVerified)
+    {
+        bytes32 slot = _computeSlot(digest, account, permissionId);
+        assembly {
             isVerified := tload(slot)
         }
     }
 
-    /// @notice Marks as verified for SmartSession mode
-    function markAsVerified(
-        bytes32 digest,
-        address account,
-        PermissionId permissionId,
-        bytes12 lockTag
-    )
-        internal
-    {
-        bytes32 slot;
+    /*//////////////////////////////////////////////////////////////
+                                  SET
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Marks a digest as verified for a SmartSession
+    /// @dev Computes a unique slot from the input parameters and stores in transient storage
+    /// @param digest The digest that was verified
+    /// @param account The account address associated with the verification
+    /// @param permissionId The SmartSession permission identifier
+    function markAsVerified(bytes32 digest, address account, PermissionId permissionId) internal {
+        bytes32 slot = _computeSlot(digest, account, permissionId);
         assembly {
-            // Get the free memory pointer
-            let ptr := mload(0x40)
-            // Calculate the storage slot using keccak256 hash
-            mstore(ptr, TSTORE_BASE_SLOT)
-            mstore(add(ptr, 0x20), account)
-            mstore(add(ptr, 0x40), digest)
-            mstore(add(ptr, 0x60), permissionId)
-            mstore(add(ptr, 0x80), lockTag)
-            slot := keccak256(ptr, 0xa0)
-            // Store the VERIFIED constant in transient storage
             tstore(slot, VERIFIED)
         }
     }

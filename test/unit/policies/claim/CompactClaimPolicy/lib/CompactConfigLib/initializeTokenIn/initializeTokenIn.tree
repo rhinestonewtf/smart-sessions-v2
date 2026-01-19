@@ -1,0 +1,13 @@
+CompactConfigLib::initializeTokenIn
+├── given single entry is provided
+│   └── it should add the packed id to tokenInSet for the chainId
+├── given multiple entries on same chain are provided
+│   └── it should add all packed ids to the chainId set
+├── given entries are on different chains
+│   └── it should store entries in separate chainId mappings
+├── given same token has different lockTags
+│   └── it should store both as separate entries
+├── given there is remaining calldata
+│   └── it should return the remaining bytes
+└── given count is zero
+    └── it should return all calldata as remaining without modifying storage

@@ -1,0 +1,9 @@
+BaseConfigLib::getEffectiveChainId
+├── given MODE_CHECK_STORAGE
+│   └── it should return the actual chainId
+├── given MODE_CHECK_CATCHALL
+│   └── it should return 0
+├── given MODE_SKIP
+│   └── it should return the actual chainId
+└── given MODE_CHECK_SUBPOLICY
+    └── it should return the actual chainId

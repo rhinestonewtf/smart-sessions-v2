@@ -1,0 +1,7 @@
+BaseClaimPolicy::getModeConfig
+├── given policy is initialized
+│   └── it should return stored modeConfig
+├── given policy is not initialized
+│   └── it should return zero (all SKIP)
+└── given different configId/account pairs
+    └── it should return isolated modeConfig per pair

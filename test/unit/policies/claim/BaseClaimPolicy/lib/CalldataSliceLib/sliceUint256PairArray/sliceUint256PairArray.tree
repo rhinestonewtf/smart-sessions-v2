@@ -1,0 +1,13 @@
+CalldataSliceLib::sliceUint256PairArray
+├── given empty array (length 0)
+│   ├── it should return empty array
+│   └── it should return same offset
+├── given single pair
+│   ├── it should return array with one pair
+│   └── it should return offset + 64
+├── given multiple pairs
+│   ├── it should return correct array length
+│   ├── it should return correct values for each pair
+│   └── it should return offset + (length * 64)
+└── given array at non-zero offset
+    └── it should read from correct position

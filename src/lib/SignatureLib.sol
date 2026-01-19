@@ -27,20 +27,25 @@ library SignatureLib {
                                 VALIDATE
     //////////////////////////////////////////////////////////////*/
 
+    // In SignatureLib:
+
     /// @notice Validates the allocator and user signatures for a given hash,
     ///         reverts if the signatures are invalid.
+    /// @dev Signature requirements:
+    ///      - User signature: Always required (unless msg.sender == user)
+    ///      - Allocator signature: Required only when isInit=true AND allocator != address(0)
     /// @param hash The hash to validate signatures against
-    /// @param allocator The address of the allocator
+    /// @param allocator The address of the allocator (address(0) if none)
     /// @param user The address of the user
     /// @param allocatorSignature The signature of the allocator
     /// @param userSignature The signature of the user
-    /// @param isInit Whether this is an initialization call
+    /// @param isInit True if lockTag already enabled (require allocator sig), false if first enable
     function verifySignatures(
         bytes32 hash,
         address allocator,
         address user,
-        bytes calldata allocatorSignature,
-        bytes calldata userSignature,
+        bytes memory allocatorSignature,
+        bytes memory userSignature,
         bool isInit
     )
         internal
@@ -48,49 +53,16 @@ library SignatureLib {
     {
         // Verify user signature if the sender is not the user
         if (msg.sender != user) {
-            require(user.isValidSignatureNowCalldata(hash, userSignature), InvalidUserSignature());
+            require(user.isValidSignatureNow(hash, userSignature), InvalidUserSignature());
         }
 
-        // If this is not an initialization call, verify the allocator signature
-        if (!isInit) {
+        // Verify allocator signature on subsequent enables (isInit=true)
+        // Skip if no allocator is configured (allocator == address(0))
+        if (isInit && allocator != address(0)) {
             require(
-                allocator.isValidERC1271SignatureNowCalldata(hash, allocatorSignature),
+                allocator.isValidERC1271SignatureNow(hash, allocatorSignature),
                 InvalidAllocatorSignature()
             );
-        }
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                 ECDSA
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Validates an ECDSA signature for a given hash, only supports 65-byte signatures.
-    /// @param hash The hash to validate the signature against
-    /// @param signature The ECDSA signature to validate
-    /// @return result The address that signed the hash
-    function recoverECDSA(
-        bytes32 hash,
-        bytes calldata signature
-    )
-        internal
-        view
-        returns (address result)
-    {
-        /// @solidity memory-safe-assembly
-        // solhint-disable-next-line no-inline-assembly
-        assembly {
-            let m := mload(0x40) // Cache free memory pointer
-            mstore(0x20, byte(0, calldataload(add(signature.offset, 0x40)))) // 'v'
-            calldatacopy(0x40, signature.offset, 0x40) // Copy 'r' and 's'
-            mstore(0x00, hash) // Store the hash
-            result := mload(staticcall(gas(), 1, 0x00, 0x80, 0x01, 0x20)) // Call ecrecover
-            // `returndatasize() will be '0x20' if successful, otherwise it will be '0'.
-            if iszero(returndatasize()) {
-                mstore(0x00, 0x8baa579f) // `InvalidSignature()`.
-                revert(0x1c, 0x04)
-            }
-            mstore(0x60, 0x00) // Restore the zero slot
-            mstore(0x40, m) // Restore free memory pointer
         }
     }
 }

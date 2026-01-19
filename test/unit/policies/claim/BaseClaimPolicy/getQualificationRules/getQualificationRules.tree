@@ -1,0 +1,10 @@
+BaseClaimPolicy::getQualificationRules
+├── given not initialized
+│   └── it should return empty struct
+├── given initialized
+│   ├── it should return rules for configured chainId/arbiter
+│   ├── it should return empty struct for unconfigured chainId
+│   ├── it should return empty struct for unconfigured arbiter
+│   └── it should return useArbiterHash flag
+└── given multiple chainId/arbiter pairs
+    └── it should return correct rules per pair

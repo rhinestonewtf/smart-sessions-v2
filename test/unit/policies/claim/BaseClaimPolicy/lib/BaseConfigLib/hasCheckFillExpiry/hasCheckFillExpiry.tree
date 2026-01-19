@@ -1,0 +1,9 @@
+BaseConfigLib::hasCheckFillExpiry
+├── given mode is SKIP
+│   └── it should return false
+├── given mode is STORAGE
+│   └── it should return true
+├── given mode is CATCHALL
+│   └── it should return true
+└── given mode is SUBPOLICY
+    └── it should return true

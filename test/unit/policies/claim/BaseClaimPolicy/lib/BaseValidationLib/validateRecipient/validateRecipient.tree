@@ -1,0 +1,24 @@
+BaseValidationLib::validateRecipient
+├── given mode is SKIP
+│   └── it should return true
+├── given mode is STORAGE
+│   ├── given recipient matches stored value
+│   │   └── it should return true
+│   ├── given recipient does not match stored value
+│   │   └── it should return false
+│   ├── given stored value is ANY_ADDRESS
+│   │   └── it should return true for any recipient
+│   └── given no stored value for chainId
+│       └── it should return false
+├── given mode is CATCHALL
+│   ├── given recipient matches stored value at chainId 0
+│   │   └── it should return true
+│   └── given recipient does not match stored value at chainId 0
+│       └── it should return false
+├── given mode is SUBPOLICY
+│   ├── given sub-policy returns true
+│   │   └── it should return true
+│   └── given sub-policy returns false
+│       └── it should return false
+└── given mode is unknown
+    └── it should return false

@@ -1,0 +1,12 @@
+BaseClaimPolicy::getFillExpiryBounds
+├── given not initialized
+│   └── it should return zeros
+├── given initialized with STORAGE mode
+│   ├── it should return correct bounds for configured chainId
+│   ├── it should return zeros for unconfigured chainId
+│   └── it should return correct bounds for multiple chainIds
+├── given initialized with CATCHALL mode
+│   └── it should return correct bounds for chainId 0
+└── given storage isolation
+    ├── it should isolate per configId
+    └── it should isolate per account

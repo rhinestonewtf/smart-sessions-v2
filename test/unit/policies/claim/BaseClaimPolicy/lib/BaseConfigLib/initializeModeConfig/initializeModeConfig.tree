@@ -1,0 +1,11 @@
+BaseConfigLib::initializeModeConfig
+├── given valid 4-byte config
+│   ├── it should write modeConfig to storage
+│   ├── it should return the PolicyConfig
+│   └── it should return remaining calldata after 4 bytes
+├── given all zeros config
+│   └── it should store zero config (all SKIP)
+├── given all fields enabled
+│   └── it should store all fields correctly
+└── given extra data after config
+    └── it should return extra data as remaining

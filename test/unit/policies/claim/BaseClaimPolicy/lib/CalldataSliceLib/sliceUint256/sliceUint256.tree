@@ -1,0 +1,12 @@
+CalldataSliceLib::sliceUint256
+├── given zero value
+│   ├── it should return 0
+│   └── it should return offset + 32
+├── given max value
+│   ├── it should return type(uint256).max
+│   └── it should return offset + 32
+├── given value at offset
+│   ├── it should read from correct position
+│   └── it should return offset + 32
+└── given sequential reads
+    └── it should read each value correctly with advancing offset

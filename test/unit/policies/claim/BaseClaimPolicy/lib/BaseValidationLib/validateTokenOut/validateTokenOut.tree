@@ -1,0 +1,26 @@
+BaseValidationLib::validateTokenOut
+├── given mode is STORAGE
+│   ├── given all tokens are in whitelist
+│   │   ├── it should return valid = true
+│   │   ├── it should return correct tokenOutHash
+│   │   └── it should return correct newOffset
+│   ├── given one token is not in whitelist
+│   │   └── it should return valid = false
+│   ├── given whitelist is empty
+│   │   └── it should return valid = false
+│   └── given empty token array
+│       ├── it should return valid = true
+│       └── it should return empty hash
+├── given mode is CATCHALL
+│   ├── given tokens are in whitelist at chainId 0
+│   │   └── it should return valid = true
+│   └── given tokens are not in whitelist at chainId 0
+│       └── it should return valid = false
+├── given mode is SUBPOLICY
+│   ├── given sub-policy returns true
+│   │   ├── it should return valid = true
+│   │   └── it should return correct tokenOutHash
+│   └── given sub-policy returns false
+│       └── it should return valid = false
+└── given mode is unknown
+    └── it should return valid = false

@@ -8,8 +8,9 @@ import { NoSessionValidator } from "@test/mock/NoSessionValidator.sol";
 import { NoValidator } from "@test/mock/NoValidator.sol";
 import { NoPolicy } from "@smartsessions-test/mock/NoPolicy.sol";
 import { EIP712 } from "@solady/utils/EIP712.sol";
-import { SmartSessionCompatibilityFallback } from
-    "@smartsessions/SmartSessionCompatibilityFallback.sol";
+import {
+    SmartSessionCompatibilityFallback
+} from "@smartsessions/SmartSessionCompatibilityFallback.sol";
 
 // Interfaces
 import { IERC7579Account } from "erc7579/interfaces/IERC7579Account.sol";
@@ -39,6 +40,7 @@ import {
     ModeLib
 } from "erc7579/lib/ModeLib.sol";
 import { MODULE_TYPE_FALLBACK } from "erc7579/interfaces/IERC7579Module.sol";
+import { PolicyConfig, BaseConfigLib } from "@policies/claim/base/lib/BaseConfigLib.sol";
 
 /// @notice An abstract base test contract that provides common test logic.
 abstract contract Base_Test is Test, RhinestoneModuleKit {
@@ -47,6 +49,7 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
     //////////////////////////////////////////////////////////////*/
 
     using ModuleKitHelpers for *;
+    using BaseConfigLib for uint32;
 
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
@@ -114,6 +117,8 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
         noValidator = new NoValidator();
         // Deploy the NoPolicy contract.
         noPolicy = new NoPolicy();
+        // Deploy fallback module
+        fallbackModule = new SmartSessionCompatibilityFallback();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -161,5 +166,16 @@ abstract contract Base_Test is Test, RhinestoneModuleKit {
                 IERC7579Account.execute, (mode, ExecutionLib.encodeBatch(executions))
             );
         }
+    }
+
+    /// @notice Builds a PolicyConfig with specified field mode
+    function _buildConfig(uint8 fieldId, uint8 mode) internal pure returns (PolicyConfig) {
+        uint32 modeConfig = uint32(0).setFieldMode(fieldId, mode);
+        return PolicyConfig.wrap(modeConfig);
+    }
+
+    /// @notice Helper to create mode config with specific field mode
+    function _createModeConfig(uint8 fieldId, uint8 mode) internal pure returns (uint32) {
+        return uint32(mode) << (fieldId * 2);
     }
 }

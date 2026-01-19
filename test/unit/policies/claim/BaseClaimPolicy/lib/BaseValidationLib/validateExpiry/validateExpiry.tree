@@ -1,0 +1,26 @@
+BaseValidationLib::validateExpiry
+├── given mode is SKIP
+│   └── it should return true
+├── given mode is STORAGE
+│   ├── given expiry is within bounds
+│   │   └── it should return true
+│   ├── given expiry equals min bound
+│   │   └── it should return true
+│   ├── given expiry equals max bound
+│   │   └── it should return true
+│   ├── given expiry is below min bound
+│   │   └── it should return false
+│   └── given expiry is above max bound
+│       └── it should return false
+├── given mode is CATCHALL
+│   ├── given expiry is within bounds
+│   │   └── it should return true
+│   └── given expiry is out of bounds
+│       └── it should return false
+├── given mode is SUBPOLICY
+│   ├── given sub-policy returns true
+│   │   └── it should return true
+│   └── given sub-policy returns false
+│       └── it should return false
+└── given mode is unknown
+    └── it should return false

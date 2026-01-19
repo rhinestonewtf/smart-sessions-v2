@@ -1,0 +1,26 @@
+SmartSessionEmissary::verifyClaim
+├── given SmartSession mode (0x02)
+│   ├── when signature is valid
+│   │   └── it returns verifyClaim selector
+│   ├── when session validator rejects signature
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when digest is cached
+│   │   └── it returns verifyClaim selector without revalidating
+│   ├── when permissionId is invalid (never enabled)
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when permissionId is wrong (different session)
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when lockTag does not match enabled session
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when account is different from enabled session
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when signature is malformed
+│   │   └── it reverts
+│   └── given isolation tests
+│       ├── it isolates claim policies per account
+│       ├── it isolates claim policies per permissionId
+│       └── it isolates claim policies per lockTag
+├── given unknown mode (0xFF)
+│   └── it returns INVALID_SIGNATURE
+└── given emissary data is empty
+    └── it reverts

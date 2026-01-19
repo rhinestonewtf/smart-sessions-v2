@@ -1,0 +1,13 @@
+SmartSessionLens::isLockTagEnabled
+├── when lock tag is not enabled
+│   └── it returns false
+├── when checking different account
+│   └── it returns false
+├── when checking different lock tag
+│   └── it returns false
+├── when checking different permission id
+│   └── it returns false
+├── when lock tag is enabled
+│   └── it returns true
+└── when using no lock tag (bytes12(0))
+    └── it returns true when enabled

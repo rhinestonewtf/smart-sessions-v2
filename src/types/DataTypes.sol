@@ -7,14 +7,29 @@ import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.s
 
 // Types
 import { ResetPeriod, Scope } from "@compact-utils/interfaces/IEmissary.sol";
-import { PermissionId, ChainDigest, ActionData, PolicyData } from "@smartsessions/DataTypes.sol";
+import {
+    PermissionId,
+    ChainDigest,
+    ActionData,
+    PolicyData,
+    ERC7739Data
+} from "@smartsessions/DataTypes.sol";
 
 /*//////////////////////////////////////////////////////////////
                             CONSTANTS
 //////////////////////////////////////////////////////////////*/
 
 /// @dev Invalid return value for unsupported or invalid operations
-bytes4 constant INVALID_RETURN = 0xFFFFFFFF;
+bytes4 constant INVALID_SIGNATURE = 0xFFFFFFFF;
+
+/// @dev Sentinel lockTag value used for sessions without a lockTag
+bytes12 constant NO_LOCKTAG = bytes12(0);
+
+/// @dev The keccak256 hash of an empty string, used as the expected content hash
+///      for direct mode validation in ERC-7739. In direct mode, the content hash
+///      must match this value to indicate that no additional content is present.
+bytes32 constant EMPTY_CONTENT_HASH =
+    0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
 /*//////////////////////////////////////////////////////////////
                             STRUCTS
@@ -53,52 +68,35 @@ struct DisableSession {
 ///         A session key owner can have multiple sessions with the same parameters. To facilitate
 ///         this, a salt is necessary to avoid collision.
 ///
-///     erc1271Policies (PolicyData[]): An array of policy data for specifying ERC-1271 policies.
-///
 ///     actions (ActionData[]): An array of action data for specifying function-specific policies.
 ///         A common use case of session keys is to scope access to a specific target and function
 ///         selector. SmartSession calls this "Action". With ActionData, we can specify policies
 ///         that are only run if a 7579 execution contains a specific action.
+///
+///     claimPolicies (PolicyData[]): ERC-1271 policies for Compact claim verification.
+///         These policies are enforced during verifyClaim calls and are stored per lockTag,
+///         allowing different signing permissions for different Compact allocator contexts.
+///
+///     erc7739Policies (ERC7739Data): ERC-1271 policies specific to the ERC-7739 standard.
+///         These policies are used for general message signing via isValidSignature and are
+///         stored globally (not lockTag-specific), enabling broad signing capabilities.
 struct Session {
     ISessionValidator sessionValidator;
     bytes sessionValidatorInitData;
     bytes32 salt;
-    PolicyData[] erc1271Policies;
     ActionData[] actions;
+    PolicyData[] claimPolicies;
+    ERC7739Data erc7739Policies;
 }
 
 /// @notice Configuration for the Smart Session Emissary.
 /// @dev This configuration is used to set up the Smart Session Emissary with multiple sessions,
 ///      a scope, a reset period, and an allocator address.
 struct SmartSessionEmissaryConfig {
-    address sender;
     Scope scope;
     ResetPeriod resetPeriod;
     address allocator;
     PermissionId permissionId;
-}
-
-/// @notice Configuration for the basic Emissary.
-/// @dev This configuration is used to set up the Emissary with a specific allocator,
-///      a scope, a reset period, and a stateless validator.
-struct EmissaryConfig {
-    uint8 configId;
-    address allocator;
-    Scope scope;
-    ResetPeriod resetPeriod;
-    IStatelessValidator validator;
-    bytes validatorConfig;
-}
-
-/// @notice Data structure for enabling an Emissary.
-/// @dev This structure contains the signatures, expiration time, chain IDs
-///      for enabling an Emissary on a specific chain.
-struct EmissaryEnable {
-    bytes allocatorSig;
-    bytes userSig;
-    uint256 expires;
-    uint256[] allChainIds;
-    uint256 chainIndex;
 }
 
 /// @notice Data structure for enabling a Smart Session Emissary.
@@ -119,28 +117,3 @@ struct SmartSessionEmissaryDisable {
     DisableSession session;
 }
 
-/// @notice Structure holding WebAuthn credential information
-/// @dev Maps a credential ID to its public key and verification requirements
-/// @param pubKeyX The X coordinate of the credential's public key on the P-256 curve
-/// @param pubKeyY The Y coordinate of the credential's public key on the P-256 curve
-/// @param requireUV Whether user verification (biometrics/PIN) is required for this credential
-struct WebAuthnCredential {
-    uint256 pubKeyX;
-    uint256 pubKeyY;
-    bool requireUV;
-}
-
-/// @notice WebAuthVerificationContext
-/// @dev Context for WebAuthn verification, including credential details and threshold
-/// @param usePrecompile Whether to use the RIP7212 precompile for signature verification,
-///                      or fallback to FreshCryptoLib. According to ERC-7562, calling the
-///                      precompile is only allowed on networks that support it.
-/// @param threshold The number of signatures required for validation
-/// @param credentialIds The IDs of the credentials used for signing
-/// @param credential data WebAuthn credential data
-struct WebAuthVerificationContext {
-    bool usePrecompile;
-    uint256 threshold;
-    bytes32[] credentialIds;
-    WebAuthnCredential[] credentialData;
-}

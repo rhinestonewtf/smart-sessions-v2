@@ -1,0 +1,12 @@
+DigestCacheLib::isAlreadyVerified
+├── when digest is not cached
+│   └── it returns false
+├── when digest is cached
+│   └── it returns true
+└── given different parameters
+    ├── when different accounts
+    │   └── it returns isolated results per account
+    ├── when different permissions
+    │   └── it returns isolated results per permission
+    └── when different digests
+        └── it returns isolated results per digest

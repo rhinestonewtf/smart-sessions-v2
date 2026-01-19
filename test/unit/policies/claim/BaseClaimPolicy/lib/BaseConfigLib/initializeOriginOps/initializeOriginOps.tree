@@ -1,0 +1,14 @@
+BaseConfigLib::initializeOriginOps
+├── given zero entries
+│   └── it should return remaining data unchanged
+├── given single entry with required=true
+│   ├── it should write true to storage for chainId
+│   └── it should return remaining calldata
+├── given single entry with required=false
+│   ├── it should write false to storage for chainId
+│   └── it should return remaining calldata
+├── given multiple entries
+│   ├── it should write all entries to storage
+│   └── it should return remaining calldata
+└── given extra data after entries
+    └── it should return extra data as remaining

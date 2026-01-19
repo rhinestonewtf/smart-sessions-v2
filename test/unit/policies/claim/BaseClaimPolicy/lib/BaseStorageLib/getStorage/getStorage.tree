@@ -1,0 +1,12 @@
+BaseStorageLib::getStorage
+├── given a configId and account pair
+│   ├── it should return a valid storage pointer
+│   └── it should allow writing and reading from storage
+├── given the same configId with different accounts
+│   ├── it should return isolated storage per account
+│   └── it should return different slots
+├── given the same account with different configIds
+│   ├── it should return isolated storage per configId
+│   └── it should return different slots
+└── given the same configId and account called multiple times
+    └── it should return the same storage slot
