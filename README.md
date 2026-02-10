@@ -375,4 +375,4 @@ For simple ECDSA/Passkey validation without policies:
 
 ## License
 
-AGPL-3.0
+BUSL-1.1

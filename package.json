@@ -2,7 +2,7 @@
   "name": "@rhinestone/module-template",
   "version": "0.4.2",
   "description": "A Foundry template for building modules using the ModuleKit",
-  "license": "GPL-3.0",
+  "license": "BUSL-1.1",
   "author": {
     "name": "Rhinestone",
     "url": "https://rhinestone.wtf"
