@@ -7,7 +7,7 @@ import {
 } from "@test/integration/policies/ActionPolicyBase.integration.t.sol";
 
 // Contracts
-import { IntentExecutionPolicy } from "@policies/excecution/IntentExecutionPolicy.sol";
+import { IntentExecutionPolicy } from "@policies/execution/IntentExecutionPolicy.sol";
 
 // Interfaces
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";

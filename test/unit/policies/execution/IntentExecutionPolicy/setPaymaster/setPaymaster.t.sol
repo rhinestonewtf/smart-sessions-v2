@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { IntentExecutionPolicy_Unit_Test } from "../IntentExecutionPolicy.t.sol";
 
 // Contracts
-import { IntentExecutionPolicy } from "@policies/excecution/IntentExecutionPolicy.sol";
+import { IntentExecutionPolicy } from "@policies/execution/IntentExecutionPolicy.sol";
 
 /// @title IntentExecutionPolicy.setPaymaster Unit Tests
 /// @notice Unit tests for the setPaymaster function

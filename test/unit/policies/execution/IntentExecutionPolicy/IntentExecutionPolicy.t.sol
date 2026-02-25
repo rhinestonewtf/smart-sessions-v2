@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { Test } from "@forge-std/Test.sol";
 
 // Contracts
-import { IntentExecutionPolicy } from "@policies/excecution/IntentExecutionPolicy.sol";
+import { IntentExecutionPolicy } from "@policies/execution/IntentExecutionPolicy.sol";
 
 // Interfaces
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
