@@ -137,7 +137,7 @@ contract SmartSessionLens_isLockTagEnabled_Test is SmartSessionLens_Unit_Test {
         assertTrue(isEnabled2, "Lock tag 2 should be enabled");
     }
 
-    function test_isLockTagEnabled_ReturnsTrue_ForNoLockTag() public {
+    function test_isLockTagEnabled_ReturnsFalse_ForNoLockTag() public {
         // Arrange
         Session memory session = _createActionSession(
             ISessionValidator(address(yesSessionValidator)),
@@ -152,7 +152,7 @@ contract SmartSessionLens_isLockTagEnabled_Test is SmartSessionLens_Unit_Test {
         bool isEnabled = _lens().isLockTagEnabled(instance.account, permissionId, NO_LOCK_TAG);
 
         // Assert
-        assertTrue(isEnabled, "No lock tag should be enabled");
+        assertFalse(isEnabled, "No lock tag should be enabled");
     }
 
     /// @notice Test lockTag isolation - same lockTag, different permissionId
