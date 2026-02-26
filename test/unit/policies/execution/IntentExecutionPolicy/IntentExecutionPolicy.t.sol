@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { Test } from "@forge-std/Test.sol";
 
 // Contracts
-import { IntentExecutionPolicy } from "@policies/execution/IntentExecutionPolicy.sol";
+import { IntentExecutionPolicy, TargetConfig } from "@policies/execution/IntentExecutionPolicy.sol";
 
 // Interfaces
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -58,11 +58,15 @@ abstract contract IntentExecutionPolicy_Unit_Test is Test {
         whitelistedTarget2 = makeAddr("whitelistedTarget2");
         nonWhitelistedTarget = makeAddr("nonWhitelistedTarget");
 
-        // Deploy policy with initial whitelisted targets
-        address[] memory initialTargets = new address[](2);
-        initialTargets[0] = whitelistedTarget1;
-        initialTargets[1] = whitelistedTarget2;
-        policy = new IntentExecutionPolicy(owner, paymasterAddr, initialTargets);
+        // Deploy policy
+        policy = new IntentExecutionPolicy(owner, paymasterAddr);
+
+        // Whitelist initial targets
+        TargetConfig[] memory entries = new TargetConfig[](2);
+        entries[0] = TargetConfig({ target: whitelistedTarget1, allowed: true });
+        entries[1] = TargetConfig({ target: whitelistedTarget2, allowed: true });
+        vm.prank(owner);
+        policy.setWhitelistedTargets(entries);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -75,6 +79,19 @@ abstract contract IntentExecutionPolicy_Unit_Test is Test {
     /// @return The encoded approve calldata
     function _encodeApprove(address spender, uint256 amount) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(IERC20.approve.selector, spender, amount);
+    }
+
+    /// @notice Wraps a single target/allowed pair into a TargetConfig array
+    function _targetConfig(
+        address target,
+        bool allowed
+    )
+        internal
+        pure
+        returns (TargetConfig[] memory entries)
+    {
+        entries = new TargetConfig[](1);
+        entries[0] = TargetConfig({ target: target, allowed: allowed });
     }
 
     /// @notice Builds a non-approve calldata with a given selector

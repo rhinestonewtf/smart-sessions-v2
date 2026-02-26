@@ -15,6 +15,11 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 // Contracts
 import { Ownable } from "solady/auth/Ownable.sol";
 
+struct TargetConfig {
+    address target;
+    bool allowed;
+}
+
 // forgefmt: disable-start
 /// @title Intent Execution Policy
 /// @author Rhinestone
@@ -69,27 +74,22 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
 
     /// @param _owner The owner address with permission to manage the whitelist
     /// @param _paymaster The initial paymaster address allowed as spender in approve calls
-    /// @param _initialWhitelistedTargets An array of addresses to initially whitelist as execution
-    /// targets
-    constructor(address _owner, address _paymaster, address[] memory _initialWhitelistedTargets) {
+    constructor(address _owner, address _paymaster) {
         _initializeOwner(_owner);
         paymaster = _paymaster;
-        for (uint256 i = 0; i < _initialWhitelistedTargets.length; i++) {
-            whitelistedTargets[_initialWhitelistedTargets[i]] = true;
-            emit TargetWhitelisted(_initialWhitelistedTargets[i], true);
-        }
     }
 
     /*//////////////////////////////////////////////////////////////
                             ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Add or remove an address from the target whitelist
-    /// @param target The address to update
-    /// @param allowed Whether the address should be whitelisted
-    function setWhitelistedTarget(address target, bool allowed) external onlyOwner {
-        whitelistedTargets[target] = allowed;
-        emit TargetWhitelisted(target, allowed);
+    /// @notice Add or remove multiple addresses from the target whitelist
+    /// @param entries Array of target/allowed pairs
+    function setWhitelistedTargets(TargetConfig[] calldata entries) external onlyOwner {
+        for (uint256 i; i < entries.length; i++) {
+            whitelistedTargets[entries[i].target] = entries[i].allowed;
+            emit TargetWhitelisted(entries[i].target, entries[i].allowed);
+        }
     }
 
     /// @notice Update the paymaster address

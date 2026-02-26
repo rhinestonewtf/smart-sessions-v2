@@ -180,14 +180,14 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
 
         // Act - whitelist it
         vm.prank(owner);
-        policy.setWhitelistedTarget(newTarget, true);
+        policy.setWhitelistedTargets(_targetConfig(newTarget, true));
 
         // Assert - now allowed
         assertEq(policy.checkAction(configId, address(0), newTarget, 0, callData), SUCCESS);
 
         // Act - remove it
         vm.prank(owner);
-        policy.setWhitelistedTarget(newTarget, false);
+        policy.setWhitelistedTargets(_targetConfig(newTarget, false));
 
         // Assert - denied again
         assertEq(policy.checkAction(configId, address(0), newTarget, 0, callData), FAILED);

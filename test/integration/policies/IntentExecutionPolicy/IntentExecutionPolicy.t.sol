@@ -7,7 +7,7 @@ import {
 } from "@test/integration/policies/ActionPolicyBase.integration.t.sol";
 
 // Contracts
-import { IntentExecutionPolicy } from "@policies/execution/IntentExecutionPolicy.sol";
+import { IntentExecutionPolicy, TargetConfig } from "@policies/execution/IntentExecutionPolicy.sol";
 
 // Interfaces
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -60,11 +60,15 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
         whitelistedSpender = makeAddr("whitelistedSpender");
         nonWhitelistedTarget = makeAddr("nonWhitelistedTarget");
 
-        // Deploy policy with initial whitelisted targets
-        address[] memory initialTargets = new address[](2);
-        initialTargets[0] = whitelistedTarget;
-        initialTargets[1] = whitelistedSpender;
-        intentPolicy = new IntentExecutionPolicy(owner, paymasterAddr, initialTargets);
+        // Deploy policy
+        intentPolicy = new IntentExecutionPolicy(owner, paymasterAddr);
+
+        // Whitelist initial targets
+        TargetConfig[] memory entries = new TargetConfig[](2);
+        entries[0] = TargetConfig({ target: whitelistedTarget, allowed: true });
+        entries[1] = TargetConfig({ target: whitelistedSpender, allowed: true });
+        vm.prank(owner);
+        intentPolicy.setWhitelistedTargets(entries);
 
         // Setup account
         account = makeAccountInstance("TestAccount");
@@ -342,7 +346,9 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
 
         // Whitelist the target
         vm.prank(owner);
-        intentPolicy.setWhitelistedTarget(dynamicTarget, true);
+        TargetConfig[] memory entries = new TargetConfig[](1);
+        entries[0] = TargetConfig({ target: dynamicTarget, allowed: true });
+        intentPolicy.setWhitelistedTargets(entries);
 
         // Second: should pass (now whitelisted)
         bytes32 digest2 = createTestDigest(account.account, dynamicTarget, 0, callData, 2);
