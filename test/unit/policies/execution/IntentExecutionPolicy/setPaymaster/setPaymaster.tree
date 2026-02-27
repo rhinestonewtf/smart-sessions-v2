@@ -1,6 +1,0 @@
-IntentExecutionPolicy::setPaymaster
-├── given caller is owner
-│   ├── it should update the paymaster address
-│   └── it should emit PaymasterSet(newPaymaster)
-└── given caller is not owner
-    └── it should revert

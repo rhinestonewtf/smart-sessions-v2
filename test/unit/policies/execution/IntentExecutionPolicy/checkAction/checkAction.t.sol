@@ -97,23 +97,6 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
     }
 
     /*//////////////////////////////////////////////////////////////
-              NON-WHITELISTED TARGET - APPROVE WITH PAYMASTER
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Test approve with paymaster as spender on non-whitelisted target returns SUCCESS
-    function test_checkAction_approve_paymasterSpender() external view {
-        // Arrange
-        bytes memory callData = _encodeApprove(paymasterAddr, 100);
-
-        // Act
-        uint256 result =
-            policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
-
-        // Assert
-        assertEq(result, SUCCESS);
-    }
-
-    /*//////////////////////////////////////////////////////////////
           NON-WHITELISTED TARGET - APPROVE WITH WHITELISTED SPENDER
     //////////////////////////////////////////////////////////////*/
 
@@ -193,24 +176,4 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
         assertEq(policy.checkAction(configId, address(0), newTarget, 0, callData), FAILED);
     }
 
-    /// @notice Test approve spender validation reflects paymaster changes
-    function test_checkAction_approve_reflectsPaymasterChange() external {
-        // Arrange - use non-whitelisted target to exercise approve path
-        address newPaymaster = makeAddr("newPaymaster");
-        bytes memory callData = _encodeApprove(newPaymaster, 100);
-
-        // Assert - initially denied (newPaymaster not yet set)
-        assertEq(
-            policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData), FAILED
-        );
-
-        // Act
-        vm.prank(owner);
-        policy.setPaymaster(newPaymaster);
-
-        // Assert - now allowed
-        assertEq(
-            policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData), SUCCESS
-        );
-    }
 }

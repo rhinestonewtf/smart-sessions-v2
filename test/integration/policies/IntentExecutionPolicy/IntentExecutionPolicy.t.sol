@@ -35,7 +35,6 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
     Vm.Wallet bob;
 
     address owner;
-    address paymasterAddr;
 
     address whitelistedTarget;
     address nonWhitelistedTarget;
@@ -51,9 +50,8 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
     function setUp() public override {
         super.setUp();
 
-        // Setup owner and paymaster
+        // Setup owner
         owner = makeAddr("policyOwner");
-        paymasterAddr = makeAddr("paymaster");
 
         // Setup whitelisted addresses
         whitelistedTarget = makeAddr("whitelistedTarget");
@@ -61,7 +59,7 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
         nonWhitelistedTarget = makeAddr("nonWhitelistedTarget");
 
         // Deploy policy
-        intentPolicy = new IntentExecutionPolicy(owner, paymasterAddr);
+        intentPolicy = new IntentExecutionPolicy(owner);
 
         // Whitelist initial targets
         TargetConfig[] memory entries = new TargetConfig[](2);
@@ -137,27 +135,6 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
     /*//////////////////////////////////////////////////////////////
                     SINGLE EXECUTION - APPROVE SPENDER
     //////////////////////////////////////////////////////////////*/
-
-    function test_verifyExecution_approve_paymasterSpender() public {
-        // Setup: enable session for approve on whitelisted target
-        bytes memory initData = "";
-        PermissionId pid = enableActionSession(
-            account, address(intentPolicy), initData, alice.addr, whitelistedTarget, approveSelector
-        );
-
-        // Create approve calldata with paymaster as spender
-        bytes memory callData =
-            abi.encodeWithSelector(approveSelector, paymasterAddr, uint256(1000));
-        bytes32 digest =
-            createTestDigest(account.account, whitelistedTarget, 0, callData, 1);
-
-        // Validate
-        bool valid = validateExecutionWithKey(
-            account, pid, digest, whitelistedTarget, 0, callData, alice.privateKey
-        );
-
-        assertTrue(valid, "Approve with paymaster spender should pass");
-    }
 
     function test_verifyExecution_approve_whitelistedSpender() public {
         // Setup: enable session for approve on whitelisted target

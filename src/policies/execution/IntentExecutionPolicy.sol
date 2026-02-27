@@ -25,19 +25,20 @@ struct TargetConfig {
 /// @author Rhinestone
 /// @notice Action policy that restricts execution targets to a whitelisted set of addresses
 ///         managed by the contract owner. For ERC20 `approve` calls, validates that the spender
-///         is either the paymaster or a whitelisted address.
+///         is a whitelisted address.
 ///
 /// ┌─────────────────────────────────────────────────────────────────────────┐
 /// │                       Validation Logic                                  │
 /// │                                                                         │
 /// │  checkAction(target, data)                                              │
 /// │  │                                                                      │
+/// │  ├── target ∈ whitelistedTargets                         → ALLOW        │
+/// │  │                                                                      │
 /// │  ├── selector == approve(address,uint256)?                              │
-/// │  │   ├── YES → spender ∈ {paymaster, whitelistedTargets} → ALLOW        │
+/// │  │   ├── YES → spender ∈ whitelistedTargets              → ALLOW        │
 /// │  │   │         otherwise                                 → DENY         │
 /// │  │   │                                                                  │
-/// │  │   └── NO  → target ∈ whitelistedTargets               → ALLOW        │
-/// │  │             otherwise                                 → DENY         │
+/// │  │   └── NO                                              → DENY         │
 /// │  │                                                                      │
 /// └─────────────────────────────────────────────────────────────────────────┘
 // forgefmt: disable-end
@@ -53,9 +54,6 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Paymaster address allowed as spender in approve calls
-    address public paymaster;
-
     /// @notice Set of whitelisted target addresses
     mapping(address target => bool isWhitelisted) public whitelistedTargets;
 
@@ -65,18 +63,14 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
 
     /// @dev Emitted when a target address is added or removed from the whitelist
     event TargetWhitelisted(address indexed target, bool allowed);
-    /// @dev Emitted when the paymaster address is updated
-    event PaymasterSet(address indexed paymaster);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
     /// @param _owner The owner address with permission to manage the whitelist
-    /// @param _paymaster The initial paymaster address allowed as spender in approve calls
-    constructor(address _owner, address _paymaster) {
+    constructor(address _owner) {
         _initializeOwner(_owner);
-        paymaster = _paymaster;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -92,13 +86,6 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
         }
     }
 
-    /// @notice Update the paymaster address
-    /// @param _paymaster The new paymaster address
-    function setPaymaster(address _paymaster) external onlyOwner {
-        paymaster = _paymaster;
-        emit PaymasterSet(_paymaster);
-    }
-
     /*//////////////////////////////////////////////////////////////
                             INITIALIZATION
     //////////////////////////////////////////////////////////////*/
@@ -111,8 +98,8 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Validates an action against the whitelist policy
-    /// @dev If the call is an ERC20 `approve`, validates the spender is the paymaster or
-    ///      a whitelisted address. Otherwise, validates the target is whitelisted.
+    /// @dev If the target is whitelisted, allows immediately. If the call is an ERC20 `approve`,
+    ///      validates the spender is a whitelisted address. Otherwise, denies.
     /// @param target The target contract being called
     /// @param data The calldata of the action
     /// @return VALIDATION_SUCCESS if allowed, VALIDATION_FAILED otherwise
@@ -136,7 +123,7 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
         if (data.length >= 4 && bytes4(data[0:4]) == APPROVE_SELECTOR) {
             if (data.length >= 36) {
                 address spender = address(bytes20(data[16:36]));
-                if (spender == paymaster || whitelistedTargets[spender]) {
+                if (whitelistedTargets[spender]) {
                     return VALIDATION_SUCCESS;
                 }
             }

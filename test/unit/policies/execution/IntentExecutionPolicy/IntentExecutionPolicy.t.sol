@@ -36,7 +36,6 @@ abstract contract IntentExecutionPolicy_Unit_Test is Test {
 
     ConfigId internal configId;
     address internal owner;
-    address internal paymasterAddr;
 
     // Test addresses
     address internal whitelistedTarget1;
@@ -51,7 +50,6 @@ abstract contract IntentExecutionPolicy_Unit_Test is Test {
         // Set up test values
         configId = ConfigId.wrap(bytes32(uint256(1)));
         owner = makeAddr("owner");
-        paymasterAddr = makeAddr("paymaster");
 
         // Set up test addresses
         whitelistedTarget1 = makeAddr("whitelistedTarget1");
@@ -59,7 +57,7 @@ abstract contract IntentExecutionPolicy_Unit_Test is Test {
         nonWhitelistedTarget = makeAddr("nonWhitelistedTarget");
 
         // Deploy policy
-        policy = new IntentExecutionPolicy(owner, paymasterAddr);
+        policy = new IntentExecutionPolicy(owner);
 
         // Whitelist initial targets
         TargetConfig[] memory entries = new TargetConfig[](2);
