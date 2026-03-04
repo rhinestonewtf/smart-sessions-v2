@@ -8,13 +8,11 @@ on:
 jobs:
   lint:
     uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-lint.yaml@main"
-    secrets:
-      DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
+    secrets: inherit
 
   build:
     uses: "rhinestonewtf/reusable-workflows/.github/workflows/forge-build.yaml@main"
-    secrets:
-      DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
+    secrets: inherit
 
   test:
     needs: ["lint", "build"]
@@ -23,5 +21,4 @@ jobs:
       foundry-fuzz-runs: 5000
       foundry-profile: "test"
       match-path: "test/**/*.sol"
-    secrets:
-      DEPLOY_KEYS: ${{ secrets.DEPLOY_KEYS }}
+    secrets: inherit
