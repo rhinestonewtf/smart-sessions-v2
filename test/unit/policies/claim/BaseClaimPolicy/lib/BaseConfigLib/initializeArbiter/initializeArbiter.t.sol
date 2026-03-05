@@ -155,6 +155,12 @@ contract BaseConfigLib_initializeArbiter_Unit_Test is BaseConfigLib_Unit_Test {
     function testFuzz_initializeArbiter(address[5] memory _arbiters, uint8 _count) external {
         // Bound count to array size
         _count = uint8(bound(_count, 0, 5));
+        for (uint8 i = 0; i < _count; i++) {
+            // Ensure arbiters are not sentinel
+            vm.assume(
+                bytes32(bytes20(_arbiters[i])) != bytes32(bytes20(uint160(0xfbb67fda52d4bfb8bf)))
+            );
+        }
 
         // Arrange - build data
         data = abi.encodePacked(_count);
