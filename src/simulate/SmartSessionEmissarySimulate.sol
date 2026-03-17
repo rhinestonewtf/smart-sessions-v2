@@ -213,13 +213,21 @@ contract SmartSessionEmissarySimulate is SmartSessionEmissary {
         });
         uint256 preClaimGas = g1 - gasleft();
 
-        // 2. notarizedClaim path: isValidSignatureWithSender equivalent (warm storage reads)
-        //    Can't call this.isValidSignatureWithSender directly — msg.sender would be the
-        //    emissary address, not the account, breaking all $enabledSessions / $erc1271Policies
-        //    lookups. Use _simulateErc1271 which takes explicit account + permit2 params.
-        uint256 g2 = gasleft();
-        _simulateErc1271(account, permit2, notarizedHash, notarizedSigData);
-        uint256 notarizedClaimGas = g2 - gasleft();
+        // 2. notarizedClaim path: call simulate_verify1271 on self via staticcall so that any
+        //    revert inside (e.g. no ERC1271 policies, bad policy data) is caught here and we
+        //    still return preClaimGas. The sub-call sees warm storage from step 1, matching
+        //    real execution order. notarizedClaimGas stays 0 if the sub-call fails.
+        uint256 notarizedClaimGas = 0;
+        (bool ok, bytes memory ret) = address(this).staticcall(
+            abi.encodeCall(this.simulate_verify1271, (account, permit2, notarizedSigData, notarizedHash))
+        );
+        // simulate_verify1271 always reverts — ok should always be false.
+        // Decode notarizedClaimGas from GasUsed1271(uint256) revert data (4 + 32 = 36 bytes).
+        if (!ok && ret.length == 36 && bytes4(ret) == GasUsed1271.selector) {
+            assembly {
+                notarizedClaimGas := mload(add(ret, 36))
+            }
+        }
 
         revert GasUsed(preClaimGas, notarizedClaimGas);
     }
