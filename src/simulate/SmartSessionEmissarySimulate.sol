@@ -154,6 +154,30 @@ contract SmartSessionEmissarySimulate is SmartSessionEmissary {
         });
     }
 
+    error GasUsedExecution(uint256 preClaimGas);
+
+    /// @notice Simulates verifyExecution alone — for flows with only a preClaimSig and no
+    ///         notarizedClaimSig (single-sig flows where the same session covers both).
+    /// @dev Reverts with GasUsedExecution(gas) so the orchestrator can parse it from one eth_call.
+    function simulate_verifyExecution(
+        address account,
+        bytes calldata preClaimSigData,
+        Types.Operation calldata ops
+    )
+        external
+    {
+        uint256 g = gasleft();
+        _verifyExecutionSmartSession({
+            account: account,
+            digest: bytes32(0),
+            emissaryData: preClaimSigData,
+            executions: ops
+        });
+        uint256 preClaimGas = g - gasleft();
+
+        revert GasUsedExecution(preClaimGas);
+    }
+
     error GasUsed(uint256 preClaimGas, uint256 notarizedClaimGas);
 
     /// @notice Simulates both verifyExecution (preClaimSig) and isValidSignatureWithSender
