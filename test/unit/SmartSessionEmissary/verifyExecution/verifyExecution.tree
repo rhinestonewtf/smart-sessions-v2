@@ -37,10 +37,16 @@ SmartSessionEmissary::verifyExecution
 │   ├── when user signature is invalid
 │   │   └── it reverts with InvalidUserSignature
 │   ├── given re-enable (session already enabled)
-│   │   ├── when allocator signature is valid
-│   │   │   └── it returns verifyExecution selector
-│   │   └── when allocator signature is invalid
-│   │       └── it reverts with InvalidAllocatorSignature
+│   │   ├── when first enable was via setConfig
+│   │   │   ├── when allocator signature is valid
+│   │   │   │   └── it returns verifyExecution selector
+│   │   │   └── when allocator signature is invalid
+│   │   │       └── it reverts with InvalidAllocatorSignature
+│   │   └── when first enable was via verifyExecution ENABLE mode
+│   │       ├── when nonce is fresh (rebuilt after first enable)
+│   │       │   └── it returns verifyExecution selector
+│   │       └── when nonce is stale (not rebuilt after first enable)
+│   │           └── it reverts with HashMismatch
 │   └── given NO_LOCKTAG flow
 │       └── it enables session without allocator signature
 └── given unsupported mode (UNSAFE_ENABLE)

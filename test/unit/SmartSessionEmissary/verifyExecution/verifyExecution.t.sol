@@ -657,6 +657,53 @@ contract SmartSessionEmissary_verifyExecution_Unit_Test is SmartSessionEmissary_
         assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
     }
 
+    /// @notice Test verifyExecution with ENABLE mode re-enable succeeds after prior verifyExecution
+    /// enable (nonce incremented by verifyExecution, not setConfig)
+    function test_verifyExecution_EnableMode_reEnable_afterVerifyExecutionEnable_success() public {
+        // Arrange - first enable via verifyExecution ENABLE mode
+        bytes memory enableModeData1 = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, enableModeData1, mockExecData);
+
+        bool isEnabledAfterFirst = _lens().isPermissionEnabled(instance.account, testPermissionId);
+        assertTrue(isEnabledAfterFirst);
+
+        // Prepare second enable with fresh nonce (nonce incremented by first verifyExecution)
+        _rebuildEnableData();
+        bytes memory enableModeData2 = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+
+        // Act
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        bytes4 result = smartSessionEmissary.verifyExecution(
+            instance.account, keccak256("newHash"), enableModeData2, mockExecData
+        );
+
+        // Assert
+        assertEq(result, ISmartSessionEmissary.verifyExecution.selector);
+    }
+
+    /// @notice Test verifyExecution with ENABLE mode reverts with HashMismatch when nonce is stale
+    /// from a prior verifyExecution enable
+    function test_verifyExecution_EnableMode_reEnable_afterVerifyExecutionEnable_revertsWhen_staleNonce(
+    )
+        public
+    {
+        // Arrange - first enable via verifyExecution ENABLE mode (nonce 0 -> 1)
+        bytes memory enableModeData1 = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(instance.account, testHash, enableModeData1, mockExecData);
+
+        // Second attempt reuses same (stale) enable data without rebuilding
+        bytes memory enableModeData2 = _packEnableData(testEnableData, testConfig, "sessionKeySig");
+
+        // Act & Assert - should revert with HashMismatch because nonce is now 1 but digest used nonce 0
+        vm.expectRevert();
+        vm.prank(MOCK_INTENT_EXECUTOR);
+        smartSessionEmissary.verifyExecution(
+            instance.account, keccak256("newHash"), enableModeData2, mockExecData
+        );
+    }
+
     /// @notice Test verifyExecution with ENABLE mode re-enable reverts with invalid allocator sig
     function test_verifyExecution_EnableMode_reEnable_revertsWhen_invalidAllocatorSig() public {
         // Arrange - first enable via setConfig

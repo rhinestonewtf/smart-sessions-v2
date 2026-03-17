@@ -196,6 +196,7 @@ abstract contract SmartSessionMixin is
         address account
     )
         internal
+        virtual
         returns (bool validSig)
     {
         // ensure that the permissionId is enabled for the sender, account, and lockTag

@@ -96,6 +96,7 @@ abstract contract SmartSessionManager is SmartSessionStorage, ReentrancyGuardTra
         PermissionId permissionId
     )
         internal
+        virtual
     {
         // Derive lockTag from allocator, scope, resetPeriod
         bytes12 lockTag = config.allocator.deriveLockTag(config.scope, config.resetPeriod);
