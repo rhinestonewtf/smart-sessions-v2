@@ -234,12 +234,18 @@ contract SmartSessionEmissarySimulate is SmartSessionEmissary {
 
     /// @notice Mirrors _erc1271IsValidSignatureNowCalldata with explicit account instead of
     ///         msg.sender, and skips isValidISessionValidator (no real sig at simulation time).
-    /// @dev Keeps all storage reads ($enabledSessions, $enabledERC7739, $erc1271Policies) so
-    ///      gas figures reflect the real on-chain cost. Direct mode only (appDomainSeparator=0).
+    /// @dev Keeps the session-enabled, ERC-7739, and ERC-1271 policy-list storage reads so
+    ///      gas figures track per-account variance (number of enabled policies, warm vs cold
+    ///      slots). The ERC-1271 policy *invocation* is skipped because the mock signature
+    ///      carries dummy policy data: PolicyLib's `check` would revert with NoPoliciesSet
+    ///      for accounts with no ERC-1271 policies enabled, and would revert inside the
+    ///      policy contract otherwise. The orchestrator's POLICY_OVERHEAD buffer approximates
+    ///      the per-policy validation cost we skip — consistent with how _enforceActionPolicies
+    ///      handles action policy validation in this file.
     function _simulateErc1271(
         address account,
-        address requestSender,
-        bytes32 hash,
+        address /* requestSender */,
+        bytes32 /* hash */,
         bytes calldata signature
     )
         internal
@@ -255,18 +261,12 @@ contract SmartSessionEmissarySimulate is SmartSessionEmissary {
             account: account, value: EMPTY_CONTENT_HASH
         });
 
-        uint256 policyDataOffset = uint256(bytes32(signature[32:64]));
-
-        // Keep: ERC-1271 policy check with correct account + permit2 as requestSender
-        $erc1271Policies.checkERC1271({
-            account: account,
-            requestSender: requestSender,
-            hash: hash,
-            signature: signature[policyDataOffset:],
-            permissionId: permissionId,
-            configId: permissionId.toErc1271PolicyId().toConfigId(account),
-            minPoliciesToEnforce: 1
-        });
+        // Keep: enumerate ERC-1271 policy list — SLOADs the EnumerableSet header + each
+        // policy slot, so accounts with N policies pay N+1 SLOADs (matches real-on-chain
+        // cost of the storage portion of the policy check). We don't invoke the policies
+        // themselves; their per-call cost is approximated by POLICY_OVERHEAD on the
+        // orchestrator side.
+        $erc1271Policies.policyList[permissionId].values({ account: account });
 
         // Skip: $sessionValidators.isValidISessionValidator — no real session key sig at simulation time
     }
