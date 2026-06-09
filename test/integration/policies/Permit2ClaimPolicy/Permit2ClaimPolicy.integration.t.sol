@@ -887,7 +887,11 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
 
         vm.prank(env.smartAccount1.account);
 
-        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        // Per-chain destOps requires a target check so the target chain id is bound to the signed
+        // mandate; recipientIsSponsor is the minimal one (no extra config data) and the default
+        // intent recipient is the sponsor.
+        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
 
         PolicyData[] memory policyDatas = new PolicyData[](1);
         policyDatas[0] = PolicyData({
@@ -1026,8 +1030,11 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
 
     /// @notice Check if target fields need expansion
     function _needsExpandedTarget() internal view returns (bool) {
+        // FIELD_DEST_OPS is paired with the recipientIsSponsor target check (see
+        // _setupSessionWithDestOpsConfig), so its policy data also needs the expanded target.
         return activeFieldMode == FIELD_RECIPIENT || activeFieldMode == FIELD_RECIPIENT_IS_SPONSOR
-            || activeFieldMode == FIELD_FILL_EXPIRY || activeFieldMode == FIELD_TOKEN_OUT;
+            || activeFieldMode == FIELD_FILL_EXPIRY || activeFieldMode == FIELD_TOKEN_OUT
+            || activeFieldMode == FIELD_DEST_OPS;
     }
 
     /// @notice Check if mandate fields need expansion (but not target)

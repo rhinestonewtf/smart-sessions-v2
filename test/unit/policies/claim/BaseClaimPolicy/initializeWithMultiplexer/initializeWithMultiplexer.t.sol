@@ -889,7 +889,9 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test initializes dest ops required=true
     function test_initializeWithMultiplexer_destOpsStorage_requiredTrue() external {
         // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
         bool[] memory required = new bool[](1);
         chainIds[0] = chainId1;
@@ -907,7 +909,9 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test initializes dest ops required=false
     function test_initializeWithMultiplexer_destOpsStorage_requiredFalse() external {
         // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
         bool[] memory required = new bool[](1);
         chainIds[0] = chainId1;
@@ -925,7 +929,9 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test initializes dest ops for multiple chainIds
     function test_initializeWithMultiplexer_destOpsStorage_multipleChains() external {
         // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](2);
         bool[] memory required = new bool[](2);
         chainIds[0] = chainId1;
@@ -964,7 +970,9 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test re-initialization overwrites destOps config
     function test_initializeWithMultiplexer_destOpsStorage_revertsWhen_overwrites() external {
         // Arrange - first init
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
         bool[] memory required = new bool[](1);
         chainIds[0] = chainId1;
@@ -981,6 +989,61 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
         // Act
         vm.expectRevert(IBaseClaimPolicy.ConfigurationAlreadyExists.selector);
         policy.initializeWithMultiplexer(account, configId, initData2);
+    }
+
+    /// @notice Test reverts when per-chain destOps is enabled without any target check
+    /// @dev Storage-mode destOps keys its lookup on the mandate target chain id, which is only bound
+    ///      to the signed mandate when a target check is enabled.
+    function test_initializeWithMultiplexer_revertsWhen_destOpsStorageWithoutTargetCheck() external {
+        // Arrange
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        uint256[] memory chainIds = new uint256[](1);
+        bool[] memory required = new bool[](1);
+        chainIds[0] = chainId1;
+        required[0] = true;
+        bytes memory initData =
+            abi.encodePacked(modeConfig, _encodeDestOpsConfig(chainIds, required));
+
+        // Act & Assert
+        vm.expectRevert(BaseConfigLib.DestOpsStorageRequiresTargetCheck.selector);
+        policy.initializeWithMultiplexer(account, configId, initData);
+    }
+
+    /// @notice Test allows per-chain destOps when a target check is enabled (target chain id is bound)
+    function test_initializeWithMultiplexer_destOpsStorage_withTargetCheck() external {
+        // Arrange - recipientIsSponsor is a target check and requires no extra config data
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+        uint256[] memory chainIds = new uint256[](1);
+        bool[] memory required = new bool[](1);
+        chainIds[0] = chainId1;
+        required[0] = true;
+        bytes memory initData =
+            abi.encodePacked(modeConfig, _encodeDestOpsConfig(chainIds, required));
+
+        // Act
+        policy.initializeWithMultiplexer(account, configId, initData);
+
+        // Assert
+        assertTrue(policy.getDestOpsRequired(configId, account, chainId1));
+    }
+
+    /// @notice Test allows catch-all destOps without a target check (chain id is ignored)
+    function test_initializeWithMultiplexer_destOpsCatchall_withoutTargetCheck() external {
+        // Arrange
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_CATCHALL);
+        uint256[] memory chainIds = new uint256[](1);
+        bool[] memory required = new bool[](1);
+        chainIds[0] = 0;
+        required[0] = true;
+        bytes memory initData =
+            abi.encodePacked(modeConfig, _encodeDestOpsConfig(chainIds, required));
+
+        // Act
+        policy.initializeWithMultiplexer(account, configId, initData);
+
+        // Assert
+        assertTrue(policy.getDestOpsRequired(configId, account, 0));
     }
 
     /*//////////////////////////////////////////////////////////////
