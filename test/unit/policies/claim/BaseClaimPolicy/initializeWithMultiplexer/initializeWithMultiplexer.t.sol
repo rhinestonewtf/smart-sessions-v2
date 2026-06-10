@@ -1005,8 +1005,41 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
             abi.encodePacked(modeConfig, _encodeDestOpsConfig(chainIds, required));
 
         // Act & Assert
-        vm.expectRevert(BaseConfigLib.DestOpsStorageRequiresTargetCheck.selector);
+        vm.expectRevert(BaseConfigLib.DestOpsRequiresTargetCheck.selector);
         policy.initializeWithMultiplexer(account, configId, initData);
+    }
+
+    /// @notice Test reverts when subpolicy destOps is enabled without any target check
+    /// @dev Subpolicy-mode destOps forwards the mandate target chain id to the subpolicy, which is
+    ///      only bound to the signed mandate when a target check is enabled.
+    function test_initializeWithMultiplexer_revertsWhen_destOpsSubPolicyWithoutTargetCheck()
+        external
+    {
+        // Arrange
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY);
+        bytes memory initData = abi.encodePacked(
+            modeConfig, _encodeSubPolicyConfig(FIELD_DEST_OPS, address(mockSubPolicy), "")
+        );
+
+        // Act & Assert
+        vm.expectRevert(BaseConfigLib.DestOpsRequiresTargetCheck.selector);
+        policy.initializeWithMultiplexer(account, configId, initData);
+    }
+
+    /// @notice Test allows subpolicy destOps when a target check is enabled (target chain id is bound)
+    function test_initializeWithMultiplexer_destOpsSubPolicy_withTargetCheck() external {
+        // Arrange - recipientIsSponsor is a target check and requires no extra config data
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+        bytes memory initData = abi.encodePacked(
+            modeConfig, _encodeSubPolicyConfig(FIELD_DEST_OPS, address(mockSubPolicy), "")
+        );
+
+        // Act
+        policy.initializeWithMultiplexer(account, configId, initData);
+
+        // Assert
+        assertEq(policy.getSubPolicy(configId, account, FIELD_DEST_OPS), address(mockSubPolicy));
     }
 
     /// @notice Test allows per-chain destOps when a target check is enabled (target chain id is bound)

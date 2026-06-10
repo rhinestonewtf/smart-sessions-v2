@@ -1685,8 +1685,9 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         uint256 targetChainId = 137;
         bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -1706,8 +1707,9 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         uint256 targetChainId = 137;
         bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -2325,8 +2327,12 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     }
 
     /// @notice Initialize policy with destOps subpolicy
+    /// @dev Subpolicy destOps forwards the mandate target chain id to the subpolicy, which is only
+    ///      bound to the signed mandate when a target check is enabled. recipientIsSponsor is the
+    ///      minimal target check (no extra config data).
     function _initializePolicyWithDestOpsSubpolicy(address subPolicy) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY);
+        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY)
+            | _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         bytes memory initData =
             abi.encodePacked(modeConfig, uint8(1), uint8(FIELD_DEST_OPS), subPolicy, uint256(0));
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);

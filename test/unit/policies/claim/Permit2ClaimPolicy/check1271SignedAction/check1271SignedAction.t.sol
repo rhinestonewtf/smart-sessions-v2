@@ -2887,7 +2887,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         (address arbiter,) = makeAddrAndKey("arbiter");
         uint256 nonce = 1;
         uint256 deadline = block.timestamp + 3600;
-        address recipient = makeAddr("recipient");
+        address recipient = testAccount; // recipient == sponsor (satisfies recipientIsSponsor)
         bytes32 tokenPermissionsHash = keccak256("tokenPermissions");
         bytes32 tokenOutHash = keccak256("tokenOut");
         uint256 targetChainId = 137;
@@ -2901,11 +2901,14 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             targetHash, SAMPLE_MIN_GAS, Constants.NO_OPS, SAMPLE_OPS_HASH, SAMPLE_QUALIFICATION_HASH
         );
 
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
-            targetHash,
+            recipient,
             targetChainId,
+            fillExpiry,
+            tokenOutHash,
             SAMPLE_MIN_GAS,
             Constants.NO_OPS,
             SAMPLE_OPS_HASH,
@@ -2930,7 +2933,7 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
         (address arbiter,) = makeAddrAndKey("arbiter");
         uint256 nonce = 1;
         uint256 deadline = block.timestamp + 3600;
-        address recipient = makeAddr("recipient");
+        address recipient = testAccount; // recipient == sponsor (satisfies recipientIsSponsor)
         bytes32 tokenPermissionsHash = keccak256("tokenPermissions");
         bytes32 tokenOutHash = keccak256("tokenOut");
         uint256 targetChainId = 137;
@@ -2944,11 +2947,14 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             targetHash, SAMPLE_MIN_GAS, Constants.NO_OPS, SAMPLE_OPS_HASH, SAMPLE_QUALIFICATION_HASH
         );
 
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
-            targetHash,
+            recipient,
             targetChainId,
+            fillExpiry,
+            tokenOutHash,
             SAMPLE_MIN_GAS,
             Constants.NO_OPS,
             SAMPLE_OPS_HASH,
@@ -3851,7 +3857,10 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
 
     /// @notice Initialize policy with destOps subpolicy
     function _initializePolicyWithDestOpsSubpolicy(address subpolicyAddr) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY);
+        // Subpolicy destOps forwards the mandate target chain id, which is only bound to the
+        // signed mandate when a target check is enabled; recipientIsSponsor is the minimal one.
+        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY)
+            | _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         bytes memory initData = abi.encodePacked(
             modeConfig, uint8(1), uint8(FIELD_DEST_OPS), subpolicyAddr, uint256(0)
         );
