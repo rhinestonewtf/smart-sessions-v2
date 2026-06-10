@@ -1552,11 +1552,12 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Test destOps storage mode - required and present
     function test_check1271SignedAction_destOps_storage_requiredAndPresent_shouldPass() public {
         uint256 targetChainId = 137;
-        _initializePolicyWithDestOps(true, targetChainId, MODE_CHECK_STORAGE);
+        _initializePolicyWithDestOpsAndTarget(true, targetChainId);
 
         bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -1572,10 +1573,11 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Test destOps storage mode - required but missing
     function test_check1271SignedAction_destOps_storage_requiredButMissing_shouldFail() public {
         uint256 targetChainId = 137;
-        _initializePolicyWithDestOps(true, targetChainId, MODE_CHECK_STORAGE);
+        _initializePolicyWithDestOpsAndTarget(true, targetChainId);
 
-        bytes memory compactData = _createCompactDataWithDestOps(Constants.NO_OPS, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(Constants.NO_OPS, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -1591,10 +1593,11 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Test destOps storage mode - not required and missing
     function test_check1271SignedAction_destOps_storage_notRequiredAndMissing_shouldPass() public {
         uint256 targetChainId = 137;
-        _initializePolicyWithDestOps(false, targetChainId, MODE_CHECK_STORAGE);
+        _initializePolicyWithDestOpsAndTarget(false, targetChainId);
 
-        bytes memory compactData = _createCompactDataWithDestOps(Constants.NO_OPS, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(Constants.NO_OPS, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -1610,11 +1613,12 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     /// @notice Test destOps storage mode - not required but present
     function test_check1271SignedAction_destOps_storage_notRequiredButPresent_shouldFail() public {
         uint256 targetChainId = 137;
-        _initializePolicyWithDestOps(false, targetChainId, MODE_CHECK_STORAGE);
+        _initializePolicyWithDestOpsAndTarget(false, targetChainId);
 
         bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -1681,8 +1685,9 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         uint256 targetChainId = 137;
         bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -1702,8 +1707,9 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
 
         uint256 targetChainId = 137;
         bytes32 nonEmptyOpsHash = keccak256("some ops");
-        bytes memory compactData = _createCompactDataWithDestOps(nonEmptyOpsHash, targetChainId);
-        bytes32 expectedHash = this.computeExpectedHashWithMandateExpanded(compactData);
+        bytes memory compactData =
+            _createCompactDataWithTargetAndDestOps(nonEmptyOpsHash, targetChainId);
+        bytes32 expectedHash = this.computeExpectedHashWithTarget(compactData);
 
         bool result = compactClaimPolicy.check1271SignedAction(
             testConfigId,
@@ -2203,6 +2209,18 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
     }
 
+    /// @notice Initialize policy with per-chain (STORAGE) destOps plus a target check.
+    /// @dev Per-chain destOps keys its requirement on the mandate target chain id, which is only
+    ///      bound to the signed mandate when a target check is enabled. recipientIsSponsor is the
+    ///      minimal target check (no extra config data).
+    function _initializePolicyWithDestOpsAndTarget(bool required, uint256 chainId) internal {
+        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
+        bytes memory initData =
+            abi.encodePacked(modeConfig, uint8(1), chainId, uint8(required ? 1 : 0));
+        compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
+    }
+
     //--------------------------------------------
     // QUALIFICATION HELPERS
     //--------------------------------------------
@@ -2309,8 +2327,12 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     }
 
     /// @notice Initialize policy with destOps subpolicy
+    /// @dev Subpolicy destOps forwards the mandate target chain id to the subpolicy, which is only
+    ///      bound to the signed mandate when a target check is enabled. recipientIsSponsor is the
+    ///      minimal target check (no extra config data).
     function _initializePolicyWithDestOpsSubpolicy(address subPolicy) internal {
-        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY);
+        uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY)
+            | _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         bytes memory initData =
             abi.encodePacked(modeConfig, uint8(1), uint8(FIELD_DEST_OPS), subPolicy, uint256(0));
         compactClaimPolicy.initializeWithMultiplexer(testAccount, testConfigId, initData);
@@ -2511,6 +2533,31 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
             keccak256("qualification")
         );
         return abi.encodePacked(header, elementHeader, keccak256("commitments"), mandateData);
+    }
+
+    /// @notice Create Compact data with an expanded target (recipient == sponsor) plus destOps,
+    ///         matching a config that pairs per-chain destOps with the recipientIsSponsor target check.
+    function _createCompactDataWithTargetAndDestOps(
+        bytes32 destOpsHash,
+        uint256 targetChainId
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes memory header = _createCompactHeader();
+        bytes memory elementHeader = _createElementHeader(makeAddr("arbiter"), 0);
+        bytes memory targetData = abi.encodePacked(
+            testAccount, // recipient == sponsor
+            targetChainId,
+            uint256(block.timestamp + 7200),
+            Constants.EMPTY_TOKEN_OUT_HASH
+        );
+        bytes memory mandateFooter = abi.encodePacked(
+            uint128(0), Constants.NO_OPS, destOpsHash, keccak256("qualification")
+        );
+        return abi.encodePacked(
+            header, elementHeader, keccak256("commitments"), targetData, mandateFooter
+        );
     }
 
     /// @notice Create Compact data with qualification

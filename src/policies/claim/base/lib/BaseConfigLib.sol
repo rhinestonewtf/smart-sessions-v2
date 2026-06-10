@@ -195,6 +195,14 @@ library BaseConfigLib {
     /// @notice Thrown when subpolicy address doesn't implement I1271Policy
     error InvalidSubPolicy();
 
+    /// @notice Thrown when destOps is configured in a chain-aware mode without any target check
+    /// @dev Per-chain destOps (MODE_CHECK_STORAGE) keys its requirement lookup on the mandate's
+    ///      target chain id, and subpolicy destOps (MODE_CHECK_SUBPOLICY) forwards that chain id
+    ///      to the subpolicy. The chain id is only bound to the signed mandate when a target check
+    ///      is enabled (it is then folded into targetHash). Catch-all destOps
+    ///      (MODE_CHECK_CATCHALL) ignores the chain id, so it is unaffected.
+    error DestOpsRequiresTargetCheck();
+
     /*//////////////////////////////////////////////////////////////
                              MODE EXTRACTION
     //////////////////////////////////////////////////////////////
@@ -426,6 +434,21 @@ library BaseConfigLib {
         returns (PolicyConfig modeConfig, bytes calldata remaining)
     {
         modeConfig = PolicyConfig.wrap(uint32(bytes4(initData[0:4])));
+
+        // Chain-aware destOps validation depends on the mandate's target chain id: per-chain
+        // storage mode keys its requirement lookup on it, and subpolicy mode forwards it to the
+        // subpolicy. That chain id is only committed to the signed mandate when a target check is
+        // enabled, so either mode without a target check would validate against an unbound chain
+        // id. Catch-all destOps (MODE_CHECK_CATCHALL) keys on chainId 0 regardless, so it is
+        // exempt.
+        uint8 destOpsMode = getFieldMode(modeConfig, FIELD_DEST_OPS);
+        if (
+            (destOpsMode == MODE_CHECK_STORAGE || destOpsMode == MODE_CHECK_SUBPOLICY)
+                && !hasAnyTargetCheck(modeConfig)
+        ) {
+            revert DestOpsRequiresTargetCheck();
+        }
+
         $.modeConfig = modeConfig;
         remaining = initData[4:];
     }
