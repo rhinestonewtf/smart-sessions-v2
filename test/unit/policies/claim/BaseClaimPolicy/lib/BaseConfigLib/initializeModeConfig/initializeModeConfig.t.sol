@@ -133,8 +133,8 @@ contract BaseConfigLib_initializeModeConfig_Unit_Test is BaseConfigLib_Unit_Test
         // Exclude the invalid combination rejected by initializeModeConfig: chain-aware (STORAGE
         // or SUBPOLICY) destOps (field 7, bits 14-15) without any target check (bits 6-7, 8-9,
         // 10-11, 18-19).
-        uint32 maskTargetChecks = (uint32(0x3) << 6) | (uint32(0x3) << 8) | (uint32(0x3) << 10)
-            | (uint32(0x3) << 18);
+        uint32 maskTargetChecks =
+            (uint32(0x3) << 6) | (uint32(0x3) << 8) | (uint32(0x3) << 10) | (uint32(0x3) << 18);
         uint8 destOpsMode = uint8((_modeConfig >> 14) & 0x3);
         bool destOpsChainAware = destOpsMode == 1 || destOpsMode == 3;
         vm.assume(!(destOpsChainAware && (_modeConfig & maskTargetChecks) == 0));
