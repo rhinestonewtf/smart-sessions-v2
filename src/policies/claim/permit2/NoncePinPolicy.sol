@@ -2,11 +2,15 @@
 pragma solidity ^0.8.28;
 
 // Interfaces
-import { I1271Policy, IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
+import { I1271Policy, IActionPolicy, IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 import {
     IStandaloneIntentExecutor
 } from "@rhinestone/compact-utils/src/executor/interfaces/IStandaloneIntent.sol";
+
+// Libraries
+import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC7579Module.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -16,8 +20,8 @@ import { Permit2HeaderLib } from "@policies/claim/permit2/lib/Permit2HeaderLib.s
 
 /// @title Nonce Pin Policy
 /// @author Rhinestone
-/// @notice Constrains a Permit2 claim to one pre-agreed nonce, so every digest a session can
-///         produce competes for a single consumable slot per chain.
+/// @notice Owns one nonce for a session and refuses wherever it has already been spent — on the
+///         Permit2 surface as a claim constraint, on the executor surface as a gate.
 /// @dev A 1271 policy is `view` and cannot record that a session was spent, so one-time use has
 ///      to borrow Permit2's nonce bitmap. The signer picks the nonce, so without pinning it can
 ///      mint a fresh digest per nonce and spend repeatedly.
@@ -33,7 +37,7 @@ import { Permit2HeaderLib } from "@policies/claim/permit2/lib/Permit2HeaderLib.s
 /// @dev Limits, all of them real: the guarantee is per chain, not per session; any whitelisted
 ///      arbiter can burn the pin with a zero-value settlement and end the session; and it bounds
 ///      settlements, not signature validations. See PR #51 and the RHI-5757 design note.
-contract NoncePinPolicy is I1271Policy {
+contract NoncePinPolicy is I1271Policy, IActionPolicy {
     /*//////////////////////////////////////////////////////////////
                                 IMMUTABLES
     //////////////////////////////////////////////////////////////*/
@@ -41,13 +45,18 @@ contract NoncePinPolicy is I1271Policy {
     /// @notice The intent executor whose standalone nonce slot marks an executor settlement
     IStandaloneIntentExecutor public immutable INTENT_EXECUTOR;
 
+    /// @notice The Permit2 deployment whose bitmap marks a vendor settlement
+    ISignatureTransfer public immutable PERMIT2;
+
     /*//////////////////////////////////////////////////////////////
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
     /// @param intentExecutor The intent executor to consult for executor-side settlements
-    constructor(address intentExecutor) {
+    /// @param permit2 The Permit2 deployment to consult for vendor-side settlements
+    constructor(address intentExecutor, address permit2) {
         INTENT_EXECUTOR = IStandaloneIntentExecutor(intentExecutor);
+        PERMIT2 = ISignatureTransfer(permit2);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -126,6 +135,39 @@ contract NoncePinPolicy is I1271Policy {
         // slot is readable here: Permit2 burns its own bit before validating, so reading that
         // would reject this very settlement.
         return !INTENT_EXECUTOR.isStandaloneIntentNonceConsumed($pinned.nonce, account);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            ACTION VALIDATION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @inheritdoc IActionPolicy
+    /// @notice Fails an executor action once the pinned nonce is spent on Permit2
+    /// @dev The mirror of the check above, for the other settlement family. Neither family sees
+    ///      the other's consumable, so each surface reads across.
+    /// @dev Reads only Permit2's bitmap. The executor consumes its own slot before validating,
+    ///      so reading that here would reject the very action being validated.
+    /// @dev Needs no digest: the nonce comes from this policy's configuration, not the payload.
+    function checkAction(
+        ConfigId id,
+        address account,
+        address, /* target */
+        uint256, /* value */
+        bytes calldata /* data */
+    )
+        external
+        view
+        override
+        returns (uint256)
+    {
+        PinnedNonce storage $pinned = $pinnedNonce[id][msg.sender][account];
+        if (!$pinned.configured) return VALIDATION_FAILED;
+
+        uint256 pinned = $pinned.nonce;
+        uint256 word = PERMIT2.nonceBitmap(account, pinned >> 8);
+        if (word & (uint256(1) << (pinned & 0xff)) != 0) return VALIDATION_FAILED;
+
+        return VALIDATION_SUCCESS;
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -66,8 +66,7 @@ contract BaseValidationLib_validateTokenOut_Unit_Test is BaseValidationLib_Unit_
         view
         returns (bool, bytes32, uint256)
     {
-        BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexer: msg.sender });
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
         return BaseValidationLib.validateTokenOut(
             $, _data, _offset, _targetChainId, _config, configId, account, testHash
         );

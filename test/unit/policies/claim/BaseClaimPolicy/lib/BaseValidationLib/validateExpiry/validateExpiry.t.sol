@@ -66,8 +66,7 @@ contract BaseValidationLib_validateExpiry_Unit_Test is BaseValidationLib_Unit_Te
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexer: msg.sender });
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
         return BaseValidationLib.validateExpiry($, _expiry, _config, configId, account, testHash);
     }
 

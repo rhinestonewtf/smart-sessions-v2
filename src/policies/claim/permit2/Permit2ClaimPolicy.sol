@@ -15,7 +15,6 @@ import { BaseStorageLib, BasePolicyStorage } from "@policies/claim/base/lib/Base
 import { BaseValidationLib } from "@policies/claim/base/lib/BaseValidationLib.sol";
 import { Permit2ConfigLib } from "@policies/claim/permit2/lib/Permit2ConfigLib.sol";
 import { Permit2ValidationLib } from "@policies/claim/permit2/lib/Permit2ValidationLib.sol";
-import { Permit2HeaderLib } from "@policies/claim/permit2/lib/Permit2HeaderLib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 // Types
@@ -230,7 +229,7 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         //////////////////////////////////////////////////////////////*/
 
         // Init tokenPermissions fields
-        uint256 offset = Permit2HeaderLib.HEADER_END;
+        uint256 offset = 84; // 84 bytes = address(20) + nonce(32) + deadline(32)
         bytes32 tokenPermissionsHash;
         // This validates the tokenIn field
         (valid, tokenPermissionsHash, offset) = Permit2ValidationLib.validateTokenIn(
@@ -283,11 +282,9 @@ contract Permit2ClaimPolicy is BaseClaimPolicy, Permit2EIP712 {
         pure
         returns (address arbiter, uint256 nonce, uint256 deadline)
     {
-        arbiter =
-            address(bytes20(data[Permit2HeaderLib.ARBITER_START:Permit2HeaderLib.ARBITER_END]));
-        nonce = uint256(bytes32(data[Permit2HeaderLib.NONCE_START:Permit2HeaderLib.NONCE_END]));
-        deadline =
-            uint256(bytes32(data[Permit2HeaderLib.DEADLINE_START:Permit2HeaderLib.DEADLINE_END]));
+        arbiter = address(bytes20(data[0:20]));
+        nonce = uint256(bytes32(data[20:52]));
+        deadline = uint256(bytes32(data[52:84]));
     }
 
     /*//////////////////////////////////////////////////////////////

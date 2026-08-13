@@ -9,6 +9,7 @@ import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
 
 // Mocks
 import { MockStandaloneIntent } from "@mocks/MockStandaloneIntent.sol";
+import { MockPermit2Bitmap } from "@mocks/MockPermit2Bitmap.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -22,6 +23,7 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
 
     NoncePinPolicy internal noncePinPolicy;
     MockStandaloneIntent internal intentExecutor;
+    MockPermit2Bitmap internal permit2;
     ConfigId internal configId;
     address internal account;
 
@@ -46,7 +48,8 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
         super.setUp();
 
         intentExecutor = new MockStandaloneIntent();
-        noncePinPolicy = new NoncePinPolicy(address(intentExecutor));
+        permit2 = new MockPermit2Bitmap();
+        noncePinPolicy = new NoncePinPolicy(address(intentExecutor), address(permit2));
         configId = ConfigId.wrap(keccak256("nonce.pin.config"));
         account = makeAddr("account");
     }

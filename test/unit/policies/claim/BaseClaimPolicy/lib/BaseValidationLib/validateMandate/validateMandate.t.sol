@@ -88,8 +88,7 @@ contract BaseValidationLib_validateMandate_Unit_Test is BaseValidationLib_Unit_T
         view
         returns (bool, bytes32)
     {
-        BasePolicyStorage storage $ =
-            configId.getStorage({ account: account, multiplexer: msg.sender });
+        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
         return BaseValidationLib.validateMandate(
             $, _data, _offset, _chainId, _arbiter, _config, configId, account, testHash
         );

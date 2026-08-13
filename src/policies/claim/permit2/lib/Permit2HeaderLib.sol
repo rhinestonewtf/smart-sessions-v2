@@ -3,9 +3,11 @@ pragma solidity ^0.8.28;
 
 /// @title Permit2 Header Library
 /// @author Rhinestone
-/// @notice Byte offsets of the Permit2 claim payload header, shared by everything that reads it
-/// @dev One source of truth. A second copy of these offsets drifts silently: a policy reading a
-///      stale window returns a wrong boolean rather than reverting.
+/// @notice Byte offsets of the Permit2 claim payload header
+/// @dev These mirror `Permit2ClaimPolicy._decodePermit2Header`, which states them inline. Keeping
+///      them named here means a reader of this policy can see what it assumes, but the two are
+///      not linked: if that layout changes, a policy reading these keeps reading a stale window
+///      and returns a wrong boolean rather than reverting. Update both together.
 library Permit2HeaderLib {
     /// @dev arbiter (Permit2 spender) occupies [0:20]
     uint256 internal constant ARBITER_START = 0;
