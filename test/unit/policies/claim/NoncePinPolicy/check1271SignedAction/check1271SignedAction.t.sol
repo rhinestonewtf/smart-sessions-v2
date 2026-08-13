@@ -164,6 +164,49 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     }
 
     /*//////////////////////////////////////////////////////////////
+                          CROSS-FAMILY EXCLUSION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Refuses once the executor has settled on the same nonce.
+    /// @dev The direction that leaks worst without this. An arbiter's pre-claim burn is
+    ///      failure-tolerant, so an executor settlement would otherwise not stop a later
+    ///      settlement here, and the funds would move twice.
+    function test_check1271SignedAction_executorAlreadySettled_shouldReturnFalse() public {
+        _pin(address(this), PINNED_NONCE);
+        intentExecutor.setConsumed(PINNED_NONCE, account, true);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertFalse(result, "must refuse once the executor has spent this nonce");
+    }
+
+    /// @notice The executor slot is consulted per account, not globally.
+    function test_check1271SignedAction_executorSettledForAnotherAccount_shouldReturnTrue() public {
+        _pin(address(this), PINNED_NONCE);
+        intentExecutor.setConsumed(PINNED_NONCE, makeAddr("otherAccount"), true);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertTrue(result, "another account's settlement must not block this one");
+    }
+
+    /// @notice The executor slot is consulted for the pinned nonce, not the presented one.
+    function test_check1271SignedAction_executorSettledOnAnotherNonce_shouldReturnTrue() public {
+        _pin(address(this), PINNED_NONCE);
+        intentExecutor.setConsumed(PINNED_NONCE + 1, account, true);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertTrue(result, "an unrelated nonce must not block this settlement");
+    }
+
+    /*//////////////////////////////////////////////////////////////
                         COMPOSITION REQUIREMENT
     //////////////////////////////////////////////////////////////*/
 

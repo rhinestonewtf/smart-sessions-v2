@@ -7,6 +7,9 @@ import { Base_Test } from "@test/Base.t.sol";
 // Contracts
 import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
 
+// Mocks
+import { MockStandaloneIntent } from "@mocks/MockStandaloneIntent.sol";
+
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
@@ -18,6 +21,7 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
     //////////////////////////////////////////////////////////////*/
 
     NoncePinPolicy internal noncePinPolicy;
+    MockStandaloneIntent internal intentExecutor;
     ConfigId internal configId;
     address internal account;
 
@@ -41,7 +45,8 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
     function setUp() public virtual override {
         super.setUp();
 
-        noncePinPolicy = new NoncePinPolicy();
+        intentExecutor = new MockStandaloneIntent();
+        noncePinPolicy = new NoncePinPolicy(address(intentExecutor));
         configId = ConfigId.wrap(keccak256("nonce.pin.config"));
         account = makeAddr("account");
     }

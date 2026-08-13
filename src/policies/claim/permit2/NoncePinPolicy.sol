@@ -4,6 +4,9 @@ pragma solidity ^0.8.28;
 // Interfaces
 import { I1271Policy, IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {
+    IStandaloneIntentExecutor
+} from "@rhinestone/compact-utils/src/executor/interfaces/IStandaloneIntent.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -21,10 +24,32 @@ import { Permit2HeaderLib } from "@policies/claim/permit2/lib/Permit2HeaderLib.s
 /// @dev Register alongside Permit2ClaimPolicy. Alone this proves nothing: it reads a
 ///      caller-supplied slice, and only the claim policy binds that slice to the digest — which
 ///      is also what guarantees the slice is a Permit2 header rather than some other layout.
+/// @dev Also refuses once the executor has settled on the same nonce. The two families keep
+///      separate consumables — Permit2 a bitmap, the executor a mapping — so neither sees the
+///      other. This closes the direction that leaks worst: an arbiter's pre-claim burn is
+///      failure-tolerant, so without this an executor settlement would not stop a later one here.
+/// @dev It cannot close the reverse direction; that needs a policy on the executor's own 1271
+///      path, which is PR #46.
 /// @dev Limits, all of them real: the guarantee is per chain, not per session; any whitelisted
 ///      arbiter can burn the pin with a zero-value settlement and end the session; and it bounds
 ///      settlements, not signature validations. See PR #51 and the RHI-5757 design note.
 contract NoncePinPolicy is I1271Policy {
+    /*//////////////////////////////////////////////////////////////
+                                IMMUTABLES
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice The intent executor whose standalone nonce slot marks an executor settlement
+    IStandaloneIntentExecutor public immutable INTENT_EXECUTOR;
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @param intentExecutor The intent executor to consult for executor-side settlements
+    constructor(address intentExecutor) {
+        INTENT_EXECUTOR = IStandaloneIntentExecutor(intentExecutor);
+    }
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -95,7 +120,12 @@ contract NoncePinPolicy is I1271Policy {
         if (!$pinned.configured) return false;
         if (signature.length < Permit2HeaderLib.NONCE_END) return false;
 
-        return Permit2HeaderLib.nonce(signature) == $pinned.nonce;
+        if (Permit2HeaderLib.nonce(signature) != $pinned.nonce) return false;
+
+        // Refuse once the other settlement family has spent this nonce. Only the executor's
+        // slot is readable here: Permit2 burns its own bit before validating, so reading that
+        // would reject this very settlement.
+        return !INTENT_EXECUTOR.isStandaloneIntentNonceConsumed($pinned.nonce, account);
     }
 
     /*//////////////////////////////////////////////////////////////
