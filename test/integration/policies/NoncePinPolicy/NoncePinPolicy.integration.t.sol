@@ -39,7 +39,7 @@ contract NoncePinPolicy_Integration_Test is Permit2ClaimPolicy_Integration_Test 
     function setUp() public virtual override {
         super.setUp();
 
-        noncePinPolicy = new NoncePinPolicy(address(Constants.PERMIT2));
+        noncePinPolicy = new NoncePinPolicy();
     }
 
     /*//////////////////////////////////////////////////////////////
