@@ -16,13 +16,9 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
                               FAIL CLOSED
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Only Permit2 gets an answer; every other caller is refused.
-    /// @dev The offsets this policy reads are the Permit2 layout. The per-lockTag claim list is
-    ///      enabled with the SAME config id and multiplexer as the ERC-1271 list, so installing
-    ///      here is a supported configuration rather than an obvious mistake — and on that path
-    ///      TheCompact is the caller and the payload has a different shape entirely. Without
-    ///      this check the policy would read the wrong bytes and answer confidently.
-    function test_check1271SignedAction_nonPermit2Caller_shouldReturnFalse() public {
+    /// @dev The claim list is a supported install site with the same config id, and there the
+    ///      payload is Compact-shaped — so this is misconfiguration, not an obvious mistake.
+    function test_check1271SignedAction_foreignCaller_shouldReturnFalse() public {
         _pin(address(this), PINNED_NONCE);
 
         address theCompact = makeAddr("theCompact");
@@ -30,16 +26,12 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
             configId, theCompact, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
 
-        assertFalse(result, "a caller other than Permit2 must be refused");
+        assertFalse(result, "a caller outside the Permit2 flow must be refused");
     }
 
-    /// @notice Fuzz: no caller except Permit2 is ever answered.
-    /// @dev Assumes away the Permit2 case rather than folding both branches into one equality
-    ///      assertion. A fuzzed address is essentially never Permit2, so the combined form only
-    ///      ever exercised the reject path while reading as though it covered both — and would
-    ///      have passed against a body that always returned false. The accept path is covered
-    ///      by the non-fuzz tests below, which pass PERMIT2_ADDRESS explicitly.
-    function testFuzz_check1271SignedAction_nonPermit2CallerAlwaysRejected(address requestSender)
+    /// @dev Assumes Permit2 away rather than asserting an equality that a fuzzed address
+    ///      satisfies essentially never — that form only ever tests the reject path.
+    function testFuzz_check1271SignedAction_foreignCallerAlwaysRejected(address requestSender)
         public
     {
         vm.assume(requestSender != PERMIT2_ADDRESS);
@@ -49,16 +41,11 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
             configId, requestSender, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
 
-        assertFalse(result, "no caller other than Permit2 may be answered");
+        assertFalse(result, "no caller outside the Permit2 flow may be answered");
     }
 
-    /// @notice A Compact-shaped payload is refused rather than mis-parsed.
-    /// @dev The concrete failure the caller check prevents. In the Compact layout the nonce
-    ///      sits at [32:64], so reading [20:52] splices the tail of the domain separator onto
-    ///      the head of the nonce, leaving the low bits of the real nonce unconstrained. A
-    ///      large family of different nonces would then satisfy a single pin while the
-    ///      configuration still looked correct. The payload here is built so the misparse
-    ///      WOULD match if the caller check were removed.
+    /// @dev Compact puts the nonce at [32:64], so [20:52] splices a domain-separator tail onto
+    ///      a nonce head. Built so the misparse WOULD match if the caller check were removed.
     function test_check1271SignedAction_compactShapedPayload_shouldReturnFalse() public {
         bytes32 domainSeparator = keccak256("compact.domain");
         uint256 compactNonce = 7;
@@ -84,11 +71,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertFalse(result, "a Compact-shaped payload must be refused, not mis-parsed");
     }
 
-    /// @notice An unconfigured entry must reject, not pass.
-    /// @dev The claim policy family fails OPEN when unconfigured (empty mode config means
-    ///      "check nothing"). This policy must not inherit that behaviour: a session whose pin
-    ///      was never initialized would otherwise be silently unpinned, and unpinned means the
-    ///      signer can mint a fresh nonce per digest and spend the session repeatedly.
+    /// @dev The claim policy family fails OPEN when unconfigured; this must not inherit that.
     function test_check1271SignedAction_uninitialized_shouldReturnFalse() public view {
         bool result = noncePinPolicy.check1271SignedAction(
             configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE)
@@ -97,12 +80,8 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertFalse(result, "uninitialized config must fail closed");
     }
 
-    /// @notice An unconfigured entry rejects even a payload carrying nonce zero.
-    /// @dev The case the `configured` flag exists for, and the only one that catches its
-    ///      removal. An uninitialized entry reads back `nonce == 0`, so without the flag a
-    ///      zero-nonce payload compares equal and the policy returns TRUE — fail open on
-    ///      exactly the config nobody set up. Every other test pins a non-zero nonce, so the
-    ///      comparison masks the missing flag and the suite stays green.
+    /// @dev The only test that catches removal of the `configured` flag: an unset entry reads
+    ///      nonce zero, so a zero-nonce payload would compare equal and fail open.
     function test_check1271SignedAction_uninitializedWithZeroNonce_shouldReturnFalse() public view {
         bool result = noncePinPolicy.check1271SignedAction(
             configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(0)
@@ -165,10 +144,8 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertTrue(result, "pinned nonce must be accepted");
     }
 
-    /// @notice A payload holding exactly the arbiter and nonce, and nothing more, is accepted.
-    /// @dev Pins the lower boundary of the length guard. Without this every accepted payload is
-    ///      the full 84-byte header, so widening the guard anywhere between 53 and 84 bytes
-    ///      rejects nothing that the suite tests — a guard broken by a whole word still passes.
+    /// @dev The guard's lower boundary. Without it every accepted payload is the full 84-byte
+    ///      header, so a guard widened by a whole word still passes.
     function test_check1271SignedAction_minimumLengthPayload_shouldReturnTrue() public {
         _pin(address(this), PINNED_NONCE);
 
@@ -183,9 +160,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertTrue(result, "a 52-byte payload is long enough to carry the nonce");
     }
 
-    /// @notice A pinned nonce of zero is a real pin, not an unconfigured entry.
-    /// @dev Guards the `configured` flag: without it, pinning zero would be indistinguishable
-    ///      from never having been initialized.
+    /// @dev Pinning zero must stay distinguishable from never having been initialized.
     function test_check1271SignedAction_pinnedZero_shouldReturnTrue() public {
         _pin(address(this), 0);
 
@@ -200,10 +175,8 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
                             MISMATCHED NONCE
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Any nonce other than the pinned one is rejected.
-    /// @dev This is the property the whole design rests on. Without it the session signer picks
-    ///      a fresh nonce per digest, each spend individually replay-protected by Permit2 but
-    ///      the session itself unbounded.
+    /// @dev The property the design rests on: unpinned, the signer mints a fresh nonce per
+    ///      digest and the session is unbounded.
     function test_check1271SignedAction_mismatchedNonce_shouldReturnFalse() public {
         _pin(address(this), PINNED_NONCE);
 
@@ -214,12 +187,8 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertFalse(result, "a non-pinned nonce must be rejected");
     }
 
-    /// @notice Fuzz: whatever nonce is pinned, that same nonce is accepted.
-    /// @dev Split from the mismatch case deliberately. Fuzzing two independent nonces and
-    ///      asserting `result == (pinned == presented)` reads as though it covers both
-    ///      directions, but two random words are essentially never equal — so it only ever
-    ///      exercised the reject path, and would have passed against a body that always
-    ///      returned false.
+    /// @dev Split from the mismatch case: fuzzing two independent nonces and asserting their
+    ///      equality only ever exercises the reject path.
     function testFuzz_check1271SignedAction_pinnedNonceAlwaysAccepted(uint256 pinned) public {
         _pin(address(this), pinned);
 
@@ -230,8 +199,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertTrue(result, "the pinned nonce must always be accepted");
     }
 
-    /// @notice Fuzz: any nonce other than the pinned one is rejected.
-    /// @dev Offsets by a non-zero delta so the mismatch is guaranteed rather than probable.
+    /// @dev Non-zero delta so the mismatch is guaranteed rather than probable.
     function testFuzz_check1271SignedAction_otherNonceAlwaysRejected(
         uint256 pinned,
         uint256 delta
@@ -292,10 +260,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
                             STORAGE ISOLATION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Two multiplexers hold independent pins, each accepting only its own.
-    /// @dev The caller is the multiplexer. Asserting both directions rather than only that the
-    ///      other one fails closed: a storage-key ordering bug would still fail closed, but
-    ///      would show up here as one multiplexer accepting the other's nonce.
+    /// @dev Both directions, because a storage-key ordering bug still fails closed one way.
     function test_check1271SignedAction_isolatedPerMultiplexer() public {
         address otherMultiplexer = makeAddr("otherMultiplexer");
         _pin(address(this), PINNED_NONCE);
