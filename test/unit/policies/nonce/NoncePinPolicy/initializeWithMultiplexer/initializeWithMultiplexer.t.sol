@@ -4,10 +4,10 @@ pragma solidity >=0.8.27;
 // Dependencies
 import {
     NoncePinPolicy_Unit_Test
-} from "@test/unit/policies/claim/NoncePinPolicy/NoncePinPolicy.t.sol";
+} from "@test/unit/policies/nonce/NoncePinPolicy/NoncePinPolicy.t.sol";
 
 // Contracts
-import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
+import { INoncePinPolicy } from "@policies/nonce/interfaces/INoncePinPolicy.sol";
 
 // Interfaces
 import { IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
@@ -78,7 +78,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
         bytes memory tooShort = new bytes(31);
 
         vm.expectRevert(
-            abi.encodeWithSelector(NoncePinPolicy.InvalidInitDataLength.selector, uint256(31))
+            abi.encodeWithSelector(INoncePinPolicy.InvalidInitDataLength.selector, uint256(31))
         );
         noncePinPolicy.initializeWithMultiplexer(account, configId, tooShort);
     }
@@ -88,7 +88,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
         bytes memory tooLong = new bytes(33);
 
         vm.expectRevert(
-            abi.encodeWithSelector(NoncePinPolicy.InvalidInitDataLength.selector, uint256(33))
+            abi.encodeWithSelector(INoncePinPolicy.InvalidInitDataLength.selector, uint256(33))
         );
         noncePinPolicy.initializeWithMultiplexer(account, configId, tooLong);
     }
@@ -96,7 +96,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
     /// @notice Empty init data is rejected.
     function test_initializeWithMultiplexer_emptyInitData_shouldRevert() public {
         vm.expectRevert(
-            abi.encodeWithSelector(NoncePinPolicy.InvalidInitDataLength.selector, uint256(0))
+            abi.encodeWithSelector(INoncePinPolicy.InvalidInitDataLength.selector, uint256(0))
         );
         noncePinPolicy.initializeWithMultiplexer(account, configId, "");
     }
@@ -106,7 +106,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
         vm.assume(length != 32);
 
         vm.expectRevert(
-            abi.encodeWithSelector(NoncePinPolicy.InvalidInitDataLength.selector, uint256(length))
+            abi.encodeWithSelector(INoncePinPolicy.InvalidInitDataLength.selector, uint256(length))
         );
         noncePinPolicy.initializeWithMultiplexer(account, configId, new bytes(length));
     }

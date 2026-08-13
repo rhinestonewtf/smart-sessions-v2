@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 import { Base_Test } from "@test/Base.t.sol";
 
 // Contracts
-import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
+import { NoncePinPolicy } from "@policies/nonce/NoncePinPolicy.sol";
 
 // Mocks
 import { MockStandaloneIntent } from "@mocks/MockStandaloneIntent.sol";

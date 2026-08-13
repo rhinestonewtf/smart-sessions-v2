@@ -8,7 +8,7 @@ import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
 import { SmartSessionLens } from "@core/SmartSessionLens.sol";
 import { Permit2ClaimPolicy } from "@policies/claim/permit2/Permit2ClaimPolicy.sol";
 import { CompactClaimPolicy } from "@policies/claim/compact/CompactClaimPolicy.sol";
-import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
+import { NoncePinPolicy } from "@policies/nonce/NoncePinPolicy.sol";
 
 /// @title Deploy
 /// @notice Deploys SmartSessionEmissary and related contracts using CREATE2

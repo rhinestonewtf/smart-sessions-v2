@@ -4,7 +4,7 @@ pragma solidity >=0.8.27;
 // Dependencies
 import {
     NoncePinPolicy_Unit_Test
-} from "@test/unit/policies/claim/NoncePinPolicy/NoncePinPolicy.t.sol";
+} from "@test/unit/policies/nonce/NoncePinPolicy/NoncePinPolicy.t.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";

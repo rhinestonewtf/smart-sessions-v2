@@ -7,7 +7,7 @@ import {
 } from "@test/integration/policies/Permit2ClaimPolicy/Permit2ClaimPolicy.integration.t.sol";
 
 // Contracts
-import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
+import { NoncePinPolicy } from "@policies/nonce/NoncePinPolicy.sol";
 
 // Libraries
 import { Constants } from "@compact-utils/types/Constants.sol";
