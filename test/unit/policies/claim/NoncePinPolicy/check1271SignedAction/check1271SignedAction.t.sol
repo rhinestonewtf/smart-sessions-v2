@@ -110,6 +110,44 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     }
 
     /*//////////////////////////////////////////////////////////////
+                        COMPOSITION REQUIREMENT
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice This policy does NOT bind the payload to the digest, and must never be
+    ///         registered on its own.
+    /// @dev Characterization test for a deliberate limitation, not a bug.
+    ///
+    ///      The digest is ignored entirely: the same payload passes against any hash. On its
+    ///      own this policy therefore proves nothing, because the caller supplies the payload
+    ///      and can put the pinned nonce in it while the real permit carries a different one.
+    ///      The pin would appear to hold while the session stayed unpinned in practice.
+    ///
+    ///      Soundness comes from co-registering Permit2ClaimPolicy in the same list, which
+    ///      recomputes the EIP-712 hash from the payload and compares it to the digest.
+    ///      Policies in a list are ANDed, so that proves the slice read here belongs to the
+    ///      real permit.
+    ///
+    ///      Note `minPoliciesToEnforce` is 1, so a list holding only this policy satisfies the
+    ///      minimum and reverts nothing — the misconfiguration is silent. If this assertion
+    ///      ever starts failing because the policy learned to verify the digest itself, delete
+    ///      the test and the co-registration requirement along with it.
+    function test_check_ignoresDigest_soRequiresCoRegistration() public {
+        _pin(address(this), PINNED_NONCE);
+
+        bytes memory payload = _claimPayload(PINNED_NONCE);
+
+        bool withOneHash = noncePinPolicy.check1271SignedAction(
+            configId, address(0), account, keccak256("some digest"), payload
+        );
+        bool withAnother = noncePinPolicy.check1271SignedAction(
+            configId, address(0), account, keccak256("an entirely unrelated digest"), payload
+        );
+
+        assertTrue(withOneHash, "payload should pass on its nonce alone");
+        assertEq(withAnother, withOneHash, "the digest must make no difference - that is the point");
+    }
+
+    /*//////////////////////////////////////////////////////////////
                             STORAGE ISOLATION
     //////////////////////////////////////////////////////////////*/
 
