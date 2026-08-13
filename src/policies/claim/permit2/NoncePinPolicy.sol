@@ -52,6 +52,27 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 ///
 /// @dev Fails CLOSED when unconfigured, unlike the claim policy family, whose empty mode
 ///      configuration degenerates to "check nothing".
+///
+/// ┌─────────────────────────────────────────────────────────────────────────┐
+/// │                       What the pin does NOT give                        │
+/// └─────────────────────────────────────────────────────────────────────────┘
+///
+/// @dev Once per CHAIN, not once per session. Permit2 nonce bitmaps live in each chain's
+///      deployment, so the same session enabled on N chains permits N settlements of the same
+///      pinned nonce. Pin per chain, or state the guarantee per chain.
+///
+/// @dev Any authorized arbiter can kill the session for free. Permit2 burns the nonce before
+///      it transfers, and a zero requested amount skips the transfer entirely — so any one of
+///      the whitelisted spenders can consume the pin while moving nothing. Unpinned that wastes
+///      one nonce out of many; pinned it ends the session. Pinning buys one-time use and pays
+///      for it with this. The same applies to any unrelated Permit2 activity that happens to
+///      land on the pinned value, and nothing here enforces that two sessions pick different
+///      pins — derive the nonce from something session-unique.
+///
+/// @dev It bounds SETTLEMENTS, not validations. The consumed bit lives in Permit2's bitmap, and
+///      this policy is `view`, so it will answer true for unlimited signature checks. Anything
+///      treating a successful ERC-1271 validation as one-shot authorization, without settling
+///      through Permit2, gets no protection from the pin.
 // forgefmt: disable-end
 contract NoncePinPolicy is I1271Policy {
     /*//////////////////////////////////////////////////////////////
