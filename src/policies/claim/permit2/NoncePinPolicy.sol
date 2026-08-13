@@ -11,8 +11,11 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 // forgefmt: disable-start
 /// @title Nonce Pin Policy
 /// @author Rhinestone
-/// @notice Constrains a Permit2 claim to a single, pre-agreed nonce, turning Permit2's
-///         per-nonce replay protection into per-session one-time use.
+/// @notice Constrains a Permit2 claim to a single, pre-agreed nonce, so that every digest a
+///         session can produce competes for one consumable slot per chain.
+/// @notice Read the limits at the end of this block before relying on it. In particular the
+///         guarantee is per chain, not per session, and it constrains settlements rather than
+///         signature validations.
 ///
 /// ┌─────────────────────────────────────────────────────────────────────────┐
 /// │                            Why this exists                              │

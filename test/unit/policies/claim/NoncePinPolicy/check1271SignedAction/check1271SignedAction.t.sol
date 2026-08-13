@@ -34,14 +34,22 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     }
 
     /// @notice Fuzz: no caller except Permit2 is ever answered.
-    function testFuzz_check1271SignedAction_onlyPermit2IsAnswered(address requestSender) public {
+    /// @dev Assumes away the Permit2 case rather than folding both branches into one equality
+    ///      assertion. A fuzzed address is essentially never Permit2, so the combined form only
+    ///      ever exercised the reject path while reading as though it covered both — and would
+    ///      have passed against a body that always returned false. The accept path is covered
+    ///      by the non-fuzz tests below, which pass PERMIT2_ADDRESS explicitly.
+    function testFuzz_check1271SignedAction_nonPermit2CallerAlwaysRejected(address requestSender)
+        public
+    {
+        vm.assume(requestSender != PERMIT2_ADDRESS);
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
             configId, requestSender, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
 
-        assertEq(result, requestSender == PERMIT2_ADDRESS, "only Permit2 may be answered");
+        assertFalse(result, "no caller other than Permit2 may be answered");
     }
 
     /// @notice A Compact-shaped payload is refused rather than mis-parsed.
@@ -206,20 +214,40 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertFalse(result, "a non-pinned nonce must be rejected");
     }
 
-    /// @notice Fuzz: only the pinned nonce is ever accepted.
-    function testFuzz_check1271SignedAction_onlyPinnedNonceAccepted(
-        uint256 pinned,
-        uint256 presented
-    )
-        public
-    {
+    /// @notice Fuzz: whatever nonce is pinned, that same nonce is accepted.
+    /// @dev Split from the mismatch case deliberately. Fuzzing two independent nonces and
+    ///      asserting `result == (pinned == presented)` reads as though it covers both
+    ///      directions, but two random words are essentially never equal — so it only ever
+    ///      exercised the reject path, and would have passed against a body that always
+    ///      returned false.
+    function testFuzz_check1271SignedAction_pinnedNonceAlwaysAccepted(uint256 pinned) public {
         _pin(address(this), pinned);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(presented)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(pinned)
         );
 
-        assertEq(result, pinned == presented, "acceptance must track nonce equality exactly");
+        assertTrue(result, "the pinned nonce must always be accepted");
+    }
+
+    /// @notice Fuzz: any nonce other than the pinned one is rejected.
+    /// @dev Offsets by a non-zero delta so the mismatch is guaranteed rather than probable.
+    function testFuzz_check1271SignedAction_otherNonceAlwaysRejected(
+        uint256 pinned,
+        uint256 delta
+    )
+        public
+    {
+        delta = _bound(delta, 1, type(uint256).max);
+        _pin(address(this), pinned);
+
+        unchecked {
+            bool result = noncePinPolicy.check1271SignedAction(
+                configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(pinned + delta)
+            );
+
+            assertFalse(result, "any nonce other than the pinned one must be rejected");
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
