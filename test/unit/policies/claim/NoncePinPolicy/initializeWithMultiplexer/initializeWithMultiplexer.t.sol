@@ -9,13 +9,21 @@ import {
 // Contracts
 import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
 
+// Interfaces
+import { IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
+
+// Types
+import { ConfigId } from "@smartsessions/DataTypes.sol";
+
+/// @title NoncePinPolicy.initializeWithMultiplexer Unit Tests
+/// @notice Unit tests for the initializeWithMultiplexer function
 contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                                  HAPPY
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Initialization stores the nonce against the calling multiplexer.
-    function test_initialize_shouldStoreNonce() public {
+    function test_initializeWithMultiplexer_shouldStoreNonce() public {
         _pin(address(this), PINNED_NONCE);
 
         (bool configured, uint256 nonce) =
@@ -25,8 +33,18 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
         assertEq(nonce, PINNED_NONCE, "stored nonce should match init data");
     }
 
+    /// @notice Initialization announces itself.
+    /// @dev Indexers and the enable flow rely on this event to observe which policies were
+    ///      configured for a session.
+    function test_initializeWithMultiplexer_shouldEmitPolicySet() public {
+        vm.expectEmit(true, true, true, true);
+        emit IPolicy.PolicySet(configId, address(this), account);
+
+        noncePinPolicy.initializeWithMultiplexer(account, configId, abi.encode(PINNED_NONCE));
+    }
+
     /// @notice Re-initialization overwrites, as required of policies enabled without deinit.
-    function test_initialize_shouldOverwriteOnReinit() public {
+    function test_initializeWithMultiplexer_shouldOverwriteOnReinit() public {
         _pin(address(this), PINNED_NONCE);
         _pin(address(this), PINNED_NONCE + 7);
 
@@ -38,7 +56,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
     }
 
     /// @notice Fuzz: any nonce round-trips through initialization.
-    function testFuzz_initialize_roundTrips(uint256 pinned) public {
+    function testFuzz_initializeWithMultiplexer_roundTrips(uint256 pinned) public {
         _pin(address(this), pinned);
 
         (bool configured, uint256 nonce) =
@@ -56,7 +74,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
     /// @dev Reverting rather than silently accepting matters: a short or padded blob that
     ///      decoded to the wrong nonce would produce a session pinned to a value nobody
     ///      intended, which fails only later and confusingly.
-    function test_initialize_shortInitData_shouldRevert() public {
+    function test_initializeWithMultiplexer_shortInitData_shouldRevert() public {
         bytes memory tooShort = new bytes(31);
 
         vm.expectRevert(
@@ -66,7 +84,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
     }
 
     /// @notice Over-long init data is rejected too.
-    function test_initialize_longInitData_shouldRevert() public {
+    function test_initializeWithMultiplexer_longInitData_shouldRevert() public {
         bytes memory tooLong = new bytes(33);
 
         vm.expectRevert(
@@ -76,11 +94,21 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
     }
 
     /// @notice Empty init data is rejected.
-    function test_initialize_emptyInitData_shouldRevert() public {
+    function test_initializeWithMultiplexer_emptyInitData_shouldRevert() public {
         vm.expectRevert(
             abi.encodeWithSelector(NoncePinPolicy.InvalidInitDataLength.selector, uint256(0))
         );
         noncePinPolicy.initializeWithMultiplexer(account, configId, "");
+    }
+
+    /// @notice Fuzz: any length other than one word is rejected.
+    function testFuzz_initializeWithMultiplexer_wrongLengthAlwaysReverts(uint8 length) public {
+        vm.assume(length != 32);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(NoncePinPolicy.InvalidInitDataLength.selector, uint256(length))
+        );
+        noncePinPolicy.initializeWithMultiplexer(account, configId, new bytes(length));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -88,7 +116,7 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Two multiplexers pinning the same config keep independent entries.
-    function test_initialize_isolatedPerMultiplexer() public {
+    function test_initializeWithMultiplexer_isolatedPerMultiplexer() public {
         address otherMultiplexer = makeAddr("otherMultiplexer");
 
         _pin(address(this), PINNED_NONCE);
@@ -101,12 +129,19 @@ contract NoncePinPolicy_initializeWithMultiplexer_Test is NoncePinPolicy_Unit_Te
         assertEq(theirs, PINNED_NONCE + 1, "other multiplexer should keep its own pin");
     }
 
-    /// @notice An uninitialized entry reports as unconfigured.
-    function test_getPinnedNonce_uninitialized() public view {
-        (bool configured, uint256 nonce) =
-            noncePinPolicy.getPinnedNonce(configId, address(this), account);
+    /// @notice Pins are isolated per account and per config.
+    function test_initializeWithMultiplexer_isolatedPerAccountAndConfig() public {
+        address otherAccount = makeAddr("otherAccount");
+        ConfigId otherConfig = ConfigId.wrap(keccak256("other.config"));
 
-        assertFalse(configured, "untouched entry should be unconfigured");
-        assertEq(nonce, 0, "untouched entry should read zero");
+        _pin(address(this), PINNED_NONCE);
+
+        (bool otherAccountConfigured,) =
+            noncePinPolicy.getPinnedNonce(configId, address(this), otherAccount);
+        (bool otherConfigConfigured,) =
+            noncePinPolicy.getPinnedNonce(otherConfig, address(this), account);
+
+        assertFalse(otherAccountConfigured, "a pin must not leak across accounts");
+        assertFalse(otherConfigConfigured, "a pin must not leak across configs");
     }
 }

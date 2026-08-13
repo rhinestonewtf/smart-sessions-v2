@@ -1,0 +1,13 @@
+NoncePinPolicy::initializeWithMultiplexer
+├── given init data of exactly one word
+│   ├── it should store the nonce against the calling multiplexer
+│   └── it should emit PolicySet
+├── given the config was already initialized
+│   └── it should overwrite the stored nonce
+├── given init data of any other length
+│   ├── given empty init data
+│   │   └── it should revert with InvalidInitDataLength
+│   └── given a short or over-long blob
+│       └── it should revert with InvalidInitDataLength
+└── given another multiplexer, account or config
+    └── it should keep the entries independent

@@ -9,6 +9,8 @@ import {
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
+/// @title NoncePinPolicy.check1271SignedAction Unit Tests
+/// @notice Unit tests for the check1271SignedAction function
 contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                               FAIL CLOSED
@@ -19,8 +21,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     ///      "check nothing"). This policy must not inherit that behaviour: a session whose pin
     ///      was never initialized would otherwise be silently unpinned, and unpinned means the
     ///      signer can mint a fresh nonce per digest and spend the session repeatedly.
-    function test_check_uninitialized_shouldReturnFalse() public {
-        vm.prank(address(this));
+    function test_check1271SignedAction_uninitialized_shouldReturnFalse() public view {
         bool result = noncePinPolicy.check1271SignedAction(
             configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
@@ -28,8 +29,22 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertFalse(result, "uninitialized config must fail closed");
     }
 
+    /// @notice An unconfigured entry rejects even a payload carrying nonce zero.
+    /// @dev The case the `configured` flag exists for, and the only one that catches its
+    ///      removal. An uninitialized entry reads back `nonce == 0`, so without the flag a
+    ///      zero-nonce payload compares equal and the policy returns TRUE — fail open on
+    ///      exactly the config nobody set up. Every other test pins a non-zero nonce, so the
+    ///      comparison masks the missing flag and the suite stays green.
+    function test_check1271SignedAction_uninitializedWithZeroNonce_shouldReturnFalse() public view {
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, address(0), account, bytes32(0), _claimPayload(0)
+        );
+
+        assertFalse(result, "an unconfigured entry must reject nonce zero, not match it");
+    }
+
     /// @notice A payload too short to contain a nonce must reject rather than revert.
-    function test_check_payloadTooShort_shouldReturnFalse() public {
+    function test_check1271SignedAction_payloadTooShort_shouldReturnFalse() public {
         _pin(address(this), PINNED_NONCE);
 
         // 51 bytes: one short of the [20:52] nonce window
@@ -43,7 +58,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     }
 
     /// @notice An empty payload must reject rather than revert.
-    function test_check_emptyPayload_shouldReturnFalse() public {
+    function test_check1271SignedAction_emptyPayload_shouldReturnFalse() public {
         _pin(address(this), PINNED_NONCE);
 
         bool result =
@@ -52,12 +67,26 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertFalse(result, "empty payload must fail closed");
     }
 
+    /// @notice Fuzz: every payload shorter than the nonce window is rejected.
+    /// @dev Bounded fuzz rather than one instance, so an over-strict guard cannot hide behind
+    ///      a single hand-picked length.
+    function testFuzz_check1271SignedAction_shortPayloadAlwaysRejected(uint8 length) public {
+        length = uint8(_bound(length, 0, 51));
+        _pin(address(this), PINNED_NONCE);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, address(0), account, bytes32(0), new bytes(length)
+        );
+
+        assertFalse(result, "any payload shorter than the nonce window must fail closed");
+    }
+
     /*//////////////////////////////////////////////////////////////
                              MATCHING NONCE
     //////////////////////////////////////////////////////////////*/
 
     /// @notice The pinned nonce is accepted.
-    function test_check_matchingNonce_shouldReturnTrue() public {
+    function test_check1271SignedAction_matchingNonce_shouldReturnTrue() public {
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
@@ -67,10 +96,27 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertTrue(result, "pinned nonce must be accepted");
     }
 
+    /// @notice A payload holding exactly the arbiter and nonce, and nothing more, is accepted.
+    /// @dev Pins the lower boundary of the length guard. Without this every accepted payload is
+    ///      the full 84-byte header, so widening the guard anywhere between 53 and 84 bytes
+    ///      rejects nothing that the suite tests — a guard broken by a whole word still passes.
+    function test_check1271SignedAction_minimumLengthPayload_shouldReturnTrue() public {
+        _pin(address(this), PINNED_NONCE);
+
+        // 52 bytes: arbiter (20) + nonce (32), with no deadline or mandate following
+        bytes memory exact = abi.encodePacked(address(0xA11CE), PINNED_NONCE);
+        assertEq(exact.length, 52, "fixture must sit exactly on the guard boundary");
+
+        bool result =
+            noncePinPolicy.check1271SignedAction(configId, address(0), account, bytes32(0), exact);
+
+        assertTrue(result, "a 52-byte payload is long enough to carry the nonce");
+    }
+
     /// @notice A pinned nonce of zero is a real pin, not an unconfigured entry.
     /// @dev Guards the `configured` flag: without it, pinning zero would be indistinguishable
     ///      from never having been initialized.
-    function test_check_pinnedZero_shouldReturnTrue() public {
+    function test_check1271SignedAction_pinnedZero_shouldReturnTrue() public {
         _pin(address(this), 0);
 
         bool result = noncePinPolicy.check1271SignedAction(
@@ -88,7 +134,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     /// @dev This is the property the whole design rests on. Without it the session signer picks
     ///      a fresh nonce per digest, each spend individually replay-protected by Permit2 but
     ///      the session itself unbounded.
-    function test_check_mismatchedNonce_shouldReturnFalse() public {
+    function test_check1271SignedAction_mismatchedNonce_shouldReturnFalse() public {
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
@@ -99,7 +145,12 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     }
 
     /// @notice Fuzz: only the pinned nonce is ever accepted.
-    function testFuzz_check_onlyPinnedNonceAccepted(uint256 pinned, uint256 presented) public {
+    function testFuzz_check1271SignedAction_onlyPinnedNonceAccepted(
+        uint256 pinned,
+        uint256 presented
+    )
+        public
+    {
         _pin(address(this), pinned);
 
         bool result = noncePinPolicy.check1271SignedAction(
@@ -131,7 +182,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     ///      minimum and reverts nothing — the misconfiguration is silent. If this assertion
     ///      ever starts failing because the policy learned to verify the digest itself, delete
     ///      the test and the co-registration requirement along with it.
-    function test_check_ignoresDigest_soRequiresCoRegistration() public {
+    function test_check1271SignedAction_ignoresDigest_soRequiresCoRegistration() public {
         _pin(address(this), PINNED_NONCE);
 
         bytes memory payload = _claimPayload(PINNED_NONCE);
@@ -151,24 +202,40 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
                             STORAGE ISOLATION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Pins are isolated per multiplexer.
-    /// @dev The caller is the multiplexer. A pin set by one must not be readable as another's,
-    ///      or an unrelated session could satisfy this one's constraint.
-    function test_check_isolatedPerMultiplexer() public {
+    /// @notice Two multiplexers hold independent pins, each accepting only its own.
+    /// @dev The caller is the multiplexer. Asserting both directions rather than only that the
+    ///      other one fails closed: a storage-key ordering bug would still fail closed, but
+    ///      would show up here as one multiplexer accepting the other's nonce.
+    function test_check1271SignedAction_isolatedPerMultiplexer() public {
         address otherMultiplexer = makeAddr("otherMultiplexer");
         _pin(address(this), PINNED_NONCE);
+        _pin(otherMultiplexer, PINNED_NONCE + 1);
 
-        // The other multiplexer never initialized, so it must fail closed
-        vm.prank(otherMultiplexer);
-        bool result = noncePinPolicy.check1271SignedAction(
+        bool ownNonceHere = noncePinPolicy.check1271SignedAction(
             configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
+        bool otherNonceHere = noncePinPolicy.check1271SignedAction(
+            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
+        );
 
-        assertFalse(result, "a pin must not leak across multiplexers");
+        assertTrue(ownNonceHere, "each multiplexer must accept its own pin");
+        assertFalse(otherNonceHere, "a pin must not leak across multiplexers");
+
+        vm.startPrank(otherMultiplexer);
+        bool ownNonceThere = noncePinPolicy.check1271SignedAction(
+            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
+        );
+        bool otherNonceThere = noncePinPolicy.check1271SignedAction(
+            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+        vm.stopPrank();
+
+        assertTrue(ownNonceThere, "each multiplexer must accept its own pin");
+        assertFalse(otherNonceThere, "a pin must not leak across multiplexers");
     }
 
     /// @notice Pins are isolated per account.
-    function test_check_isolatedPerAccount() public {
+    function test_check1271SignedAction_isolatedPerAccount() public {
         address otherAccount = makeAddr("otherAccount");
         _pin(address(this), PINNED_NONCE);
 
@@ -180,7 +247,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     }
 
     /// @notice Pins are isolated per config.
-    function test_check_isolatedPerConfig() public {
+    function test_check1271SignedAction_isolatedPerConfig() public {
         ConfigId otherConfig = ConfigId.wrap(keccak256("other.config"));
         _pin(address(this), PINNED_NONCE);
 

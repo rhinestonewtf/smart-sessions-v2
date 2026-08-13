@@ -8,6 +8,7 @@ import { SmartSessionEmissary } from "@contracts/SmartSessionEmissary.sol";
 import { SmartSessionLens } from "@core/SmartSessionLens.sol";
 import { Permit2ClaimPolicy } from "@policies/claim/permit2/Permit2ClaimPolicy.sol";
 import { CompactClaimPolicy } from "@policies/claim/compact/CompactClaimPolicy.sol";
+import { NoncePinPolicy } from "@policies/claim/permit2/NoncePinPolicy.sol";
 
 /// @title Deploy
 /// @notice Deploys SmartSessionEmissary and related contracts using CREATE2
@@ -33,6 +34,7 @@ contract Deploy is Script {
     SmartSessionEmissary public emissary;
     Permit2ClaimPolicy public permit2Policy;
     CompactClaimPolicy public compactClaimPolicy;
+    NoncePinPolicy public noncePinPolicy;
 
     /*//////////////////////////////////////////////////////////////
                                   RUN
@@ -64,6 +66,10 @@ contract Deploy is Script {
         compactClaimPolicy = new CompactClaimPolicy{ salt: SALT }();
         console2.log("CompactClaimPolicy deployed at:", address(compactClaimPolicy));
 
+        // 5. Deploy NoncePinPolicy
+        noncePinPolicy = new NoncePinPolicy{ salt: SALT }();
+        console2.log("NoncePinPolicy deployed at:", address(noncePinPolicy));
+
         vm.stopBroadcast();
 
         // Log summary
@@ -73,5 +79,6 @@ contract Deploy is Script {
         console2.log("SmartSessionEmissary: ", address(emissary));
         console2.log("Permit2ClaimPolicy:        ", address(permit2Policy));
         console2.log("CompactClaimPolicy:   ", address(compactClaimPolicy));
+        console2.log("NoncePinPolicy:       ", address(noncePinPolicy));
     }
 }

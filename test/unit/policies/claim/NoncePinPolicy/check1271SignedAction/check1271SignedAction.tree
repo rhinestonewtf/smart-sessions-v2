@@ -1,0 +1,20 @@
+NoncePinPolicy::check1271SignedAction
+├── given the config was never initialized
+│   └── it should return false
+├── given a payload shorter than the nonce window
+│   ├── given an empty payload
+│   │   └── it should return false
+│   └── given any length below 52 bytes
+│       └── it should return false
+├── given a payload holding exactly the arbiter and nonce
+│   └── it should return true
+├── given the payload carries the pinned nonce
+│   └── it should return true
+├── given the pinned nonce is zero
+│   └── it should return true
+├── given the payload carries any other nonce
+│   └── it should return false
+├── given the digest differs but the nonce matches
+│   └── it should return true regardless of the digest
+└── given a pin belonging to another multiplexer, account or config
+    └── it should return false

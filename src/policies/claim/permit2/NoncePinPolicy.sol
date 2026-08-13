@@ -31,15 +31,10 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 /// │  at Permit2 with InvalidNonce.                                          │
 /// └─────────────────────────────────────────────────────────────────────────┘
 ///
-/// ┌─────────────────────────────────────────────────────────────────────────┐
-/// │                        Permit2 claim data layout                        │
-/// │  ┌───────────┬──────────────────────────────────────────────────────┐   │
-/// │  │  [0:20]   │  arbiter (address) - Permit2 spender                  │   │
-/// │  │  [20:52]  │  nonce (uint256)                     ← checked here   │   │
-/// │  │  [52:84]  │  deadline (uint256)                                   │   │
-/// │  │  [84:...] │  tokenIn / mandate                                    │   │
-/// │  └───────────┴──────────────────────────────────────────────────────┘   │
-/// └─────────────────────────────────────────────────────────────────────────┘
+/// @dev The nonce sits at bytes [20:52] of the Permit2 claim payload, after the arbiter.
+///      See `Permit2ClaimPolicy._decodePermit2Header` for the full header layout — it is
+///      documented there and deliberately not duplicated here, because a second copy is
+///      what drifts.
 ///
 /// @dev Register this ALONGSIDE Permit2ClaimPolicy in the ERC-1271 policy list. Policies in
 ///      that list are ANDed and each receives the identical payload, so this policy rides the
@@ -59,6 +54,9 @@ contract NoncePinPolicy is I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev Start of the nonce in the Permit2 claim payload, after the 20-byte arbiter
+    /// @dev Must track `Permit2ClaimPolicy._decodePermit2Header`, which decodes the same
+    ///      header. A layout change there is silent here: this policy would keep reading the
+    ///      old offsets and return a wrong boolean rather than reverting.
     uint256 internal constant NONCE_START = 20;
 
     /// @dev End of the nonce in the Permit2 claim payload
@@ -180,6 +178,10 @@ contract NoncePinPolicy is I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice ERC165 interface support
+    /// @dev Smart sessions probes this at install time and rejects the policy if it returns
+    ///      false, so a wrong id here means the policy cannot be installed at all
+    /// @param interfaceId The interface identifier to check
+    /// @return True if the interface is supported
     function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
         return
             interfaceId == type(I1271Policy).interfaceId || interfaceId == type(IERC165).interfaceId;

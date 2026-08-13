@@ -1,0 +1,9 @@
+NoncePinPolicy::supportsInterface
+├── given IERC165 interface
+│   └── it should return true
+├── given I1271Policy interface
+│   └── it should return true
+├── given unsupported interface
+│   └── it should return false
+└── given the ERC-165 invalid identifier
+    └── it should return false

@@ -8,6 +8,7 @@ CONTRACTS=(
     "src/core/SmartSessionLens.sol"
     "src/policies/claim/compact/CompactClaimPolicy.sol"
     "src/policies/claim/permit2/Permit2ClaimPolicy.sol"
+    "src/policies/claim/permit2/NoncePinPolicy.sol"
 )
 
 # Loop through the contracts and run build-artifacts.sh for each

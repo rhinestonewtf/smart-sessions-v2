@@ -1,0 +1,7 @@
+NoncePinPolicy::getPinnedNonce
+├── given the config was never initialized
+│   └── it should report unconfigured and zero
+├── given the config was initialized
+│   └── it should report configured and the pinned nonce
+└── given the pinned nonce is zero
+    └── it should still report configured
