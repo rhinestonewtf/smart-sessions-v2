@@ -67,7 +67,7 @@ contract Deploy is Script {
         console2.log("CompactClaimPolicy deployed at:", address(compactClaimPolicy));
 
         // 5. Deploy NoncePinPolicy
-        noncePinPolicy = new NoncePinPolicy{ salt: SALT }();
+        noncePinPolicy = new NoncePinPolicy{ salt: SALT }(PERMIT2);
         console2.log("NoncePinPolicy deployed at:", address(noncePinPolicy));
 
         vm.stopBroadcast();

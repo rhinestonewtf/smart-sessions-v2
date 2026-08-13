@@ -31,6 +31,9 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
     /// @dev Arbitrary deadline used in test payloads; this policy does not read it
     uint256 internal constant DEADLINE = 1_800_000_000;
 
+    /// @dev Canonical Permit2 deployment; the only caller this policy answers
+    address internal constant PERMIT2_ADDRESS = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+
     /*//////////////////////////////////////////////////////////////
                                  SETUP
     //////////////////////////////////////////////////////////////*/
@@ -38,7 +41,7 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
     function setUp() public virtual override {
         super.setUp();
 
-        noncePinPolicy = new NoncePinPolicy();
+        noncePinPolicy = new NoncePinPolicy(PERMIT2_ADDRESS);
         configId = ConfigId.wrap(keccak256("nonce.pin.config"));
         account = makeAddr("account");
     }

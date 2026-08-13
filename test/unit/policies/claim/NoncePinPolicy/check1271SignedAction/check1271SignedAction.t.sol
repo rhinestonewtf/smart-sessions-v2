@@ -16,6 +16,66 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
                               FAIL CLOSED
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Only Permit2 gets an answer; every other caller is refused.
+    /// @dev The offsets this policy reads are the Permit2 layout. The per-lockTag claim list is
+    ///      enabled with the SAME config id and multiplexer as the ERC-1271 list, so installing
+    ///      here is a supported configuration rather than an obvious mistake — and on that path
+    ///      TheCompact is the caller and the payload has a different shape entirely. Without
+    ///      this check the policy would read the wrong bytes and answer confidently.
+    function test_check1271SignedAction_nonPermit2Caller_shouldReturnFalse() public {
+        _pin(address(this), PINNED_NONCE);
+
+        address theCompact = makeAddr("theCompact");
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, theCompact, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertFalse(result, "a caller other than Permit2 must be refused");
+    }
+
+    /// @notice Fuzz: no caller except Permit2 is ever answered.
+    function testFuzz_check1271SignedAction_onlyPermit2IsAnswered(address requestSender) public {
+        _pin(address(this), PINNED_NONCE);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, requestSender, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertEq(result, requestSender == PERMIT2_ADDRESS, "only Permit2 may be answered");
+    }
+
+    /// @notice A Compact-shaped payload is refused rather than mis-parsed.
+    /// @dev The concrete failure the caller check prevents. In the Compact layout the nonce
+    ///      sits at [32:64], so reading [20:52] splices the tail of the domain separator onto
+    ///      the head of the nonce, leaving the low bits of the real nonce unconstrained. A
+    ///      large family of different nonces would then satisfy a single pin while the
+    ///      configuration still looked correct. The payload here is built so the misparse
+    ///      WOULD match if the caller check were removed.
+    function test_check1271SignedAction_compactShapedPayload_shouldReturnFalse() public {
+        bytes32 domainSeparator = keccak256("compact.domain");
+        uint256 compactNonce = 7;
+
+        // Compact layout: [0:32] domainSeparator, [32:64] nonce, [64:96] expires
+        bytes memory compactPayload =
+            abi.encodePacked(domainSeparator, compactNonce, uint256(DEADLINE));
+
+        // What this policy's Permit2 offsets would read out of that payload
+        uint256 misparsed;
+        assembly {
+            misparsed := mload(add(add(compactPayload, 0x20), 20))
+        }
+
+        // Pin exactly that value, so only the caller check can save us
+        _pin(address(this), misparsed);
+
+        address theCompact = makeAddr("theCompact");
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, theCompact, account, bytes32(0), compactPayload
+        );
+
+        assertFalse(result, "a Compact-shaped payload must be refused, not mis-parsed");
+    }
+
     /// @notice An unconfigured entry must reject, not pass.
     /// @dev The claim policy family fails OPEN when unconfigured (empty mode config means
     ///      "check nothing"). This policy must not inherit that behaviour: a session whose pin
@@ -23,7 +83,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     ///      signer can mint a fresh nonce per digest and spend the session repeatedly.
     function test_check1271SignedAction_uninitialized_shouldReturnFalse() public view {
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
 
         assertFalse(result, "uninitialized config must fail closed");
@@ -37,7 +97,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     ///      comparison masks the missing flag and the suite stays green.
     function test_check1271SignedAction_uninitializedWithZeroNonce_shouldReturnFalse() public view {
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(0)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(0)
         );
 
         assertFalse(result, "an unconfigured entry must reject nonce zero, not match it");
@@ -51,7 +111,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         bytes memory truncated = new bytes(51);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), truncated
+            configId, PERMIT2_ADDRESS, account, bytes32(0), truncated
         );
 
         assertFalse(result, "short payload must fail closed");
@@ -61,8 +121,9 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     function test_check1271SignedAction_emptyPayload_shouldReturnFalse() public {
         _pin(address(this), PINNED_NONCE);
 
-        bool result =
-            noncePinPolicy.check1271SignedAction(configId, address(0), account, bytes32(0), "");
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, PERMIT2_ADDRESS, account, bytes32(0), ""
+        );
 
         assertFalse(result, "empty payload must fail closed");
     }
@@ -75,7 +136,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), new bytes(length)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), new bytes(length)
         );
 
         assertFalse(result, "any payload shorter than the nonce window must fail closed");
@@ -90,7 +151,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
 
         assertTrue(result, "pinned nonce must be accepted");
@@ -107,8 +168,9 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         bytes memory exact = abi.encodePacked(address(0xA11CE), PINNED_NONCE);
         assertEq(exact.length, 52, "fixture must sit exactly on the guard boundary");
 
-        bool result =
-            noncePinPolicy.check1271SignedAction(configId, address(0), account, bytes32(0), exact);
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, PERMIT2_ADDRESS, account, bytes32(0), exact
+        );
 
         assertTrue(result, "a 52-byte payload is long enough to carry the nonce");
     }
@@ -120,7 +182,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(address(this), 0);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(0)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(0)
         );
 
         assertTrue(result, "a pinned nonce of zero must be honoured");
@@ -138,7 +200,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
         );
 
         assertFalse(result, "a non-pinned nonce must be rejected");
@@ -154,7 +216,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(address(this), pinned);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(presented)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(presented)
         );
 
         assertEq(result, pinned == presented, "acceptance must track nonce equality exactly");
@@ -188,10 +250,10 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         bytes memory payload = _claimPayload(PINNED_NONCE);
 
         bool withOneHash = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, keccak256("some digest"), payload
+            configId, PERMIT2_ADDRESS, account, keccak256("some digest"), payload
         );
         bool withAnother = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, keccak256("an entirely unrelated digest"), payload
+            configId, PERMIT2_ADDRESS, account, keccak256("an entirely unrelated digest"), payload
         );
 
         assertTrue(withOneHash, "payload should pass on its nonce alone");
@@ -212,10 +274,10 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(otherMultiplexer, PINNED_NONCE + 1);
 
         bool ownNonceHere = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
         bool otherNonceHere = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
         );
 
         assertTrue(ownNonceHere, "each multiplexer must accept its own pin");
@@ -223,10 +285,10 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
 
         vm.startPrank(otherMultiplexer);
         bool ownNonceThere = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE + 1)
         );
         bool otherNonceThere = noncePinPolicy.check1271SignedAction(
-            configId, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
+            configId, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
         vm.stopPrank();
 
@@ -240,7 +302,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            configId, address(0), otherAccount, bytes32(0), _claimPayload(PINNED_NONCE)
+            configId, PERMIT2_ADDRESS, otherAccount, bytes32(0), _claimPayload(PINNED_NONCE)
         );
 
         assertFalse(result, "a pin must not leak across accounts");
@@ -252,7 +314,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         _pin(address(this), PINNED_NONCE);
 
         bool result = noncePinPolicy.check1271SignedAction(
-            otherConfig, address(0), account, bytes32(0), _claimPayload(PINNED_NONCE)
+            otherConfig, PERMIT2_ADDRESS, account, bytes32(0), _claimPayload(PINNED_NONCE)
         );
 
         assertFalse(result, "a pin must not leak across configs");

@@ -39,11 +39,16 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 /// @dev Register this ALONGSIDE Permit2ClaimPolicy in the ERC-1271 policy list. Policies in
 ///      that list are ANDed and each receives the identical payload, so this policy rides the
 ///      claim policy's digest recomputation for authenticity of the slice it reads. On its own
-///      it proves nothing — it only constrains a value the claim policy has bound to the digest.
+///      it proves nothing — it only constrains a value the claim policy has bound to the digest,
+///      and a list holding only this policy still satisfies the one-policy minimum.
 ///
-/// @dev Install in the ERC-1271 policy list, NOT the claim policy list. Permit2 settlement
-///      reaches the account through ERC-1271; claim verification is TheCompact's path. A pin
-///      installed in the wrong list leaves the Permit2 path unconstrained.
+/// @dev Only answers true when Permit2 itself is the caller. Both the ERC-1271 list and the
+///      per-lockTag claim list are enabled with the SAME config id and multiplexer, so the
+///      claim list is a supported install site, not a hypothetical slip — and there the payload
+///      is the Compact layout, where these offsets would read a domain-separator tail spliced
+///      onto a nonce head. That misparse leaves a large family of nonces satisfying one pin
+///      while the configuration still reads as correct. Binding to the settlement contract
+///      makes every non-Permit2 install fail closed instead of silently mis-parsing.
 ///
 /// @dev Fails CLOSED when unconfigured, unlike the claim policy family, whose empty mode
 ///      configuration degenerates to "check nothing".
@@ -61,6 +66,24 @@ contract NoncePinPolicy is I1271Policy {
 
     /// @dev End of the nonce in the Permit2 claim payload
     uint256 internal constant NONCE_END = 52;
+
+    /*//////////////////////////////////////////////////////////////
+                                IMMUTABLES
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice The Permit2 deployment whose claims this policy constrains
+    /// @dev Checked against the ERC-1271 caller, so an install on any other validation path
+    ///      fails closed rather than parsing a payload it does not understand
+    address public immutable PERMIT2;
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @param permit2 The Permit2 deployment whose claims this policy constrains
+    constructor(address permit2) {
+        PERMIT2 = permit2;
+    }
 
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
@@ -124,12 +147,13 @@ contract NoncePinPolicy is I1271Policy {
     ///      outcome. Fails closed on both an unconfigured entry and a payload too short to
     ///      contain a nonce.
     /// @param id The configuration ID
+    /// @param requestSender The contract that invoked ERC-1271 validation on the account
     /// @param account The account that signed
     /// @param signature The Permit2 claim payload
     /// @return True if the claim's nonce equals the pinned nonce
     function check1271SignedAction(
         ConfigId id,
-        address, /* requestSender */
+        address requestSender,
         address account,
         bytes32, /* hash */
         bytes calldata signature
@@ -139,6 +163,11 @@ contract NoncePinPolicy is I1271Policy {
         override
         returns (bool)
     {
+        // Fail closed unless Permit2 is asking. The offsets below are the Permit2 layout, and
+        // any other caller - notably the claim path, where TheCompact asks and the payload has
+        // a different shape - would have them read the wrong bytes and answer confidently.
+        if (requestSender != PERMIT2) return false;
+
         PinnedNonce storage $pinned = $pinnedNonce[id][msg.sender][account];
 
         // Fail closed when this configuration was never initialized
