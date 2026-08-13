@@ -22,7 +22,7 @@ IPolicy interface recommends and the claim policy family uses.
 library NoncePinStorageLib {
     /// @dev keccak256("rhinestone.storage.NoncePinPolicy") - 1
     bytes32 internal constant STORAGE_POSITION =
-        0x2fdb8ec80cddbc4a0f31a9dcf0b18a0e4dcd97b3d19b8f0ff8d3c0d3a4d18e0f;
+        0x28ae8a7519be5377901d99ddf23b378cdcf388f17c49f598f0db470ae85e1a86;
 
     /// @notice Returns the pinned nonce slot for a configuration
     /// @param id The configuration ID

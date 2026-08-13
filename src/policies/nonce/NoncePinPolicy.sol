@@ -5,9 +5,7 @@ pragma solidity ^0.8.28;
 import { INoncePinPolicy } from "@policies/nonce/interfaces/INoncePinPolicy.sol";
 import { I1271Policy, IActionPolicy, IPolicy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
-import {
-    IStandaloneIntentExecutor
-} from "@compact-utils/executor/interfaces/IStandaloneIntent.sol";
+import { IIntentExecutorNonces } from "@policies/nonce/interfaces/IIntentExecutorNonces.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 
 // Libraries
@@ -27,25 +25,35 @@ import { PinnedNonce } from "@policies/nonce/types/NoncePinDataTypes.sol";
 /// ┌─────────────────────────────────────────────────────────────────────────┐
 /// │                            Why this exists                              │
 /// │                                                                         │
-/// │  A 1271 policy is `view` and cannot record that a session was spent,    │
+/// │  A policy here is `view` and cannot record that a session was spent,    │
 /// │  so one-time use borrows a consumable the settlement layer already      │
 /// │  burns. The signer picks the nonce, so without pinning it can mint a    │
 /// │  fresh digest per nonce and spend repeatedly — each spend individually  │
 /// │  replay-protected, the session unbounded.                               │
 /// │                                                                         │
 /// │  Pinning collapses every digest a session can produce into competing    │
-/// │  for one slot. The first settlement burns it; the rest revert inside    │
-/// │  the settlement layer, before any policy runs.                          │
+/// │  for one slot. What makes that bite is refusing a settlement that       │
+/// │  carries any other nonce: the first settlement on the pin burns it,     │
+/// │  and the rest revert inside the settlement layer, before any policy     │
+/// │  runs. Refusing on the pin alone would not — a consumable read is       │
+/// │  permanent, so once burned it answers the same for every settlement     │
+/// │  that follows, whatever nonce it carries.                               │
 /// └─────────────────────────────────────────────────────────────────────────┘
 ///
 /// @dev A bridge session may permit two settlement families that keep separate consumables:
 ///      Permit2 records a bitmap, the intent executor a mapping. Neither reads the other, so this
-///      policy answers on both surfaces and each reads across.
+///      policy answers on both surfaces, and each binds the settlement in front of it before
+///      excluding the other family.
 /// @dev Register alongside Permit2ClaimPolicy on the claim surface. Alone it proves nothing: it
 ///      reads a caller-supplied slice, and only the claim policy binds that slice to the digest.
+/// @dev The action surface is for executor settlements only. It refuses any action that did not
+///      consume the pinned nonce on the executor, so a plain userOp under the same permission is
+///      rejected; pair it with a policy that constrains the call itself, since this one does not.
 /// @dev Limits, all of them real: the guarantee is per chain, not per session; any whitelisted
-///      arbiter can burn the pin with a zero-value settlement and end the session; and it bounds
-///      settlements, not signature validations.
+///      arbiter can end the session by submitting the claim with every requested amount set to
+///      zero, since Permit2 burns the nonce before it reads the unsigned transfer details; any
+///      co-installed session key can likewise burn the executor slot for the pinned nonce, which
+///      is keyed on (account, nonce) alone; and it bounds settlements, not signature validations.
 // forgefmt: disable-end
 contract NoncePinPolicy is INoncePinPolicy {
     /*//////////////////////////////////////////////////////////////
@@ -59,8 +67,8 @@ contract NoncePinPolicy is INoncePinPolicy {
                                IMMUTABLES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice The intent executor whose standalone slot marks an executor settlement
-    IStandaloneIntentExecutor public immutable INTENT_EXECUTOR;
+    /// @notice The intent executor whose consumed nonces mark an executor settlement
+    IIntentExecutorNonces public immutable INTENT_EXECUTOR;
 
     /// @notice The Permit2 deployment whose bitmap marks an arbiter settlement
     ISignatureTransfer public immutable PERMIT2;
@@ -72,7 +80,7 @@ contract NoncePinPolicy is INoncePinPolicy {
     /// @param intentExecutor The intent executor to consult for executor-side settlements
     /// @param permit2 The Permit2 deployment to consult for arbiter-side settlements
     constructor(address intentExecutor, address permit2) {
-        INTENT_EXECUTOR = IStandaloneIntentExecutor(intentExecutor);
+        INTENT_EXECUTOR = IIntentExecutorNonces(intentExecutor);
         PERMIT2 = ISignatureTransfer(permit2);
     }
 
@@ -134,8 +142,9 @@ contract NoncePinPolicy is INoncePinPolicy {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IActionPolicy
-    /// @notice Fails an executor action once the pinned nonce is spent on Permit2
-    /// @dev Needs no payload: the nonce comes from configuration, not from the calldata
+    /// @notice Permits one executor settlement, on the pinned nonce, while Permit2 is unspent
+    /// @dev Needs no payload: the executor reports the nonce it is settling, so the calldata is
+    ///      never read. An action reached outside a settlement reports nothing and is refused
     /// @return VALIDATION_SUCCESS if the action may proceed, VALIDATION_FAILED otherwise
     function checkAction(
         ConfigId id,
@@ -151,7 +160,9 @@ contract NoncePinPolicy is INoncePinPolicy {
     {
         PinnedNonce storage $pinned = id.getStorage({ account: account, multiplexer: msg.sender });
 
-        return $pinned.validateAction(PERMIT2, account) ? VALIDATION_SUCCESS : VALIDATION_FAILED;
+        return $pinned.validateAction(INTENT_EXECUTOR, PERMIT2, account)
+            ? VALIDATION_SUCCESS
+            : VALIDATION_FAILED;
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -6,6 +6,13 @@ import {
     NoncePinPolicy_Unit_Test
 } from "@test/unit/policies/nonce/NoncePinPolicy/NoncePinPolicy.t.sol";
 
+// Mocks
+import {
+    FAMILY_STANDALONE,
+    FAMILY_PERMIT2,
+    FAMILY_COMPACT
+} from "@mocks/MockIntentExecutorNonces.sol";
+
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
@@ -173,7 +180,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     ///      settlement here, and the funds would move twice.
     function test_check1271SignedAction_executorAlreadySettled_shouldReturnFalse() public {
         _pin(address(this), PINNED_NONCE);
-        intentExecutor.setConsumed(PINNED_NONCE, account, true);
+        intentExecutor.setConsumed(FAMILY_STANDALONE, PINNED_NONCE, account, true);
 
         bool result = noncePinPolicy.check1271SignedAction(
             configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
@@ -182,10 +189,55 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
         assertFalse(result, "must refuse once the executor has spent this nonce");
     }
 
+    /// @notice A Permit2-stub settlement counts too.
+    /// @dev The executor is one contract settling through three families that keep independent
+    ///      slots for the same nonce, so reading only the standalone one would answer "not
+    ///      settled" for a settlement that already happened.
+    function test_check1271SignedAction_permit2FamilySettled_shouldReturnFalse() public {
+        _pin(address(this), PINNED_NONCE);
+        intentExecutor.setConsumed(FAMILY_PERMIT2, PINNED_NONCE, account, true);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertFalse(result, "a Permit2-stub settlement must end the session too");
+    }
+
+    /// @notice And a compact-stub settlement.
+    function test_check1271SignedAction_compactFamilySettled_shouldReturnFalse() public {
+        _pin(address(this), PINNED_NONCE);
+        intentExecutor.setConsumed(FAMILY_COMPACT, PINNED_NONCE, account, true);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertFalse(result, "a compact-stub settlement must end the session too");
+    }
+
+    /// @notice A settlement mid-validation must not be excluded on this surface.
+    /// @dev The executor's `settledElsewhere` view deliberately skips whichever family is being
+    ///      validated, which is what the action surface needs. A claim reached while that
+    ///      settlement is in flight must still see its burn, so this surface reads the per-family
+    ///      views instead. Wiring it to `settledElsewhere` would let both routes settle.
+    function test_check1271SignedAction_ignoresTheInFlightExclusion() public {
+        _pin(address(this), PINNED_NONCE);
+        intentExecutor.setConsumed(FAMILY_STANDALONE, PINNED_NONCE, account, true);
+        intentExecutor.setInFlight(true, PINNED_NONCE);
+        intentExecutor.setSettledElsewhere(PINNED_NONCE, account, false);
+
+        bool result = noncePinPolicy.check1271SignedAction(
+            configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
+        );
+
+        assertFalse(result, "an in-flight settlement must not be excluded from a claim check");
+    }
+
     /// @notice The executor slot is consulted per account, not globally.
     function test_check1271SignedAction_executorSettledForAnotherAccount_shouldReturnTrue() public {
         _pin(address(this), PINNED_NONCE);
-        intentExecutor.setConsumed(PINNED_NONCE, makeAddr("otherAccount"), true);
+        intentExecutor.setConsumed(FAMILY_STANDALONE, PINNED_NONCE, makeAddr("otherAccount"), true);
 
         bool result = noncePinPolicy.check1271SignedAction(
             configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)
@@ -197,7 +249,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     /// @notice The executor slot is consulted for the pinned nonce, not the presented one.
     function test_check1271SignedAction_executorSettledOnAnotherNonce_shouldReturnTrue() public {
         _pin(address(this), PINNED_NONCE);
-        intentExecutor.setConsumed(PINNED_NONCE + 1, account, true);
+        intentExecutor.setConsumed(FAMILY_STANDALONE, PINNED_NONCE + 1, account, true);
 
         bool result = noncePinPolicy.check1271SignedAction(
             configId, REQUEST_SENDER, account, bytes32(0), _claimPayload(PINNED_NONCE)

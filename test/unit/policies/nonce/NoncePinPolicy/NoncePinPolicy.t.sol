@@ -8,7 +8,7 @@ import { Base_Test } from "@test/Base.t.sol";
 import { NoncePinPolicy } from "@policies/nonce/NoncePinPolicy.sol";
 
 // Mocks
-import { MockStandaloneIntent } from "@mocks/MockStandaloneIntent.sol";
+import { MockIntentExecutorNonces } from "@mocks/MockIntentExecutorNonces.sol";
 import { MockPermit2Bitmap } from "@mocks/MockPermit2Bitmap.sol";
 
 // Types
@@ -22,7 +22,7 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
     //////////////////////////////////////////////////////////////*/
 
     NoncePinPolicy internal noncePinPolicy;
-    MockStandaloneIntent internal intentExecutor;
+    MockIntentExecutorNonces internal intentExecutor;
     MockPermit2Bitmap internal permit2;
     ConfigId internal configId;
     address internal account;
@@ -47,7 +47,7 @@ contract NoncePinPolicy_Unit_Test is Base_Test {
     function setUp() public virtual override {
         super.setUp();
 
-        intentExecutor = new MockStandaloneIntent();
+        intentExecutor = new MockIntentExecutorNonces();
         permit2 = new MockPermit2Bitmap();
         noncePinPolicy = new NoncePinPolicy(address(intentExecutor), address(permit2));
         configId = ConfigId.wrap(keccak256("nonce.pin.config"));

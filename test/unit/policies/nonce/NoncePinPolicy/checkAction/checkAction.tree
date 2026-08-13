@@ -1,13 +1,23 @@
 NoncePinPolicy::checkAction
 ├── given the config was never initialized
 │   └── it should fail closed
-├── given the pinned nonce is unspent on Permit2
-│   ├── it should succeed
-│   └── given the pin is zero
-│       └── it should succeed
-├── given the pinned nonce was spent on Permit2
+├── given no settlement is in flight
+│   └── it should fail closed
+├── given the settlement in flight carries another nonce
 │   ├── it should fail
-│   └── given the pin is zero
-│       └── it should fail
-└── given a burn for another account, another nonce, another multiplexer or another config
-    └── it should succeed
+│   └── given the pinned nonce was settled earlier
+│       └── it should still fail
+└── given the settlement in flight carries the pinned nonce
+    ├── it should succeed
+    ├── given the pin is zero
+    │   └── it should succeed
+    ├── given another executor family already settled the pinned nonce
+    │   └── it should fail
+    ├── given the pinned nonce was spent on Permit2
+    │   ├── it should fail
+    │   └── given the pin is zero
+    │       └── it should fail
+    ├── given a Permit2 burn for another account or another nonce
+    │   └── it should succeed
+    └── given the pin belongs to another multiplexer or another config
+        └── it should fail closed
