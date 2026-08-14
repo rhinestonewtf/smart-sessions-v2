@@ -11,9 +11,6 @@ interface IBaseIntentExecutorPolicy {
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice The smart-session install hasn't run yet for this `(configId, account)`.
-    error PolicyNotInitialized();
-
     /// @notice Data blob shorter than its declared header.
     error DataTruncated(uint256 expected, uint256 got);
 
@@ -43,13 +40,7 @@ interface IBaseIntentExecutorPolicy {
                                 VIEWS
     //////////////////////////////////////////////////////////////*/
 
-    function getIntentExecutor(
-        ConfigId configId,
-        address account
-    )
-        external
-        view
-        returns (address);
+    function getIntentExecutor(ConfigId configId, address account) external view returns (address);
 
     function getGasTokenWhitelist(
         ConfigId configId,
@@ -59,11 +50,5 @@ interface IBaseIntentExecutorPolicy {
         view
         returns (address[] memory tokens);
 
-    function getMaxExchangeRate(
-        ConfigId configId,
-        address account
-    )
-        external
-        view
-        returns (uint256);
+    function getMaxExchangeRate(ConfigId configId, address account) external view returns (uint256);
 }

@@ -97,14 +97,7 @@ contract StaticIntentExecutorPolicy is BaseIntentExecutorPolicy {
         }
     }
 
-    function getConfig(
-        ConfigId configId,
-        address account
-    )
-        external
-        view
-        returns (bytes memory)
-    {
+    function getConfig(ConfigId configId, address account) external view returns (bytes memory) {
         return _configStorage(configId, account).config;
     }
 
