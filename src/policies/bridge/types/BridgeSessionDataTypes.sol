@@ -11,9 +11,11 @@ the session has to know which layer it is looking at: the nonce sits at a
 different offset in each layer's payload, and each layer must be excluded from
 its own check.
 
-That exclusion is not a special case, it is the ordering. Every layer consumes
-its nonce BEFORE validating a signature, so a layer that checked its own
-consumable would reject the settlement it is currently validating.
+That exclusion is not a special case, it is the ordering: the layers wired here
+consume their nonce BEFORE validating a signature, so a layer that checked the
+consumable it is about to burn would reject the settlement it is validating.
+The exemption covers exactly that one consumable - not every consumable the
+same settlement contract happens to own.
 
   Permit2 claim payload                 SingleChainOps payload
   ┌───────────┬───────────────┐         ┌───────────┬───────────────┐
@@ -27,7 +29,16 @@ Mirrors `Permit2ClaimPolicy._decodePermit2Header` and
 `BaseIntentExecutorPolicy._validateClaim`, each of which states its own offsets
 inline. The three are not linked: if either layout changes, a policy reading
 these keeps reading a stale window and answers wrongly rather than reverting.
-Update together, and see the offset cross-assertion test.
+
+Verification status, stated plainly because one half cannot be checked here:
+20 is confirmed against `Permit2ClaimPolicy._decodePermit2Header`, which reads
+data[20:52] and folds that nonce into the digest it compares against `hash`, so
+the pin reads a digest-bound field. 22 has no counterpart in this repo -
+`BaseIntentExecutorPolicy` lives on the settlement-layer branch and is not
+vendored here - so it is currently trusted rather than proven. Cross-assert it
+against the real decoder as soon as that contract lands, and note the payload's
+leading byte is a `variant`: a second variant carrying an extra field ahead of
+the nonce would move this offset.
 
 //////////////////////////////////////////////////////////////*/
 
