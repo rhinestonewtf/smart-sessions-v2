@@ -47,6 +47,14 @@ import {
 ///      routes to a settlement policy that then fails its own digest binding, because the digest
 ///      is fixed by whichever settlement contract called the account. Only the tag matching the
 ///      real caller can produce a digest equal to `hash`.
+/// @dev That argument has a precondition, and it is an INSTALL-TIME REQUIREMENT this contract
+///      cannot verify: every settlement policy installed here must recompute its own EIP-712
+///      digest and compare it against `hash`. `supportsInterface` proves an interface, not that
+///      behaviour. Install one that validates loosely and mis-routing stops failing closed - the
+///      pin is then read at the wrong layer's offset, against a value the caller chooses, while
+///      the consumable actually spent is the one being skipped. Rejecting one policy on two
+///      layers closes the easiest way to get a non-discriminating validator into a slot; it does
+///      not close the general case.
 /// @dev What is actually guaranteed: at most one settlement THROUGH THIS SESSION, on one chain.
 ///      That is narrower than "the account spends once", and the gap is not theoretical - the
 ///      intent executor exposes `executeOpsWithoutSignature`, which moves the account's value with
