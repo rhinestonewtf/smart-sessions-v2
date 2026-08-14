@@ -89,7 +89,8 @@ contract BridgeSessionPolicy_exactlyOnce_Test is BridgeSessionPolicy_Unit_Test {
         );
     }
 
-    /// @dev Same for the executor, which also consumes before validating
+    /// @dev Same for the executor, which also consumes before validating. Note this skips ONLY
+    ///      the standalone namespace — the one a settlement through this layer actually burns.
     function test_executorDoesNotCheckItsOwnConsumable() public {
         _enable(PINNED);
         executor.burnStandalone(PINNED, account);
@@ -97,6 +98,31 @@ contract BridgeSessionPolicy_exactlyOnce_Test is BridgeSessionPolicy_Unit_Test {
         assertTrue(
             _check(_executorPayload(PINNED)),
             "an executor settlement must not be rejected by its own burn"
+        );
+    }
+
+    /// @dev The twins of the two Permit2-direction tests above, and the direction that was
+    ///      originally missing. The executor keeps three independent namespaces but a settlement
+    ///      through this layer burns only standalone, so a spend in either OTHER namespace is a
+    ///      real prior settlement and must still exclude this one. Skipping per-layer rather than
+    ///      per-consumable silently permitted a second spend.
+    function test_executorCompactThenExecutor_refused() public {
+        _enable(PINNED);
+        executor.burnCompact(PINNED, account);
+
+        assertFalse(
+            _check(_executorPayload(PINNED)),
+            "a compact-namespace spend must block a standalone settlement"
+        );
+    }
+
+    function test_executorPermit2StubThenExecutor_refused() public {
+        _enable(PINNED);
+        executor.burnPermit2Stub(PINNED, account);
+
+        assertFalse(
+            _check(_executorPayload(PINNED)),
+            "a Permit2-stub-namespace spend must block a standalone settlement"
         );
     }
 

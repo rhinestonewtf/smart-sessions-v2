@@ -26,9 +26,17 @@ Two things have to hold for a settlement to proceed:
 
   EXCLUDE    no OTHER layer has already spent that nonce
 
-and one thing must NOT be checked: the settling layer's own consumable. Every
-layer burns its nonce before validating a signature, so a layer that checked
-its own would reject the settlement it is validating, every time.
+and one thing must NOT be checked: the consumable the settling layer itself
+burns. The layers wired here burn before they validate, so a layer checking
+its own consumable would reject the settlement it is validating, every time.
+
+That exemption is per CONSUMABLE, not per layer, and the distinction matters:
+the executor keeps three independent namespaces and a settlement burns exactly
+one of them, so the other two remain real evidence of a prior spend. Nor is
+burn-before-validate a universal law of the executor family - its compact
+pre-claim path validates first and consumes after. The exemption is therefore
+claimed only for the one namespace actually skipped, where the ordering has
+been checked, rather than asserted for every layer.
 
 Uniqueness within a layer is free - each settlement layer already refuses to
 spend the same nonce twice, and does so before any policy runs. This library
@@ -103,7 +111,17 @@ library BridgeSessionValidationLib {
         returns (bool)
     {
         if (layer != LAYER_PERMIT2 && permit2Spent(permit2, nonce, account)) return true;
-        if (layer != LAYER_INTENT_EXECUTOR && executorSpent(executor, nonce, account)) return true;
+
+        // The skip is per CONSUMABLE, not per layer. The executor keeps three independent
+        // namespaces and a settlement through this layer burns only the standalone one, so only
+        // that one may be skipped - the other two are spends this settlement did not make and
+        // must still exclude it.
+        if (
+            layer != LAYER_INTENT_EXECUTOR
+                && executor.isStandaloneIntentNonceConsumed(nonce, account)
+        ) return true;
+        if (executor.isPermit2IntentNonceConsumed(nonce, account)) return true;
+        if (executor.isCompactIntentNonceConsumed(nonce, account)) return true;
 
         return false;
     }
