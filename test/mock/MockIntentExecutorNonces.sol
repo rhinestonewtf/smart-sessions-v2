@@ -10,14 +10,16 @@ uint8 constant FAMILY_COMPACT = 2;
 /// @notice Minimal stand-in for the executor's in-flight and consumed-nonce views
 contract MockIntentExecutorNonces {
     bool internal $active;
+    address internal $inFlightAccount;
     uint256 internal $inFlight;
     mapping(uint8 family => mapping(uint256 nonce => mapping(address account => bool))) internal
         $consumed;
     mapping(uint256 nonce => mapping(address account => bool)) internal $settledElsewhere;
 
     /// @notice Simulates a settlement being validated, or none when `active` is false
-    function setInFlight(bool active, uint256 nonce) external {
+    function setInFlight(bool active, address account, uint256 nonce) external {
         $active = active;
+        $inFlightAccount = account;
         $inFlight = nonce;
     }
 
@@ -33,8 +35,12 @@ contract MockIntentExecutorNonces {
         $settledElsewhere[nonce][account] = settled;
     }
 
-    function currentIntentNonce() external view returns (bool active, uint256 nonce) {
-        return ($active, $inFlight);
+    function currentIntentNonce()
+        external
+        view
+        returns (bool active, address account, uint256 nonce)
+    {
+        return ($active, $inFlightAccount, $inFlight);
     }
 
     function isIntentNonceSettledElsewhere(

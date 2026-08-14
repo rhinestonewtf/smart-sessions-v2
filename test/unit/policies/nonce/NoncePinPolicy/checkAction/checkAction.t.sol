@@ -23,9 +23,10 @@ contract NoncePinPolicy_checkAction_Test is NoncePinPolicy_Unit_Test {
         return noncePinPolicy.checkAction(configId, who, TARGET, 0, "");
     }
 
-    /// @dev Puts a settlement on `nonce` in flight, as the executor does while it validates
+    /// @dev Puts a settlement on `nonce` for `account` in flight, as the executor does while it
+    ///      validates that settlement
     function _inFlight(uint256 nonce) internal {
-        intentExecutor.setInFlight(true, nonce);
+        intentExecutor.setInFlight(true, account, nonce);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -91,6 +92,15 @@ contract NoncePinPolicy_checkAction_Test is NoncePinPolicy_Unit_Test {
         _inFlight(PINNED_NONCE + 1);
 
         assertEq(_check(account), VALIDATION_FAILED, "a settled pin must not license later ones");
+    }
+
+    /// @dev A nonce without its owner binds nothing. Another account settling on this session's
+    ///      pinned nonce must not authorize this session's action.
+    function test_checkAction_pinnedNonceInFlightForAnotherAccount_shouldFail() public {
+        _pin(address(this), PINNED_NONCE);
+        intentExecutor.setInFlight(true, makeAddr("otherAccount"), PINNED_NONCE);
+
+        assertEq(_check(account), VALIDATION_FAILED, "another account's settlement must not pass");
     }
 
     /// @dev Only the pinned nonce passes, across the whole word/bit domain

@@ -224,7 +224,7 @@ contract NoncePinPolicy_check1271SignedAction_Test is NoncePinPolicy_Unit_Test {
     function test_check1271SignedAction_ignoresTheInFlightExclusion() public {
         _pin(address(this), PINNED_NONCE);
         intentExecutor.setConsumed(FAMILY_STANDALONE, PINNED_NONCE, account, true);
-        intentExecutor.setInFlight(true, PINNED_NONCE);
+        intentExecutor.setInFlight(true, account, PINNED_NONCE);
         intentExecutor.setSettledElsewhere(PINNED_NONCE, account, false);
 
         bool result = noncePinPolicy.check1271SignedAction(

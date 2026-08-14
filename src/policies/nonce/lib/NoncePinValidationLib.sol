@@ -91,9 +91,11 @@ library NoncePinValidationLib {
         uint256 pinned = $pinned.nonce;
 
         // Bind: every execution of this settlement reports the same nonce, and a settlement on
-        // any other nonce reports that one, so a batch passes as a unit and nothing else does
-        (bool active, uint256 inFlight) = executor.currentIntentNonce();
-        if (!active || inFlight != pinned) return false;
+        // any other nonce reports that one, so a batch passes as a unit and nothing else does.
+        // The account is checked too - a nonce without its owner would match a settlement for
+        // somebody else that happens to carry this pin.
+        (bool active, address settling, uint256 inFlight) = executor.currentIntentNonce();
+        if (!active || settling != account || inFlight != pinned) return false;
 
         if (executor.isIntentNonceSettledElsewhere(pinned, account)) return false;
 

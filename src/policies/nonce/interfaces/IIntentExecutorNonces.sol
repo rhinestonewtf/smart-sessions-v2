@@ -13,8 +13,12 @@ interface IIntentExecutorNonces {
     /// @dev Transient, live only for the duration of one signature check. This is what binds a
     /// policy to the settlement in front of it; the consumed views below cannot, being permanent
     /// @return active Whether a settlement signature is being validated right now
+    /// @return account The account that settlement settles for, meaningless when active is false
     /// @return nonce The nonce of that settlement, meaningless when active is false
-    function currentIntentNonce() external view returns (bool active, uint256 nonce);
+    function currentIntentNonce()
+        external
+        view
+        returns (bool active, address account, uint256 nonce);
 
     /// @notice Whether a family other than the one settling right now already settled this nonce
     /// @dev Only the executor can answer this, since only it knows which of its three consumables
