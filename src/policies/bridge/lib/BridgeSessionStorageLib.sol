@@ -54,11 +54,34 @@ library BridgeSessionStorageLib {
     ///      is this same defect in the claim policy family.
     /// @dev Must be derived identically wherever a settlement policy is initialized or consulted.
     ///      A site that forgets fails closed - the policy reads an unwritten configuration
+    /// @dev The layer and generation are folded in as well, so two layers never share one
+    ///      settlement config and a re-initialization never inherits the previous one
     /// @param id The configuration ID of this policy
     /// @param multiplexer The multiplexer that called this policy, not this policy itself
+    /// @param generation The session's current generation
+    /// @param layer The settlement layer this configuration belongs to
     /// @return The configuration ID the settlement policy is keyed by
-    function toLayerConfigId(ConfigId id, address multiplexer) internal pure returns (ConfigId) {
-        return ConfigId.wrap(keccak256(abi.encode(id, multiplexer)));
+    function toLayerConfigId(
+        ConfigId id,
+        address multiplexer,
+        uint256 generation,
+        uint8 layer
+    )
+        internal
+        pure
+        returns (ConfigId)
+    {
+        return ConfigId.wrap(keccak256(abi.encode(id, multiplexer, generation, layer)));
+    }
+
+    /// @notice The key a layer's settlement policy is stored under
+    /// @dev Keyed by generation so a re-initialization that drops a layer leaves the old entry
+    ///      unreachable rather than live - a mapping cannot be enumerated to clear it
+    /// @param generation The session's current generation
+    /// @param layer The settlement layer
+    /// @return The mapping key
+    function toLayerKey(uint256 generation, uint8 layer) internal pure returns (uint256) {
+        return (generation << 8) | layer;
     }
 
     /// @notice Calculates the storage slot for a given ConfigId, account, and multiplexer

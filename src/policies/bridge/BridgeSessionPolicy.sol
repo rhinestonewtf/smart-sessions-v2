@@ -113,13 +113,16 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
         $session.configured = true;
         $session.nonce = uint256(bytes32(initData[0:32]));
 
-        // The settlement policies key their own storage on THIS policy's address, a constant, so
-        // they are handed an ID derived from the real multiplexer. See BridgeSessionStorageLib.
-        ConfigId layerConfigId = configId.toLayerConfigId(msg.sender);
+        // A re-enable can land on this same slot with a NARROWER layer set - permissionId covers
+        // no policy content - and layerPolicy is a mapping that cannot be enumerated to clear. The
+        // bump orphans every entry from the previous generation instead.
+        uint256 generation = $session.generation + 1;
+        $session.generation = generation;
 
         uint8 count = uint8(initData[32]);
         uint256 offset = 33;
         uint256 seen;
+        address[] memory installed = new address[](count);
 
         for (uint8 i; i < count; ++i) {
             uint8 layer = uint8(initData[offset]);
@@ -133,17 +136,26 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
             if (!IERC165(policy).supportsInterface(type(I1271Policy).interfaceId)) {
                 revert InvalidLayerPolicy(policy);
             }
+
+            // One policy may not serve two layers. The layer tag is unsigned and selects both the
+            // nonce offset and which consumable is skipped; the only thing making that safe is
+            // that a mis-tagged payload reaches a DIFFERENT policy, which rejects it on its own
+            // digest binding. Share one policy across layers and that defence disappears.
+            for (uint8 j; j < i; ++j) {
+                if (installed[j] == policy) revert DuplicateLayerPolicy(policy);
+            }
+            installed[i] = policy;
             offset += 20;
 
             uint256 length = uint256(bytes32(initData[offset:offset + 32]));
             offset += 32;
 
-            $session.layerPolicy[layer] = policy;
+            $session.layerPolicy[BridgeSessionStorageLib.toLayerKey(generation, layer)] = policy;
 
             IPolicy(policy)
                 .initializeWithMultiplexer({
                     account: account,
-                    configId: layerConfigId,
+                    configId: configId.toLayerConfigId(msg.sender, generation, layer),
                     initData: initData[offset:offset + length]
                 });
             offset += length;
@@ -181,7 +193,8 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
         BridgeSession storage $session =
             id.getStorage({ account: account, multiplexer: msg.sender });
 
-        address policy = $session.layerPolicy[layer];
+        uint256 generation = $session.generation;
+        address policy = $session.layerPolicy[BridgeSessionStorageLib.toLayerKey(generation, layer)];
         if (policy == address(0)) return false;
 
         bytes calldata payload = signature[LAYER_TAG_LENGTH:];
@@ -197,7 +210,7 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
 
         return I1271Policy(policy)
             .check1271SignedAction({
-                id: id.toLayerConfigId(msg.sender),
+                id: id.toLayerConfigId(msg.sender, generation, layer),
                 requestSender: requestSender,
                 account: account,
                 hash: hash,
@@ -241,7 +254,7 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
         BridgeSession storage $session =
             configId.getStorage({ account: account, multiplexer: multiplexer });
 
-        return $session.layerPolicy[layer];
+        return $session.layerPolicy[BridgeSessionStorageLib.toLayerKey($session.generation, layer)];
     }
 
     /*//////////////////////////////////////////////////////////////
