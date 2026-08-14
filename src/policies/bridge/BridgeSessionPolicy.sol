@@ -47,6 +47,12 @@ import {
 ///      routes to a settlement policy that then fails its own digest binding, because the digest
 ///      is fixed by whichever settlement contract called the account. Only the tag matching the
 ///      real caller can produce a digest equal to `hash`.
+/// @dev What is actually guaranteed: at most one settlement THROUGH THIS SESSION, on one chain.
+///      That is narrower than "the account spends once", and the gap is not theoretical - the
+///      intent executor exposes `executeOpsWithoutSignature`, which moves the account's value with
+///      no signature, no nonce burned and no policy consulted at all, gated only on a whitelisted
+///      arbiter. Nothing a session policy can do reaches that path, because it never enters
+///      session validation. Same for any other session the account has enabled.
 /// @dev Limits, all of them real: the guarantee is per chain, not per session; any whitelisted
 ///      arbiter can end the session by settling for zero, since Permit2 burns the nonce before it
 ///      reads the unsigned transfer details; and it bounds settlements, not signature validations.
