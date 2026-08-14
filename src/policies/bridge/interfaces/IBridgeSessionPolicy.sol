@@ -34,6 +34,12 @@ interface IBridgeSessionPolicy is I1271Policy {
     /// @param policy The address supplied
     error InvalidLayerPolicy(address policy);
 
+    /// @notice Thrown when one settlement policy is named for more than one layer
+    /// @dev The layer tag is unsigned; a mis-tagged payload is only stopped because it reaches a
+    ///      different policy that rejects it on its own digest binding
+    /// @param policy The address supplied twice
+    error DuplicateLayerPolicy(address policy);
+
     /*//////////////////////////////////////////////////////////////
                                  VIEWS
     //////////////////////////////////////////////////////////////*/

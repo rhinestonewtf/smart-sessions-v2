@@ -94,6 +94,11 @@ abstract contract BridgeSessionPolicy_Unit_Test is Base_Test {
         );
     }
 
+    /// @dev The configId a settlement policy is keyed by, for a given generation and layer
+    function _layerConfigId(uint256 generation, uint8 layer) internal view returns (ConfigId) {
+        return ConfigId.wrap(keccak256(abi.encode(configId, multiplexer, generation, layer)));
+    }
+
     function _check(bytes memory payload) internal returns (bool) {
         vm.prank(multiplexer);
         return policy.check1271SignedAction(configId, address(0), account, DIGEST, payload);

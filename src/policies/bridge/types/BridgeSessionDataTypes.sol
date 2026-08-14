@@ -61,11 +61,18 @@ uint256 constant LAYER_TAG_LENGTH = 1;
 /// @notice One bridge session: one pinned nonce, one settlement policy per permitted layer
 /// @dev `configured` is tracked separately so a pinned nonce of zero stays distinguishable from an
 ///      entry nobody ever wrote
+/// @dev `generation` exists because a session can be re-enabled with a NARROWER set of layers and
+///      land on the same slot: permissionId is derived from the session validator, its init data
+///      and the salt, and covers no policy content at all, so a re-enable that drops a layer
+///      reuses this configId. `layerPolicy` is a mapping and cannot be enumerated to clear, so
+///      every entry is keyed by generation instead and a bump orphans the whole previous set
 /// @param configured Whether this session has been set up
+/// @param generation Bumped on every initialization, so stale layers become unreachable
 /// @param nonce The nonce every permitted layer competes for
-/// @param layerPolicy The settlement policy for each permitted layer, zero where not permitted
+/// @param layerPolicy The settlement policy per (generation, layer), zero where not permitted
 struct BridgeSession {
     bool configured;
+    uint256 generation;
     uint256 nonce;
-    mapping(uint8 layer => address policy) layerPolicy;
+    mapping(uint256 generationAndLayer => address policy) layerPolicy;
 }
