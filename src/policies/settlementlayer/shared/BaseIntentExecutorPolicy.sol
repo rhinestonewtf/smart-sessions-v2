@@ -43,11 +43,11 @@ abstract contract BaseIntentExecutorPolicy is IBaseIntentExecutorPolicy, I1271Po
                               ERC-7579 / IPolicy
     //////////////////////////////////////////////////////////////*/
 
-    function onInstall(bytes calldata) external pure { /* installed via multiplexer */
-        }
+    function onInstall(bytes calldata) external pure {  /* installed via multiplexer */
+    }
 
-    function onUninstall(bytes calldata) external pure { /* state cleared lazily by SS */
-        }
+    function onUninstall(bytes calldata) external pure {  /* state cleared lazily by SS */
+    }
 
     /// @inheritdoc I1271Policy
     function check1271SignedAction(
@@ -264,7 +264,7 @@ abstract contract BaseIntentExecutorPolicy is IBaseIntentExecutorPolicy, I1271Po
         bytes calldata tail = data[cursor:];
         // solhint-disable-next-line no-inline-assembly
         assembly {
-            ops := tail.offset
+            ops := add(tail.offset, 0x20)
         }
     }
 

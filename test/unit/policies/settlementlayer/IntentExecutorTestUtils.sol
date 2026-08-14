@@ -25,7 +25,7 @@ contract IntentExecutorTestUtils {
     ///      `vt` byte 0 = `Type.ERC7579` (= 3), byte 1 = signature mode (irrelevant for
     ///      hashing). The rest of `data` is `abi.encode(Execution[])`.
     function _opData(Execution[] memory calls) internal pure returns (bytes memory) {
-        return bytes.concat(bytes2(0x0300), abi.encode(calls));
+        return bytes.concat(bytes2(0x0200), abi.encode(calls));
     }
 
     /// @dev Wraps the `opData` produced above into a packed `Operation` blob suitable for
@@ -50,8 +50,8 @@ contract IntentExecutorTestUtils {
         returns (bytes32 hash)
     {
         Types.Operation memory opMem = Types.Operation({ data: _opData(calls) });
-        bytes32 structHash =
-            IntentExecutorTestUtils(address(this))._structHash(account, nonce, opMem, gasRefundHash);
+        bytes32 structHash = IntentExecutorTestUtils(address(this))
+            ._structHash(account, nonce, opMem, gasRefundHash);
         hash = IntentExecutorEIP712Lib.hashTypedData(intentExecutor, structHash);
     }
 
@@ -80,13 +80,8 @@ contract IntentExecutorTestUtils {
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(
-            uint8(VARIANT_SINGLE_CHAIN),
-            uint8(0),
-            account,
-            nonce,
-            _opBlob(calls)
-        );
+        return
+            abi.encodePacked(uint8(VARIANT_SINGLE_CHAIN), uint8(0), account, nonce, _opBlob(calls));
     }
 
     /// @dev Packs a SingleChain data blob *with* gas refund (non-zero typehash).
