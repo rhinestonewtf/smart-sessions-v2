@@ -81,6 +81,11 @@ contract MockIntentExecutorNonces {
 ///      account) like every real policy, and it binds the payload to the digest, which is what
 ///      makes a mis-routed layer tag fail closed. `expectedHash` stands in for the EIP-712
 ///      recomputation a real policy does.
+///
+///      Used so the cross-layer matrix can hold both layers identical and vary only the thing
+///      under test. `realExecutorLayer` drives the same paths through the real
+///      `StaticIntentExecutorPolicy` and pins both nonce offsets to the real payload layouts,
+///      which is what keeps this stand-in honest.
 contract MockSettlementLayerPolicy {
     mapping(
         address multiplexer => mapping(bytes32 configId => mapping(address account => bytes))
