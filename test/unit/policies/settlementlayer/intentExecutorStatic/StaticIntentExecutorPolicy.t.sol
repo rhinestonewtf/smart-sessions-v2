@@ -19,7 +19,9 @@ import { RelayCalldataLib } from "@policies/settlementlayer/shared/lib/RelayCall
 import { RhinoCalldataLib } from "@policies/settlementlayer/shared/lib/RhinoCalldataLib.sol";
 import { CCTPCalldataLib } from "@policies/settlementlayer/shared/lib/CCTPCalldataLib.sol";
 import { OpsCalldataLib } from "@policies/settlementlayer/shared/lib/OpsCalldataLib.sol";
-import { VARIANT_MULTI_CHAIN } from "@policies/settlementlayer/shared/types/IntentExecutorDataTypes.sol";
+import {
+    VARIANT_MULTI_CHAIN
+} from "@policies/settlementlayer/shared/types/IntentExecutorDataTypes.sol";
 
 import { IntentExecutorTestUtils } from "../IntentExecutorTestUtils.sol";
 
@@ -52,12 +54,10 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
         otherToken = makeAddr("dai");
         recipient = makeAddr("recipient");
 
-        bytes memory baseHeader = abi.encodePacked(
-            intentExecutor, uint8(0), uint256(MAX_EX_RATE), uint8(1), token
-        );
-        bytes memory subTail = abi.encodePacked(
-            relayRouter, ieAdapter, uint8(1), recipient, uint8(1), token
-        );
+        bytes memory baseHeader =
+            abi.encodePacked(intentExecutor, uint8(0), uint256(MAX_EX_RATE), uint8(1), token);
+        bytes memory subTail =
+            abi.encodePacked(relayRouter, ieAdapter, uint8(1), recipient, uint8(1), token);
         policy.initializeWithMultiplexer(account, configId, bytes.concat(baseHeader, subTail));
     }
 
@@ -89,7 +89,9 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
 
     function test_happyPath_gasRefundWithinCap() public view {
         Execution[] memory calls = _justRouter();
-        bytes32 h = _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(token, MAX_EX_RATE, true));
+        bytes32 h = _digest(
+            intentExecutor, account, NONCE, calls, _gasRefundHash(token, MAX_EX_RATE, true)
+        );
         bytes memory data = _blobWithGasRefund(account, NONCE, token, MAX_EX_RATE, calls);
         assertTrue(policy.check1271SignedAction(configId, address(0), account, h, data));
     }
@@ -115,7 +117,9 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
         uint256 keep = cap % 54;
         bytes memory data = new bytes(keep);
         vm.expectRevert(
-            abi.encodeWithSelector(IBaseIntentExecutorPolicy.DataTruncated.selector, uint256(54), keep)
+            abi.encodeWithSelector(
+                IBaseIntentExecutorPolicy.DataTruncated.selector, uint256(54), keep
+            )
         );
         policy.check1271SignedAction(configId, address(0), account, bytes32(0), data);
     }
@@ -127,7 +131,9 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
             data[2 + i] = bytes1(uint8(uint160(account) >> (8 * (19 - i))));
         }
         vm.expectRevert(
-            abi.encodeWithSelector(IBaseIntentExecutorPolicy.DataTruncated.selector, uint256(106), uint256(105))
+            abi.encodeWithSelector(
+                IBaseIntentExecutorPolicy.DataTruncated.selector, uint256(106), uint256(105)
+            )
         );
         policy.check1271SignedAction(configId, address(0), account, bytes32(0), data);
     }
@@ -144,7 +150,9 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
             data[2 + i] = bytes1(uint8(uint160(fake) >> (8 * (19 - i))));
         }
         vm.expectRevert(
-            abi.encodeWithSelector(IBaseIntentExecutorPolicy.AccountMismatch.selector, account, fake)
+            abi.encodeWithSelector(
+                IBaseIntentExecutorPolicy.AccountMismatch.selector, account, fake
+            )
         );
         policy.check1271SignedAction(configId, address(0), account, h, data);
     }
@@ -186,7 +194,8 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
 
     function test_revertWhen_gasTokenNotWhitelisted() public {
         Execution[] memory calls = _justRouter();
-        bytes32 h = _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(otherToken, 1, true));
+        bytes32 h =
+            _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(otherToken, 1, true));
         bytes memory data = _blobWithGasRefund(account, NONCE, otherToken, 1, calls);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -199,10 +208,13 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
     function testFuzz_revertWhen_exchangeRateAboveCap(uint256 rate) public {
         vm.assume(rate > MAX_EX_RATE);
         Execution[] memory calls = _justRouter();
-        bytes32 h = _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(token, rate, true));
+        bytes32 h =
+            _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(token, rate, true));
         bytes memory data = _blobWithGasRefund(account, NONCE, token, rate, calls);
         vm.expectRevert(
-            abi.encodeWithSelector(IBaseIntentExecutorPolicy.ExchangeRateOverCap.selector, rate, MAX_EX_RATE)
+            abi.encodeWithSelector(
+                IBaseIntentExecutorPolicy.ExchangeRateOverCap.selector, rate, MAX_EX_RATE
+            )
         );
         policy.check1271SignedAction(configId, address(0), account, h, data);
     }
@@ -248,7 +260,8 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
                 && sel != RelayCalldataLib.SEL_RELAY_TRANSFER_AND_MULTICALL
         );
         Execution[] memory calls = new Execution[](1);
-        calls[0] = Execution({ target: relayRouter, value: 0, callData: abi.encodeWithSelector(sel) });
+        calls[0] =
+            Execution({ target: relayRouter, value: 0, callData: abi.encodeWithSelector(sel) });
         (bytes32 h, bytes memory data) = _build(calls, address(0), 0);
         vm.expectRevert(
             abi.encodeWithSelector(RelayAdapter.RelayRouterBadSelector.selector, uint256(0))
@@ -300,7 +313,9 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
         }
         (bytes32 h, bytes memory data) = _build(calls, address(0), 0);
         vm.expectRevert(
-            abi.encodeWithSelector(OpsCalldataLib.OpsCountExceeded.selector, uint256(17), uint256(16))
+            abi.encodeWithSelector(
+                OpsCalldataLib.OpsCountExceeded.selector, uint256(17), uint256(16)
+            )
         );
         policy.check1271SignedAction(configId, address(0), account, h, data);
     }
@@ -337,7 +352,9 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
         returns (bytes32 h, bytes memory data)
     {
         bool present = gasToken != address(0) || exchangeRate != 0;
-        h = _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(gasToken, exchangeRate, present));
+        h = _digest(
+            intentExecutor, account, NONCE, calls, _gasRefundHash(gasToken, exchangeRate, present)
+        );
         if (present) {
             data = _blobWithGasRefund(account, NONCE, gasToken, exchangeRate, calls);
         } else {
@@ -351,7 +368,8 @@ contract StaticIntentExecutorPolicy_Relay_Test is Test, IntentExecutorTestUtils 
     }
 
     function _routerCall(bytes4 sel, uint256 value) internal view returns (Execution memory) {
-        return Execution({ target: relayRouter, value: value, callData: abi.encodeWithSelector(sel) });
+        return
+            Execution({ target: relayRouter, value: value, callData: abi.encodeWithSelector(sel) });
     }
 
     function _erc20Approve(

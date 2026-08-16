@@ -175,9 +175,8 @@ contract IntentExecutorPolicy is BaseIntentExecutorPolicy, Ownable {
             // Fail-fast: malformed config blob at install instead of at first signature.
             IIntentExecutorAdapter(adapter).validateConfig(cfg);
 
-            ps.layers.push(
-                LayerStamp({ layerId: lid, adapter: adapter, configHash: keccak256(cfg) })
-            );
+            ps.layers
+                .push(LayerStamp({ layerId: lid, adapter: adapter, configHash: keccak256(cfg) }));
             ps.configs[lid] = bytes(cfg);
             ps.hasLayer[lid] = true;
         }
@@ -215,9 +214,8 @@ contract IntentExecutorPolicy is BaseIntentExecutorPolicy, Ownable {
             bytes memory cfg = ps.configs[stamp.layerId];
             // Adapter is `view` and stateless; try/catch so we can attach the raw
             // adapter revert reason to `AdapterRejected`.
-            try IIntentExecutorAdapter(stamp.adapter).validateCall(
-                stamp.configHash, cfg, i, calls[i]
-            ) {
+            try IIntentExecutorAdapter(stamp.adapter)
+                .validateCall(stamp.configHash, cfg, i, calls[i]) {
                 continue;
             } catch (bytes memory reason) {
                 revert AdapterRejected(i, stamp.layerId, reason);

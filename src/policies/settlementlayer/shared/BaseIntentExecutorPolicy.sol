@@ -43,14 +43,17 @@ abstract contract BaseIntentExecutorPolicy is IBaseIntentExecutorPolicy, I1271Po
                               ERC-7579 / IPolicy
     //////////////////////////////////////////////////////////////*/
 
-    function onInstall(bytes calldata) external pure { /* installed via multiplexer */ }
+    function onInstall(bytes calldata) external pure {  /* installed via multiplexer */
+    }
 
-    function onUninstall(bytes calldata) external pure { /* state cleared lazily by SS */ }
+    function onUninstall(bytes calldata) external pure {  /* state cleared lazily by SS */
+    }
 
     /// @inheritdoc I1271Policy
     function check1271SignedAction(
         ConfigId configId,
-        address /* requestSender */,
+        address,
+        /* requestSender */
         address account,
         bytes32 hash,
         bytes calldata data
@@ -63,18 +66,30 @@ abstract contract BaseIntentExecutorPolicy is IBaseIntentExecutorPolicy, I1271Po
     {
         IntentExecutorStorage storage $ =
             configId.getStorage({ account: account, multiplexer: msg.sender });
-        if ($.intentExecutor == address(0)) revert PolicyNotInitialized();
+        if ($.intentExecutor == address(0)) {
+            revert PolicyNotInitialized(configId, msg.sender, account);
+        }
         return _validateClaim(configId, account, hash, data, $);
     }
 
-    /// @inheritdoc I1271Policy
+    /// @notice Whether this policy is configured for an account and configuration
+    /// @dev Not part of IPolicy - kept as a convenience overload. It always returns false,
+    ///      because storage here is namespaced by multiplexer and this overload is not given one;
+    ///      use the three-argument form.
+    /// @return Always false
     function isInitialized(address, ConfigId) external pure returns (bool) {
         // Smart sessions calls the multiplexer-aware overload below; this overload is kept
         // for IPolicy completeness but cannot resolve storage without a multiplexer.
         return false;
     }
 
-    /// @inheritdoc I1271Policy
+    /// @notice Whether this policy is configured for an account, multiplexer and configuration
+    /// @dev Not part of IPolicy. Storage is namespaced by multiplexer, so this is the form that
+    ///      can actually answer
+    /// @param account The account to query
+    /// @param multiplexer The multiplexer that initialized the configuration
+    /// @param configId The configuration ID
+    /// @return True if an intent executor has been configured
     function isInitialized(
         address account,
         address multiplexer,
@@ -249,7 +264,7 @@ abstract contract BaseIntentExecutorPolicy is IBaseIntentExecutorPolicy, I1271Po
         bytes calldata tail = data[cursor:];
         // solhint-disable-next-line no-inline-assembly
         assembly {
-            ops := tail.offset
+            ops := add(tail.offset, 0x20)
         }
     }
 
@@ -282,7 +297,9 @@ abstract contract BaseIntentExecutorPolicy is IBaseIntentExecutorPolicy, I1271Po
             configId.getStorage({ account: account, multiplexer: msg.sender });
         uint256 n = $.gasTokenWhitelist.length();
         tokens = new address[](n);
-        for (uint256 i; i < n; i++) tokens[i] = $.gasTokenWhitelist.at(i);
+        for (uint256 i; i < n; i++) {
+            tokens[i] = $.gasTokenWhitelist.at(i);
+        }
     }
 
     function getMaxExchangeRate(

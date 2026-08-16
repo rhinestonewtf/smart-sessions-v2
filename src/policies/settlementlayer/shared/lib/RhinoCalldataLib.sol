@@ -11,7 +11,8 @@ library RhinoCalldataLib {
     /// @dev `IERC20.approve(address,uint256)`.
     bytes4 internal constant SEL_ERC20_APPROVE = 0x095ea7b3;
 
-    /// @dev `DVFDepositContract.depositWithId(address token, uint256 amount, uint256 commitmentId)`.
+    /// @dev `DVFDepositContract.depositWithId(address token, uint256 amount, uint256
+    /// commitmentId)`.
     bytes4 internal constant SEL_DEPOSIT_WITH_ID = 0x2700bbaf;
 
     function decodeApprove(bytes calldata data)
