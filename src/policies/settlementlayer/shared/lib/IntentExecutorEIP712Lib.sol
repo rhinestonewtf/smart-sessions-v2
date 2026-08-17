@@ -17,7 +17,7 @@ import {
 ///         authorising a `StandaloneIntentExecutor.executeSinglechainOps` (and, in a follow-up,
 ///         `executeMultichainOps`) call.
 /// @dev The struct-hash builders delegate to `EIP712Lib` and `EIP712TypeHashLib` from
-///      `@compact-utils` so the on-chain typehashes stay in lock-step with the deployed
+///      the compact-utils package, so the on-chain typehashes stay in lock-step with the deployed
 ///      executor. We only own the domain-separator side, which the executor builds via
 ///      `solady/EIP712` with the constants from `IntentExecutorDataTypes.sol`.
 library IntentExecutorEIP712Lib {
@@ -26,11 +26,7 @@ library IntentExecutorEIP712Lib {
     /// @notice Builds the EIP-712 domain separator for a given executor address.
     /// @dev Matches `solady/EIP712._buildDomainSeparator()` using the constants for the
     ///      `IntentExecutor` domain: `name = "IntentExecutor"`, `version = "v0.0.1"`.
-    function domainSeparator(address verifyingContract)
-        internal
-        view
-        returns (bytes32 separator)
-    {
+    function domainSeparator(address verifyingContract) internal view returns (bytes32 separator) {
         bytes32 nameHash = INTENT_EXECUTOR_NAME_HASH;
         bytes32 versionHash = INTENT_EXECUTOR_VERSION_HASH;
         bytes32 typeHash = EIP712_DOMAIN_TYPEHASH;
@@ -89,14 +85,7 @@ library IntentExecutorEIP712Lib {
     }
 
     /// @notice `keccak256(GasRefund(token, exchangeRate))` matching `EIP712Lib.hashGasRefund`.
-    function hashGasRefund(
-        address token,
-        uint256 exchangeRate
-    )
-        internal
-        pure
-        returns (bytes32)
-    {
+    function hashGasRefund(address token, uint256 exchangeRate) internal pure returns (bytes32) {
         return EIP712Lib.hashGasRefund(token, exchangeRate);
     }
 

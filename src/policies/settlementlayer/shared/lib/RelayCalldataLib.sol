@@ -15,9 +15,11 @@ library RelayCalldataLib {
     /// @dev `IERC20.transfer(address,uint256)`.
     bytes4 internal constant SEL_ERC20_TRANSFER = 0xa9059cbb;
 
-    /// @dev Relay `ERC20Router.multicall(Call3Value[] calls, address refundTo, address nftRecipient, bytes metadata)`.
+    /// @dev Relay `ERC20Router.multicall(Call3Value[] calls, address refundTo, address
+    /// nftRecipient, bytes metadata)`.
     bytes4 internal constant SEL_RELAY_MULTICALL = 0xcd6e13f7;
-    /// @dev Relay `ERC20Router.transferAndMulticall(address[] tokens, uint256[] amounts, Call3Value[] calls, address sender, address recipient)`.
+    /// @dev Relay `ERC20Router.transferAndMulticall(address[] tokens, uint256[] amounts,
+    /// Call3Value[] calls, address sender, address recipient)`.
     bytes4 internal constant SEL_RELAY_TRANSFER_AND_MULTICALL = 0x30875056;
 
     // Note on IntentExecutorAdapter selectors: the orchestrator emits one of

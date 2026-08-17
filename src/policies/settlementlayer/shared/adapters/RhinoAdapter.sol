@@ -55,7 +55,9 @@ contract RhinoAdapter is IIntentExecutorAdapter {
         if (call.value != 0) revert RhinoValueNonzero(callIndex);
 
         if (to == bridge) {
-            if (sel != RhinoCalldataLib.SEL_DEPOSIT_WITH_ID) revert RhinoBridgeBadSelector(callIndex);
+            if (sel != RhinoCalldataLib.SEL_DEPOSIT_WITH_ID) {
+                revert RhinoBridgeBadSelector(callIndex);
+            }
             (address token,,) = RhinoCalldataLib.decodeDepositWithId(data);
             if (!_contains(config, tokensStart, tokensLen, token)) {
                 revert RhinoDepositTokenDeny(callIndex, token);
@@ -97,7 +99,9 @@ contract RhinoAdapter is IIntentExecutorAdapter {
         returns (bool)
     {
         for (uint256 i; i < len; i++) {
-            if (address(bytes20(config[start + 20 * i:start + 20 * i + 20])) == target) return true;
+            if (address(bytes20(config[start + 20 * i:start + 20 * i + 20])) == target) {
+                return true;
+            }
         }
         return false;
     }

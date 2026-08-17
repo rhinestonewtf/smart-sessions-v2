@@ -59,8 +59,10 @@ contract RelayAdapter is IIntentExecutorAdapter {
         (
             address relayRouter,
             address ieAdapter,
-            uint256 recipientsStart, uint256 recipientsLen,
-            uint256 tokensStart, uint256 tokensLen
+            uint256 recipientsStart,
+            uint256 recipientsLen,
+            uint256 tokensStart,
+            uint256 tokensLen
         ) = _scan(config);
 
         address to = call.target;
@@ -139,7 +141,9 @@ contract RelayAdapter is IIntentExecutorAdapter {
         returns (bool)
     {
         for (uint256 i; i < len; i++) {
-            if (address(bytes20(config[start + 20 * i:start + 20 * i + 20])) == target) return true;
+            if (address(bytes20(config[start + 20 * i:start + 20 * i + 20])) == target) {
+                return true;
+            }
         }
         return false;
     }

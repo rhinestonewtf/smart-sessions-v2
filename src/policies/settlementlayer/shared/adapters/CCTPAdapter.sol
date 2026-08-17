@@ -72,8 +72,7 @@ contract CCTPAdapter is IIntentExecutorAdapter {
                 ,
                 uint32 dom,
                 bytes32 mintRecipient,
-                address burnToken,
-                ,
+                address burnToken,,
                 uint256 maxFee,
                 uint32 minFinality
             ) = CCTPCalldataLib.decodeDepositForBurnWithHook(data);
@@ -169,7 +168,9 @@ contract CCTPAdapter is IIntentExecutorAdapter {
         returns (bool)
     {
         for (uint256 i; i < len; i++) {
-            if (address(bytes20(config[start + 20 * i:start + 20 * i + 20])) == target) return true;
+            if (address(bytes20(config[start + 20 * i:start + 20 * i + 20])) == target) {
+                return true;
+            }
         }
         return false;
     }

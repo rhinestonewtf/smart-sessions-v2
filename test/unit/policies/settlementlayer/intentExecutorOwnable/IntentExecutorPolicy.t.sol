@@ -67,7 +67,10 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
         mintRecipient = bytes32(uint256(uint160(makeAddr("dstAccount"))));
 
         bytes memory baseHeader = abi.encodePacked(
-            intentExecutor, uint8(0), uint256(0), uint8(0) // no gas token whitelist for brevity
+            intentExecutor,
+            uint8(0),
+            uint256(0),
+            uint8(0) // no gas token whitelist for brevity
         );
         bytes memory tail = abi.encodePacked(
             uint8(2), // two layers: Relay + Rhino
@@ -95,9 +98,7 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
     function test_revertWhen_setAdapterLayerIdMismatch() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentExecutorPolicy.LayerIdMismatch.selector,
-                keccak256("WRONG"),
-                relayA.layerId()
+                IntentExecutorPolicy.LayerIdMismatch.selector, keccak256("WRONG"), relayA.layerId()
             )
         );
         vm.prank(owner);
@@ -132,14 +133,8 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
     //////////////////////////////////////////////////////////////*/
 
     function test_revertWhen_installReferencesUnknownLayer() public {
-        bytes memory baseHeader = abi.encodePacked(
-            intentExecutor, uint8(0), uint256(0), uint8(0)
-        );
-        bytes memory tail = abi.encodePacked(
-            uint8(1),
-            keccak256("UNKNOWN"),
-            uint16(0)
-        );
+        bytes memory baseHeader = abi.encodePacked(intentExecutor, uint8(0), uint256(0), uint8(0));
+        bytes memory tail = abi.encodePacked(uint8(1), keccak256("UNKNOWN"), uint16(0));
         ConfigId cid = ConfigId.wrap(bytes32(uint256(0x9999)));
         address acct = makeAddr("acct2");
         vm.expectRevert(
@@ -149,13 +144,15 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
     }
 
     function test_revertWhen_installListsDuplicateLayer() public {
-        bytes memory baseHeader = abi.encodePacked(
-            intentExecutor, uint8(0), uint256(0), uint8(0)
-        );
+        bytes memory baseHeader = abi.encodePacked(intentExecutor, uint8(0), uint256(0), uint8(0));
         bytes memory tail = abi.encodePacked(
             uint8(2),
-            keccak256("RELAY"), uint16(_relayConfig().length), _relayConfig(),
-            keccak256("RELAY"), uint16(_relayConfig().length), _relayConfig()
+            keccak256("RELAY"),
+            uint16(_relayConfig().length),
+            _relayConfig(),
+            keccak256("RELAY"),
+            uint16(_relayConfig().length),
+            _relayConfig()
         );
         ConfigId cid = ConfigId.wrap(bytes32(uint256(0x9998)));
         address acct = makeAddr("acct3");
@@ -168,17 +165,11 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
     }
 
     function test_installFailsFast_onMalformedAdapterConfig() public {
-        bytes memory baseHeader = abi.encodePacked(
-            intentExecutor, uint8(0), uint256(0), uint8(0)
-        );
+        bytes memory baseHeader = abi.encodePacked(intentExecutor, uint8(0), uint256(0), uint8(0));
         // Relay config blob shorter than the 41-byte minimum header.
         bytes memory badConfig = new bytes(10);
-        bytes memory tail = abi.encodePacked(
-            uint8(1),
-            keccak256("RELAY"),
-            uint16(badConfig.length),
-            badConfig
-        );
+        bytes memory tail =
+            abi.encodePacked(uint8(1), keccak256("RELAY"), uint16(badConfig.length), badConfig);
         ConfigId cid = ConfigId.wrap(bytes32(uint256(0x9997)));
         address acct = makeAddr("acct4");
         vm.expectRevert(RelayAdapter.RelayInvalidConfig.selector);
@@ -213,15 +204,11 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
         hints[0] = 1; // Rhino slot
         (bytes32 h, bytes memory data) = _build(calls, _hintVector(hints));
         // Adapter throws `RhinoTargetDeny` because relayRouter isn't bridge/token.
-        bytes memory inner = abi.encodeWithSelector(
-            RhinoAdapter.RhinoTargetDeny.selector, uint256(0)
-        );
+        bytes memory inner =
+            abi.encodeWithSelector(RhinoAdapter.RhinoTargetDeny.selector, uint256(0));
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentExecutorPolicy.AdapterRejected.selector,
-                uint256(0),
-                keccak256("RHINO"),
-                inner
+                IntentExecutorPolicy.AdapterRejected.selector, uint256(0), keccak256("RHINO"), inner
             )
         );
         policy.check1271SignedAction(configId, address(0), account, h, data);
@@ -236,10 +223,7 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
         (bytes32 h, bytes memory data) = _build(calls, _hintVector(hints));
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentExecutorPolicy.LayerHintOutOfRange.selector,
-                uint256(0),
-                hint,
-                uint256(2)
+                IntentExecutorPolicy.LayerHintOutOfRange.selector, uint256(0), hint, uint256(2)
             )
         );
         policy.check1271SignedAction(configId, address(0), account, h, data);
@@ -250,9 +234,11 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
         calls[0] = _relayRouterCall();
         calls[1] = _relayRouterCall();
         // Build the digest assuming 2 calls but ship only 1 hint byte + wrong callCount.
-        bytes32 h = _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(address(0), 0, false));
+        bytes32 h =
+            _digest(intentExecutor, account, NONCE, calls, _gasRefundHash(address(0), 0, false));
         bytes memory base = _blobSansGasRefund(account, NONCE, calls);
-        bytes memory hintsBlob = abi.encodePacked(uint8(1), uint8(0)); // header says 1, vector len 1
+        bytes memory hintsBlob = abi.encodePacked(uint8(1), uint8(0)); // header says 1, vector len
+        // 1
         bytes memory data = bytes.concat(base, hintsBlob);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -277,15 +263,11 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
         uint8[] memory hints = new uint8[](1);
         hints[0] = 0; // Relay slot
         (bytes32 h, bytes memory data) = _build(calls, _hintVector(hints));
-        bytes memory inner = abi.encodeWithSelector(
-            RelayAdapter.RelayApproveBadSpender.selector, uint256(0)
-        );
+        bytes memory inner =
+            abi.encodeWithSelector(RelayAdapter.RelayApproveBadSpender.selector, uint256(0));
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentExecutorPolicy.AdapterRejected.selector,
-                uint256(0),
-                keccak256("RELAY"),
-                inner
+                IntentExecutorPolicy.AdapterRejected.selector, uint256(0), keccak256("RELAY"), inner
             )
         );
         policy.check1271SignedAction(configId, address(0), account, h, data);
@@ -300,8 +282,10 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
         return abi.encodePacked(
             relayRouter,
             address(0), // no ie adapter for this test
-            uint8(1), recipient,
-            uint8(1), token
+            uint8(1),
+            recipient,
+            uint8(1),
+            token
         );
     }
 
@@ -326,7 +310,9 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
         return Execution({
             target: bridge,
             value: 0,
-            callData: abi.encodeWithSelector(RhinoCalldataLib.SEL_DEPOSIT_WITH_ID, token, 1, uint256(0x1234))
+            callData: abi.encodeWithSelector(
+                RhinoCalldataLib.SEL_DEPOSIT_WITH_ID, token, 1, uint256(0x1234)
+            )
         });
     }
 
@@ -337,7 +323,9 @@ contract IntentExecutorPolicy_Adversarial_Test is Test, IntentExecutorTestUtils 
 
     function _hintVector(uint8[] memory hints) internal pure returns (bytes memory v) {
         v = abi.encodePacked(uint8(hints.length));
-        for (uint256 i; i < hints.length; i++) v = bytes.concat(v, abi.encodePacked(hints[i]));
+        for (uint256 i; i < hints.length; i++) {
+            v = bytes.concat(v, abi.encodePacked(hints[i]));
+        }
     }
 
     function _build(
