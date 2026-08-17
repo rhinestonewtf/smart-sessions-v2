@@ -193,7 +193,41 @@ contract BridgeSessionPolicy_exactlyOnce_Test is BridgeSessionPolicy_Unit_Test {
     function test_emptyPayload_refused() public {
         _enable(PINNED);
 
-        assertFalse(_check(""), "an empty payload must fail closed");
+        assertFalse(_check("", address(permit2)), "an empty payload must fail closed");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        THE TAG IS BOUND TO THE CALLER
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev The layer tag is not covered by the signed digest, so it must be checked against
+    ///      `requestSender` - the address that actually called the account. A settlement claiming
+    ///      to be Permit2 while arriving from somewhere else must be refused before any sub-policy
+    ///      is consulted.
+    function test_permit2TagFromAnotherCaller_refused() public {
+        _enable(PINNED);
+
+        assertTrue(_check(_permit2Payload(PINNED)), "the honest Permit2 caller settles");
+
+        assertFalse(
+            _check(_permit2Payload(PINNED), address(executor)),
+            "a Permit2 tag from the executor must be refused"
+        );
+    }
+
+    /// @dev The mirror case, and the one that makes the documented install-time requirement
+    ///      enforceable: a sub-policy configured for a DIFFERENT executor validates digests that
+    ///      executor produces, but the settlement arrives bearing that executor's address, so the
+    ///      tag binding refuses it before the divergence can be exploited.
+    function test_executorTagFromAnUnknownSettler_refused() public {
+        _enable(PINNED);
+
+        assertTrue(_check(_executorPayload(PINNED)), "the honest executor settles");
+
+        assertFalse(
+            _check(_executorPayload(PINNED), makeAddr("someOtherExecutor")),
+            "an executor tag from an executor we do not watch must be refused"
+        );
     }
 
     function test_payloadTooShortForNonce_refused() public {

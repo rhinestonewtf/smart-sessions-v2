@@ -99,8 +99,22 @@ abstract contract BridgeSessionPolicy_Unit_Test is Base_Test {
         return ConfigId.wrap(keccak256(abi.encode(configId, multiplexer, generation, layer)));
     }
 
+    /// @dev The settlement contract that really calls the account for a given layer. The policy
+    ///      binds the unsigned layer tag against this, so a test that passes `address(0)` here is
+    ///      testing a call no settlement can make.
+    function _settlerFor(uint8 layer) internal view returns (address) {
+        return layer == LAYER_PERMIT2 ? address(permit2) : address(executor);
+    }
+
+    /// @dev Drives a settlement with the requestSender the tagged layer actually implies
     function _check(bytes memory payload) internal returns (bool) {
+        require(payload.length > 0, "payload must carry a layer tag");
+        return _check(payload, _settlerFor(uint8(payload[0])));
+    }
+
+    /// @dev Drives a settlement with an explicit requestSender, for the mis-routing cases
+    function _check(bytes memory payload, address requestSender) internal returns (bool) {
         vm.prank(multiplexer);
-        return policy.check1271SignedAction(configId, address(0), account, DIGEST, payload);
+        return policy.check1271SignedAction(configId, requestSender, account, DIGEST, payload);
     }
 }

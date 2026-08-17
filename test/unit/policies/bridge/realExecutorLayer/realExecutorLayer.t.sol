@@ -135,9 +135,11 @@ contract BridgeSessionPolicy_realExecutorLayer_Test is Test, IntentExecutorTestU
         );
     }
 
+    /// @dev The executor is the contract that really calls the account on this route, and the
+    ///      policy binds the layer tag against it, so passing anything else is unrealistic.
     function _check(bytes32 digest, bytes memory tagged) internal returns (bool) {
         vm.prank(multiplexer);
-        return policy.check1271SignedAction(configId, address(0), account, digest, tagged);
+        return policy.check1271SignedAction(configId, address(executor), account, digest, tagged);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -166,7 +168,7 @@ contract BridgeSessionPolicy_realExecutorLayer_Test is Test, IntentExecutorTestU
 
         vm.prank(multiplexer);
         vm.expectRevert();
-        policy.check1271SignedAction(configId, address(0), account, digest, tagged);
+        policy.check1271SignedAction(configId, address(executor), account, digest, tagged);
     }
 
     /*//////////////////////////////////////////////////////////////

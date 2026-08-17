@@ -17,6 +17,7 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
     BridgeSession,
     LAYER_COUNT,
+    LAYER_PERMIT2,
     LAYER_TAG_LENGTH
 } from "@policies/bridge/types/BridgeSessionDataTypes.sol";
 
@@ -221,6 +222,17 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
         uint8 layer = uint8(signature[0]);
         if (layer >= LAYER_COUNT) return false;
 
+        // BIND THE TAG TO THE REAL CALLER. The tag is not covered by the signed digest, and it
+        // selects both the nonce offset and the consumable that gets skipped - so trusting it is
+        // trusting the settler. `requestSender` is the address that actually called the account's
+        // `isValidSignature`, i.e. the settlement contract itself, and it is not caller-chosen.
+        //
+        // This also makes the install-time requirements enforceable rather than documented: a
+        // sub-policy configured for a DIFFERENT settlement contract validates digests produced by
+        // that contract, and a settlement through it arrives with a `requestSender` that is not
+        // ours, so it is refused here before the sub-policy is ever consulted.
+        if (requestSender != _expectedSettlerFor(layer)) return false;
+
         BridgeSession storage $session =
             id.getStorage({ account: account, multiplexer: msg.sender });
 
@@ -247,6 +259,16 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
                 hash: hash,
                 signature: payload
             });
+    }
+
+    /// @notice The settlement contract a given layer's settlements must actually come from
+    /// @dev Layers are settlement FAMILIES, and each family has exactly one contract that calls
+    ///      the account. Across and Eco are both the Permit2 layer because they settle through
+    ///      the same Permit2 deployment - which is also why one bitmap covers both.
+    /// @param layer The settlement layer, already bounds-checked by the caller
+    /// @return The address that must have called `isValidSignature` for this layer
+    function _expectedSettlerFor(uint8 layer) internal view returns (address) {
+        return layer == LAYER_PERMIT2 ? address(PERMIT2) : address(INTENT_EXECUTOR);
     }
 
     /*//////////////////////////////////////////////////////////////
