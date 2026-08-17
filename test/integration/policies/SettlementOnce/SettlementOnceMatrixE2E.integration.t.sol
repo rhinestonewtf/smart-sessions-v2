@@ -1,0 +1,321 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.28;
+
+import {
+    Permit2ClaimPolicy_Integration_Test
+} from "../Permit2ClaimPolicy/Permit2ClaimPolicy.integration.t.sol";
+
+import { MockAdapter } from "@mocks/MockAdapter.sol";
+import { ModuleKitHelpers } from "@modulekit/ModuleKit.sol";
+import { SettlementOncePolicy } from "@policies/once/SettlementOncePolicy.sol";
+import { SmartSessionEmissaryMock } from "@mocks/SmartSessionEmissaryMock.sol";
+
+import { Execution } from "modulekit/integrations/ERC7579Exec.sol";
+import { MockTarget } from "@rhinestone/compact-utils/src/tests/MockTarget.sol";
+import { Session } from "@types/DataTypes.sol";
+import {
+    PolicyData,
+    ActionData,
+    ERC7739Data,
+    ERC7739Context,
+    PermissionId,
+    SmartSessionMode
+} from "@smartsessions/DataTypes.sol";
+import { ISessionValidator } from "@smartsessions/interfaces/ISessionValidator.sol";
+import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
+import { MODULE_TYPE_VALIDATOR } from "@modulekit/accounts/common/interfaces/IERC7579Module.sol";
+import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
+import { Types } from "@compact-utils/types/OrderTypes.sol";
+import {
+    IStandaloneIntentExecutor
+} from "@compact-utils/executor/interfaces/IStandaloneIntent.sol";
+import { FIELD_ARBITER, MODE_CHECK_STORAGE } from "@policies/claim/base/types/BaseDataTypes.sol";
+
+/// @title The full matrix, end to end, on the action surface
+/// @notice The #55 counterpart to the multiplexer's matrix test. Both routes settle for real:
+///
+///   Permit2   router -> arbiter -> Permit2.permitWitnessTransferFrom
+///                     -> account.isValidSignature
+///                     -> Permit2ClaimPolicy AND SettlementOncePolicy   (the 1271 half)
+///
+///   executor  solver -> StandaloneIntentExecutor.executeSinglechainOps
+///                     -> sigMode EMISSARY_EXECUTION -> emissary.verifyExecution
+///                     -> _enforceActionPolicies -> SettlementOncePolicy   (the action half)
+///
+/// The policy is installed on BOTH surfaces with the SAME pinned nonce, which is the production
+/// shape and the one the earlier e2e did not exercise — that test installed the action half only,
+/// so three of four orderings were untested.
+contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
+    using SmartExecutionLib for *;
+    using ModuleKitHelpers for *;
+
+    SettlementOncePolicy internal oncePolicy;
+
+    /// @dev matches `$intent.nonce` from the parent setUp
+    uint256 internal constant PINNED = 1337;
+
+    function setUp() public virtual override {
+        super.setUp();
+
+        oncePolicy = new SettlementOncePolicy(ISignatureTransfer(address(env.permit2)));
+
+        // The base harness deploys the emissary against a MOCK intent executor, so
+        // `verifyExecution` rejects the real one with UnauthorizedSource. Redeploy it against the
+        // real ADDRESSBOOK and install it, so ONE emissary serves both routes: the 1271 path for
+        // Permit2 settlements and verifyExecution for executor settlements.
+        smartSessionEmissary = new SmartSessionEmissaryMock(address(ADDRESSBOOK));
+        env.smartAccount1
+            .installModule({
+                moduleTypeId: MODULE_TYPE_VALIDATOR, module: address(smartSessionEmissary), data: ""
+            });
+
+        vm.prank(env.smartAccount1.account);
+        env.compact.assignEmissary(env.lockTag, address(smartSessionEmissary));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                  SETUP
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Installs the policy on BOTH surfaces with one pinned nonce. The 1271 list is an AND,
+    ///      so `Permit2ClaimPolicy` still binds the blob to the digest while this bounds how many
+    ///      times it may settle — both read the nonce at the same offset, so one blob serves
+    /// both.
+    /// @param boundExecutor true installs the once-policy on the action surface; false installs a
+    ///        permissive policy instead, so the list is non-empty but nothing bounds repetition.
+    ///        An EMPTY list is not the control — `minPolicies: 1` makes that revert outright.
+    function _enableOnceSession(bool boundExecutor) internal {
+        activeFieldMode = FIELD_ARBITER;
+
+        PolicyData[] memory erc1271Policies = new PolicyData[](2);
+        erc1271Policies[0] = PolicyData({
+            policy: address(permit2ClaimPolicy),
+            initData: abi.encodePacked(
+                _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE), uint8(1), arbiter
+            )
+        });
+        erc1271Policies[1] = PolicyData({
+            policy: address(oncePolicy), initData: abi.encodePacked(bytes32(PINNED))
+        });
+
+        PolicyData[] memory actionPolicies = new PolicyData[](1);
+        actionPolicies[0] = boundExecutor
+            ? PolicyData({
+                policy: address(oncePolicy), initData: abi.encodePacked(bytes32(PINNED))
+            })
+            : PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        ActionData[] memory actions = new ActionData[](1);
+        actions[0] = ActionData({
+            actionTarget: address(env.target),
+            actionTargetSelector: MockTarget.targetFn.selector,
+            actionPolicies: actionPolicies
+        });
+
+        ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
+        allowedContent[0].contentNames = new string[](1);
+        allowedContent[0].contentNames[0] = "";
+        allowedContent[0].appDomainSeparator = bytes32(0);
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256(abi.encodePacked("onceMatrix", block.timestamp)),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: ERC7739Data({
+                allowedERC7739Content: allowedContent, erc1271Policies: erc1271Policies
+            }),
+            actions: actions,
+            claimPolicies: new PolicyData[](0)
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+
+        vm.prank(env.smartAccount1.account);
+        PermissionId[] memory ids = smartSessionEmissary.enableSessions(sessions, bytes12(0));
+        defaultPermissionId = ids[0];
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            PERMIT2 ROUTE (REAL)
+    //////////////////////////////////////////////////////////////*/
+
+    function _preparePermit2Settlement() internal returns (bytes memory) {
+        Types.Order memory order = _getPermit2Order();
+        $intent.userEmissarySig = _createSmartSessionSignature(_createPolicyData());
+
+        return abi.encodeCall(
+            MockAdapter.mock_permit2_handleClaim,
+            (MockAdapter.ClaimDataPermit2({
+                    order: order, userSigs: Types.Signatures($intent.userEmissarySig, "")
+                }))
+        );
+    }
+
+    function _settleViaPermit2() internal {
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), _preparePermit2Settlement());
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           EXECUTOR ROUTE (REAL)
+    //////////////////////////////////////////////////////////////*/
+
+    function _executorOps() internal view returns (Execution[] memory calls) {
+        calls = new Execution[](1);
+        calls[0] = Execution({
+            target: address(env.target),
+            value: 0,
+            callData: abi.encodeCall(MockTarget.targetFn, (42))
+        });
+    }
+
+    /// @dev The emissary path takes a DIFFERENT envelope from the 1271 path:
+    /// `_enforceActionPolicies` unpacks (mode, permissionId, packedSig) directly, with no
+    /// module-address prefix. Using
+    ///      the parent's 1271 builder here yields InvalidSignature.
+    function _emissarySig() internal view returns (bytes memory) {
+        bytes memory validatorSig =
+            abi.encodePacked(bytes32(uint256(0x1234)), bytes32(uint256(0x5678)), uint8(27));
+
+        return abi.encodePacked(
+            SmartSessionMode.USE,
+            defaultPermissionId,
+            uint256(validatorSig.length) + 64, // policyDataOffset
+            validatorSig
+        );
+    }
+
+    /// @dev A REAL executor settlement, validated through the emissary's action-policy path
+    function _settleViaExecutor(uint256 executorNonce) internal {
+        IStandaloneIntentExecutor.SingleChainOps memory signedOps;
+        signedOps.account = env.smartAccount1.account;
+        signedOps.nonce = executorNonce;
+        signedOps.ops = SmartExecutionLib.SigMode.EMISSARY_EXECUTION.encode(_executorOps());
+        signedOps.signature = _emissarySig();
+
+        vm.prank(env.solver.addr);
+        env.intentExecutor.executeSinglechainOps(signedOps);
+    }
+
+    function _permit2Burned(uint256 nonce) internal view returns (bool) {
+        return (env.permit2.nonceBitmap($intent.sponsor, nonce >> 8) >> (nonce & 0xff)) & 1 == 1;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          EITHER ROUTE WORKS ALONE
+    //////////////////////////////////////////////////////////////*/
+
+    function test_permit2RouteSettles() public {
+        _enableOnceSession(true);
+
+        _settleViaPermit2();
+
+        assertTrue(_permit2Burned(PINNED), "the real Permit2 nonce is burned");
+    }
+
+    function test_executorRouteSettles() public {
+        _enableOnceSession(true);
+
+        _settleViaExecutor(0);
+
+        assertEq(env.target.param(), 42, "the executor settlement executed");
+        assertTrue(
+            oncePolicy.isExecutorSpent(address(smartSessionEmissary), $intent.sponsor, PINNED),
+            "and the policy recorded the spend"
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           ...BUT ONLY ONE OF THEM
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev ORDERING: executor -> Permit2. The action half burned the shared record; the 1271
+    ///      half must read it and refuse.
+    function test_executorThenPermit2_refused() public {
+        _enableOnceSession(true);
+
+        _settleViaExecutor(0);
+
+        bytes memory adapterCalldata = _preparePermit2Settlement();
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
+    /// @dev ORDERING: Permit2 -> executor. The real Permit2 burn must close the executor route.
+    function test_permit2ThenExecutor_refused() public {
+        _enableOnceSession(true);
+
+        _settleViaPermit2();
+
+        vm.expectRevert();
+        _settleViaExecutor(0);
+    }
+
+    /// @dev ORDERING: executor -> executor on a FRESH executor nonce. The executor itself does not
+    ///      close this; only the policy's own record can. The eleven-settlements shape.
+    function test_executorThenExecutorFreshNonce_refused() public {
+        _enableOnceSession(true);
+
+        _settleViaExecutor(0);
+
+        vm.expectRevert();
+        _settleViaExecutor(1);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 CONTROL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev THE CONTROL. Swap the once-policy for a permissive one and the identical second
+    ///      settlement on a fresh nonce goes straight through — so every refusal above is this
+    ///      policy's doing, not the executor's nonce and not the harness.
+    function test_withAPermissivePolicyTheExecutorRouteIsUnbounded() public {
+        _enableOnceSession(false);
+
+        _settleViaExecutor(0);
+        _settleViaExecutor(1);
+
+        assertEq(env.target.param(), 42, "both executor settlements executed");
+    }
+
+    /// @dev And the adjacent property worth pinning: an EMPTY action-policy list does not make the
+    ///      executor route unbounded, it makes it unusable. `_enforceActionPolicies` runs with
+    ///      minPolicies = 1, so nothing installed means NoPoliciesSet. That is why leaving the
+    ///      action list empty is itself a control, and why installing any action policy at all is
+    ///      what opens this route.
+    function test_anEmptyActionListClosesTheExecutorRouteEntirely() public {
+        activeFieldMode = FIELD_ARBITER;
+
+        PolicyData[] memory erc1271Policies = new PolicyData[](1);
+        erc1271Policies[0] = PolicyData({
+            policy: address(oncePolicy), initData: abi.encodePacked(bytes32(PINNED))
+        });
+
+        ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
+        allowedContent[0].contentNames = new string[](1);
+        allowedContent[0].contentNames[0] = "";
+        allowedContent[0].appDomainSeparator = bytes32(0);
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256(abi.encodePacked("onceMatrixEmpty", block.timestamp)),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: ERC7739Data({
+                allowedERC7739Content: allowedContent, erc1271Policies: erc1271Policies
+            }),
+            actions: new ActionData[](0),
+            claimPolicies: new PolicyData[](0)
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+
+        vm.prank(env.smartAccount1.account);
+        PermissionId[] memory ids = smartSessionEmissary.enableSessions(sessions, bytes12(0));
+        defaultPermissionId = ids[0];
+
+        vm.expectRevert();
+        _settleViaExecutor(0);
+    }
+}
