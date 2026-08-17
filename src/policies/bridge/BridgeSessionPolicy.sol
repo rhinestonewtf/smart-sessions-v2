@@ -55,6 +55,23 @@ import {
 ///      the consumable actually spent is the one being skipped. Rejecting one policy on two
 ///      layers closes the easiest way to get a non-discriminating validator into a slot; it does
 ///      not close the general case.
+/// @dev A SECOND INSTALL-TIME REQUIREMENT, and the sharper of the two: each sub-policy must be
+///      configured for the SAME settlement contract this policy reads nonces from. The executor
+///      sub-policy pins its own `intentExecutor` at init and uses it as the EIP-712
+///      `verifyingContract`; this policy reads consumables from its own `INTENT_EXECUTOR`
+///      immutable. Nothing here binds the two - `supportsInterface` proves the layer is an
+///      `I1271Policy`, not that it watches the same contract.
+///
+///      Diverge them and the guarantee is void, silently: a settlement validates against the
+///      configured executor and burns ITS nonce, while `spentElsewhere` reads this policy's
+///      immutable, finds it clean, and leaves the Permit2 route open. The session spends twice
+///      with every individual check passing. There is no revert and no event - the only symptom
+///      is the second spend.
+///
+///      Deliberately not enforced in code: `getIntentExecutor` would let this contract read the
+///      value back after init and reject a mismatch, at the cost of the multiplexer knowing one
+///      sub-policy's concrete type. That tradeoff was declined, so the check belongs to whoever
+///      builds the init data. Verify it there.
 /// @dev What is actually guaranteed: at most one settlement THROUGH THIS SESSION, on one chain.
 ///      That is narrower than "the account spends once", and the gap is not theoretical - the
 ///      intent executor exposes `executeOpsWithoutSignature`, which moves the account's value with

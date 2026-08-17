@@ -22,8 +22,8 @@ import {
 ///      other (e.g. recompute the digest but feed a tampered blob).
 contract IntentExecutorTestUtils {
     /// @dev Builds the inner `Operation.data` from a list of ERC-7579 executions.
-    ///      `vt` byte 0 = `Type.ERC7579` (= 3), byte 1 = signature mode (irrelevant for
-    ///      hashing). The rest of `data` is `abi.encode(Execution[])`.
+    ///      `vt` byte 0 = `SmartExecutionLib.Type.ERC7579` (= 2), byte 1 = signature mode
+    ///      (irrelevant for hashing). The rest of `data` is `abi.encode(Execution[])`.
     function _opData(Execution[] memory calls) internal pure returns (bytes memory) {
         return bytes.concat(bytes2(0x0200), abi.encode(calls));
     }

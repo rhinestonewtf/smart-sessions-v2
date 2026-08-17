@@ -30,15 +30,16 @@ Mirrors `Permit2ClaimPolicy._decodePermit2Header` and
 inline. The three are not linked: if either layout changes, a policy reading
 these keeps reading a stale window and answers wrongly rather than reverting.
 
-Verification status, stated plainly because one half cannot be checked here:
-20 is confirmed against `Permit2ClaimPolicy._decodePermit2Header`, which reads
-data[20:52] and folds that nonce into the digest it compares against `hash`, so
-the pin reads a digest-bound field. 22 has no counterpart in this repo -
-`BaseIntentExecutorPolicy` lives on the settlement-layer branch and is not
-vendored here - so it is currently trusted rather than proven. Cross-assert it
-against the real decoder as soon as that contract lands, and note the payload's
-leading byte is a `variant`: a second variant carrying an extra field ahead of
-the nonce would move this offset.
+Both are asserted against the real decoders in `realExecutorLayer`. 20 matches
+`Permit2ClaimPolicy._decodePermit2Header`, which reads data[20:52] and folds
+that nonce into the digest it compares against `hash`, so the pin reads a
+digest-bound field. 22 matches `BaseIntentExecutorPolicy._validateClaim` and is
+read out of a blob built by that suite's own helpers. Shifting either kills
+tests rather than passing silently.
+
+The executor payload's leading byte is a `variant`: a second variant carrying
+an extra field ahead of the nonce would move this offset, and only the
+`realExecutorLayer` assertion would catch it.
 
 //////////////////////////////////////////////////////////////*/
 

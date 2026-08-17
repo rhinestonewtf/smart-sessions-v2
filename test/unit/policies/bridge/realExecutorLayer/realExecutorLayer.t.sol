@@ -21,6 +21,7 @@ import { IntentExecutorTestUtils } from "../../settlementlayer/IntentExecutorTes
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
+import { BridgeSessionStorageLib } from "@policies/bridge/lib/BridgeSessionStorageLib.sol";
 import {
     LAYER_INTENT_EXECUTOR,
     INTENT_EXECUTOR_NONCE_START,
@@ -35,6 +36,8 @@ import { NO_GASREFUND } from "@policies/settlementlayer/shared/types/IntentExecu
 /// by that suite's own helpers — so the bytes are identical to what the real policy is tested
 /// against, and the pin is read out of a genuine SingleChainOps blob.
 contract BridgeSessionPolicy_realExecutorLayer_Test is Test, IntentExecutorTestUtils {
+    using BridgeSessionStorageLib for ConfigId;
+
     BridgeSessionPolicy internal policy;
     StaticIntentExecutorPolicy internal executorLayer;
     RelayAdapter internal adapter;
@@ -207,6 +210,41 @@ contract BridgeSessionPolicy_realExecutorLayer_Test is Test, IntentExecutorTestU
         }
 
         assertEq(read, PINNED, "the pin must sit exactly where the policy reads it");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            THE UNBOUND VERIFIER
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Init accepts a sub-policy configured for a settlement contract this multiplexer does
+    ///      not watch. `supportsInterface` proves the layer is an `I1271Policy`; nothing proves it
+    ///      verifies against the same executor `spentElsewhere` reads nonces from.
+    ///
+    ///      That gap voids the guarantee. A settlement bound to the configured executor burns ITS
+    ///      nonce, while the exclusion check reads this multiplexer's immutable and finds it
+    ///      clean, so the Permit2 route stays open and the session spends twice.
+    ///
+    ///      Enforcing it in code was declined in favour of the install-time requirement documented
+    ///      on `BridgeSessionPolicy`. This test exists so the decision stays visible and so the
+    ///      day someone adds the check, a red test tells them the doc needs deleting.
+    ///
+    ///      It also reads on this file's own setUp, which means every other assertion here runs
+    ///      against a mismatched pair - fine for the offsets and the pin, which do not touch the
+    ///      executor address, but worth knowing when reading the exclusion cases below.
+    function test_initAcceptsASubPolicyBoundToADifferentExecutor() public {
+        address watched = address(policy.INTENT_EXECUTOR());
+
+        // `getIntentExecutor` keys on msg.sender, so read it as the multiplexer that installed it
+        vm.prank(address(policy));
+        address verified = executorLayer.getIntentExecutor(
+            configId.toLayerConfigId(multiplexer, 1, LAYER_INTENT_EXECUTOR), account
+        );
+
+        assertTrue(verified != address(0), "the sub-policy is initialized");
+        assertTrue(
+            verified != watched,
+            "this file's setUp already diverges - if this ever fails, the setUp was fixed"
+        );
     }
 
     /*//////////////////////////////////////////////////////////////
