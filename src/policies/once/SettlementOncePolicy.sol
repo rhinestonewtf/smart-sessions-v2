@@ -31,12 +31,27 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      The Permit2 route - Across and Eco, which share one bitmap - arrives on
 ///      `check1271SignedAction`. Each closes the other's diagonal:
 ///
-///        executor settles  -> burns `executorSpent`  -> the 1271 side reads it and refuses
-///        Permit2  settles  -> burns Permit2's bitmap -> `checkAction` reads it and refuses
+///        executor settles  -> burns $spent[mux][account][N] -> the 1271 side reads it, refuses
+///        Permit2  settles  -> burns Permit2's bitmap        -> `checkAction` reads it, refuses
 ///
 ///      Uniqueness WITHIN a family is free: Permit2 rejects a second spend of its nonce, and
 ///      the executor consumes its own nonce before validating. This policy only closes the
 ///      cross-family cases, exactly as the 1271 multiplexer does.
+///
+/// @dev The spend record is keyed on the PINNED NONCE, not the ConfigId. That is not a style
+///      choice - keying it on ConfigId is silently broken, and was, until an audit caught it.
+///      SmartSessions gives each policy SLOT its own ConfigId:
+///        action  keccak(account, keccak(permissionId, actionId))
+///        1271    keccak(account, keccak("ERC1271: ", permissionId))
+///      They can never be equal, so a flag written by one half under its own ConfigId is
+///      invisible to the other and the cross-family exclusion silently never fires. The nonce is
+///      the only value both surfaces can name identically.
+///
+/// @dev INSTALL-TIME REQUIREMENT, third, and a direct consequence of the above: the two surfaces
+///      are configured by SEPARATE initData blobs, and both must pin the SAME nonce. Neither half
+///      can see the other's config, so nothing here can check it. Pin different values and the
+///      halves key different records and stop excluding each other - the same silent failure the
+///      ConfigId keying had.
 ///
 /// @dev INSTALL-TIME REQUIREMENT, and the sharp edge of this design. Action policies are
 ///      invoked once per execution in the batch, so this policy MUST be installed on an
@@ -73,11 +88,9 @@ contract SettlementOncePolicy is IActionPolicy, I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @param configured Whether a nonce has been pinned for this configuration
-    /// @param executorSpent Whether the executor route has already settled
     /// @param nonce The pinned nonce, used for the Permit2 pin and the bitmap lookup
     struct Session {
         bool configured;
-        bool executorSpent;
         uint256 nonce;
     }
 
@@ -102,8 +115,20 @@ contract SettlementOncePolicy is IActionPolicy, I1271Policy {
                                  STATE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev configId => multiplexer => account => session
+    /// @dev configId => multiplexer => account => session. Holds the PIN only. ConfigId is a
+    ///      per-policy-slot identity: SmartSessions derives it as
+    ///      `keccak(account, keccak(permissionId, actionId))` for the action surface and
+    ///      `keccak(account, keccak("ERC1271: ", permissionId))` for the 1271 surface, so the two
+    ///      halves of this policy are ALWAYS handed different values and each gets its own entry.
+    ///      That is correct for configuration; it is fatal for shared state.
     mapping(ConfigId => mapping(address => mapping(address => Session))) internal $sessions;
+
+    /// @dev multiplexer => account => nonce => spent. Holds the SPEND.
+    ///      Keyed on the pinned nonce rather than the ConfigId, because the nonce is the one
+    ///      value both surfaces can name identically: the action half takes it from its own
+    ///      config, the 1271 half reads it out of the settlement payload and pins it. Everything
+    ///      else in scope differs across the two surfaces or is absent from one of them.
+    mapping(address => mapping(address => mapping(uint256 => bool))) internal $spent;
 
     constructor(ISignatureTransfer permit2) {
         PERMIT2 = permit2;
@@ -127,12 +152,16 @@ contract SettlementOncePolicy is IActionPolicy, I1271Policy {
     {
         if (initData.length != 32) revert InvalidInitDataLength(initData.length);
 
+        uint256 nonce = uint256(bytes32(initData[0:32]));
+
         Session storage $session = $sessions[configId][msg.sender][account];
-        $session.nonce = uint256(bytes32(initData[0:32]));
+        $session.nonce = nonce;
         $session.configured = true;
-        // Re-enabling this configuration restores the session's single spend, matching the
-        // 1271 multiplexer, where a re-enable installs a fresh generation.
-        $session.executorSpent = false;
+
+        // Re-enabling restores the session's single spend. Note this clears the SHARED record,
+        // so installing the second surface of the same session also clears it - which is
+        // harmless only because both installs happen before either can settle.
+        $spent[msg.sender][account][nonce] = false;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -141,9 +170,10 @@ contract SettlementOncePolicy is IActionPolicy, I1271Policy {
 
     /// @notice Consumes the session's single spend for the executor route
     /// @dev Not `view`, which is the whole point: this is the only surface on which a session
-    ///      policy can record that a settlement happened. The nonce is never read here because
-    ///      it is not reachable - `checkAction` receives no nonce and no digest - and it does
-    ///      not need to be, since the flag below is what bounds repetition.
+    ///      policy can record that a settlement happened. The nonce is not reachable from the
+    ///      arguments - `checkAction` receives no nonce and no digest - so it is taken from this
+    ///      configuration, and it IS load-bearing here: it keys both the Permit2 bitmap read and
+    ///      the shared spend record. Install this surface with the same nonce as the 1271 one.
     /// @param id The configuration
     /// @param account The account settling
     /// @return VALIDATION_SUCCESS on the first settlement, VALIDATION_FAILED afterwards
@@ -161,11 +191,14 @@ contract SettlementOncePolicy is IActionPolicy, I1271Policy {
         Session storage $session = $sessions[id][msg.sender][account];
 
         if (!$session.configured) return VALIDATION_FAILED;
-        if ($session.executorSpent) return VALIDATION_FAILED;
-        // EXCLUDE: the Permit2 family settled first, so this route is closed
-        if (_permit2Spent(account, $session.nonce)) return VALIDATION_FAILED;
 
-        $session.executorSpent = true;
+        uint256 nonce = $session.nonce;
+
+        if ($spent[msg.sender][account][nonce]) return VALIDATION_FAILED;
+        // EXCLUDE: the Permit2 family settled first, so this route is closed
+        if (_permit2Spent(account, nonce)) return VALIDATION_FAILED;
+
+        $spent[msg.sender][account][nonce] = true;
         emit ExecutorSettled(id, account);
 
         return VALIDATION_SUCCESS;
@@ -199,32 +232,35 @@ contract SettlementOncePolicy is IActionPolicy, I1271Policy {
         Session storage $session = $sessions[id][msg.sender][account];
 
         if (!$session.configured) return false;
-        // EXCLUDE: the executor family settled first
-        if ($session.executorSpent) return false;
 
         // BIND: the settlement must carry the pinned nonce
         if (signature.length < PERMIT2_NONCE_START + NONCE_LENGTH) return false;
         uint256 presented =
             uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));
 
-        return presented == $session.nonce;
+        if (presented != $session.nonce) return false;
+
+        // EXCLUDE: the executor family settled first. Read under the nonce just pinned, which is
+        // the same key the action half burns under - not this surface's ConfigId, which the
+        // action half can never write.
+        return !$spent[msg.sender][account][presented];
     }
 
     /*//////////////////////////////////////////////////////////////
                                   VIEWS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Whether the executor route has consumed this session's spend
+    /// @notice Whether the executor route has consumed the spend for a pinned nonce
     function isExecutorSpent(
-        ConfigId id,
         address multiplexer,
-        address account
+        address account,
+        uint256 nonce
     )
         external
         view
         returns (bool)
     {
-        return $sessions[id][multiplexer][account].executorSpent;
+        return $spent[multiplexer][account][nonce];
     }
 
     /// @notice The nonce pinned for this configuration
