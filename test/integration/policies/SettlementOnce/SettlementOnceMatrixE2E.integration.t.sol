@@ -543,4 +543,35 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
 
         assertTrue(_permit2Burned(PINNED), "an honest blob on the pinned nonce settles");
     }
+
+    /*//////////////////////////////////////////////////////////////
+                          THE PIN ITSELF, END TO END
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Every other refusal on this surface goes through `$spent`. This one goes through the
+    ///      PIN: the blob is HONEST, so `Permit2ClaimPolicy` is satisfied and the digest matches
+    ///      — the only thing left that can refuse it is the once-policy comparing the presented
+    ///      nonce to the one it was installed with. Delete that comparison and nothing else in
+    ///      this file notices.
+    function test_anHonestSettlementOnAnUnpinnedNonceIsRefused() public {
+        _enableOnceSession(true, true);
+
+        bytes memory adapterCalldata = _preparePermit2Claiming({ realNonce: 9001, blobNonce: 9001 });
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
+    /// @dev CONTROL. The identical settlement — same real nonce, same honest blob — lands once
+    /// the
+    ///      once-policy is off the 1271 surface. This isolates the PIN from the nonce value, which
+    ///      the co-installation contrast above cannot do on its own: that pair varies both the lie
+    ///      and the nonce, so it attributes the lie but says nothing about 9001 itself.
+    function test_control_anUnpinnedNonceSettlesWithoutTheOncePolicy() public {
+        _enableOnceSession(true, false);
+
+        _settleViaPermit2Claiming({ realNonce: 9001, blobNonce: 9001 });
+
+        assertTrue(_permit2Burned(9001), "an unpinned nonce is open when nothing pins it");
+    }
 }

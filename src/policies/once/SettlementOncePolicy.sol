@@ -34,9 +34,12 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///        executor settles  -> burns $spent[mux][account][N] -> the 1271 side reads it, refuses
 ///        Permit2  settles  -> burns Permit2's bitmap        -> `checkAction` reads it, refuses
 ///
-///      Uniqueness WITHIN a family is free: Permit2 rejects a second spend of its nonce, and
-///      the executor consumes its own nonce before validating. This policy only closes the
-///      cross-family cases, exactly as the 1271 multiplexer does.
+///      Uniqueness WITHIN a family is free on the Permit2 side only: Permit2 rejects a second
+///      spend of the same nonce. It is NOT free on the executor side. The executor rejects a
+///      replay of the same nonce, but the settler picks that nonce, so a fresh one costs nothing
+///      and the route is unbounded without help. Closing executor -> executor is `$spent`'s job,
+///      not the executor's - which is why deleting it does not merely weaken a cross-family
+///      guarantee, it reopens the repeat this policy exists to stop.
 ///
 /// @dev The spend record is keyed on the PINNED NONCE, not the ConfigId. That is not a style
 ///      choice - keying it on ConfigId is silently broken, and was, until an audit caught it.

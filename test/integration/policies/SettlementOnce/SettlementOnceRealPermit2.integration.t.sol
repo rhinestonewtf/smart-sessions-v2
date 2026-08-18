@@ -145,14 +145,24 @@ contract SettlementOnceRealPermit2_Test is Test, CompactEnvironment {
         assertFalse(_executorSettles(), "the policy must read the same bit Permit2 wrote");
     }
 
-    /// @dev Fuzzed over word boundaries, where a wrong shift would silently disagree
+    /// @dev Fuzzed over word boundaries, where a wrong shift would silently disagree.
+    ///
+    ///      The negative leg runs on a nonce this policy has NEVER spent, and that is the whole
+    ///      test. Re-pinning the same nonce does not undo the first leg's burn — `$spent` is not
+    ///      cleared on init — so `checkAction`'s own spend check would satisfy the assertion and
+    ///      `_permit2Spent` would never be reached. The earlier version did exactly that and
+    ///      passed with the bitmap read deleted.
     function testFuzz_policyReadMatchesRealPermit2Bitmap(uint256 nonce) public {
-        _enable(nonce);
+        uint256 fresh;
+        unchecked {
+            fresh = nonce + 1;
+        }
 
+        _enable(nonce);
         assertTrue(_executorSettles(), "unburned: the executor route is open");
 
-        _enable(nonce); // restore the spend consumed by the assertion above
-        _burnRealPermit2Nonce(nonce);
+        _enable(fresh);
+        _burnRealPermit2Nonce(fresh);
 
         assertFalse(_executorSettles(), "burned on the real contract: the route must close");
     }
