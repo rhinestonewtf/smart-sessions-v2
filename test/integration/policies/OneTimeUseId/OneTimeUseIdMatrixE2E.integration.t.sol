@@ -229,6 +229,27 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         _settleViaExecutor(executorNonce, 42);
     }
 
+    /// @dev The same settlement with the injected `consume` OMITTED. This is what a settler who
+    ///      can choose their own ops would build, and it is the shape the install-time
+    ///      requirement exists to forbid.
+    function _settleViaExecutorWithoutConsume(uint256 executorNonce, uint256 param) internal {
+        Execution[] memory calls = new Execution[](1);
+        calls[0] = Execution({
+            target: address(env.target),
+            value: 0,
+            callData: abi.encodeCall(MockTarget.targetFn, (param))
+        });
+
+        IStandaloneIntentExecutor.SingleChainOps memory signedOps;
+        signedOps.account = env.smartAccount1.account;
+        signedOps.nonce = executorNonce;
+        signedOps.ops = SmartExecutionLib.SigMode.EMISSARY_EXECUTION.encode(calls);
+        signedOps.signature = _emissarySig();
+
+        vm.prank(env.solver.addr);
+        env.intentExecutor.executeSinglechainOps(signedOps);
+    }
+
     function _burned() internal view returns (bool) {
         return oncePolicy.isConsumed($intent.sponsor, ID);
     }
@@ -321,6 +342,42 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
 
         vm.expectRevert();
         _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    THE INSTALL-TIME REQUIREMENT, DEMONSTRATED
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev THE residual, and the one thing this policy cannot enforce for itself. `checkAction`
+    ///      only READS; the burn is the injected `consume`. A settlement that omits it therefore
+    ///      burns nothing, and the session stays open however many times it is repeated.
+    ///
+    ///      The guarantee is "a settlement which DOES burn cannot be followed by another", NOT
+    ///      "every settlement burns". Closing the gap is an install-time obligation — the
+    /// injected
+    ///      call must sit inside the SIGNED intent so removing it invalidates the signature — and
+    ///      nothing in the contract can check that. Asserted here rather than described, so the
+    ///      cost of getting the install wrong is visible.
+    function test_aSettlementOmittingConsumeIsUnbounded() public {
+        _enableSession(true);
+
+        _settleViaExecutorWithoutConsume(0, 42);
+        assertFalse(_burned(), "nothing burned, because nothing called consume");
+
+        _settleViaExecutorWithoutConsume(1, 43);
+        assertEq(env.target.param(), 43, "and so a second settlement lands");
+    }
+
+    /// @dev The contrast: the identical pair WITH the injected call is refused on the second.
+    ///      Together these two say exactly what the requirement buys.
+    function test_theSamePairWithConsumeIsRefused() public {
+        _enableSession(true);
+
+        _settleViaExecutor(0, 42);
+        assertTrue(_burned(), "the injected call burned");
+
+        vm.expectRevert();
+        _settleViaExecutor(1, 43);
     }
 
     /// @dev CONTROL for Permit2 -> executor
