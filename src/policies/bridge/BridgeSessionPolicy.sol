@@ -64,16 +64,11 @@ import {
 ///      immutable. Nothing here binds the two - `supportsInterface` proves the layer is an
 ///      `I1271Policy`, not that it watches the same contract.
 ///
-///      Diverge them and the guarantee is void, silently: a settlement validates against the
-///      configured executor and burns ITS nonce, while `spentElsewhere` reads this policy's
-///      immutable, finds it clean, and leaves the Permit2 route open. The session spends twice
-///      with every individual check passing. There is no revert and no event - the only symptom
-///      is the second spend.
-///
-///      Deliberately not enforced in code: `getIntentExecutor` would let this contract read the
-///      value back after init and reject a mismatch, at the cost of the multiplexer knowing one
-///      sub-policy's concrete type. That tradeoff was declined, so the check belongs to whoever
-///      builds the init data. Verify it there.
+///      Init still accepts a diverged pair, but the consequence is NOT the silent double-spend an
+///      earlier version of this comment described. `requestSender` closes it: a sub-policy pinned
+///      to executor E' only ever sees settlements sent by E', and this policy refuses those at the
+///      tag binding below, before the sub-policy is consulted. Divergence therefore fails CLOSED -
+///      that layer simply never validates - rather than spending twice.
 /// @dev What is actually guaranteed: at most one settlement THROUGH THIS SESSION, on one chain.
 ///      That is narrower than "the account spends once", and the gap is not theoretical - the
 ///      intent executor exposes `executeOpsWithoutSignature`, which moves the account's value with

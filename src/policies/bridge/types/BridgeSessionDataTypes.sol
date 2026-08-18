@@ -30,12 +30,19 @@ Mirrors `Permit2ClaimPolicy._decodePermit2Header` and
 inline. The three are not linked: if either layout changes, a policy reading
 these keeps reading a stale window and answers wrongly rather than reverting.
 
-Both are asserted against the real decoders in `realExecutorLayer`. 20 matches
-`Permit2ClaimPolicy._decodePermit2Header`, which reads data[20:52] and folds
-that nonce into the digest it compares against `hash`, so the pin reads a
-digest-bound field. 22 matches `BaseIntentExecutorPolicy._validateClaim` and is
-read out of a blob built by that suite's own helpers. Shifting either kills
-tests rather than passing silently.
+They are anchored differently, and only one of them in `realExecutorLayer`.
+
+22 is anchored there: `test_realExecutorSettlement_validates` drives the real
+`BaseIntentExecutorPolicy._validateClaim`, which reads data[22:54], so shifting
+either side breaks that test.
+
+20 is NOT anchored by that suite. `test_permit2NonceOffsetMatchesTheRealHeaderLayout`
+builds its own header and never touches `Permit2ClaimPolicy` - swapping that
+decoder's nonce and deadline windows leaves it green. What does hold 20 is
+`BridgeSessionEndToEnd.test_realPermit2SettlementThroughTheMultiplexer`, where a
+wrong offset makes a real settlement fail, plus `Permit2ClaimPolicy`'s own suite.
+20 does read a digest-bound field: `_decodePermit2Header` folds that nonce into
+the digest it compares against `hash`.
 
 The executor payload's leading byte is a `variant`: a second variant carrying
 an extra field ahead of the nonce would move this offset, and only the

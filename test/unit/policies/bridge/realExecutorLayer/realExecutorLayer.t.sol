@@ -198,12 +198,13 @@ contract BridgeSessionPolicy_realExecutorLayer_Test is Test, IntentExecutorTestU
         assertEq(read, PINNED, "the pin must sit exactly where the policy reads it");
     }
 
-    /// @dev The Permit2 side of the same claim. `Permit2ClaimPolicy` reads a header of
-    ///      `arbiter ‖ nonce ‖ deadline` with no prefix, so the pin sits at 20. This asserts
-    /// the
-    ///      layout only — the Permit2 policy's own behaviour is covered by its suite, and this
-    ///      policy's dispatch to it by the stand-in in `exactlyOnce`.
-    function test_permit2NonceOffsetMatchesTheRealHeaderLayout() public {
+    /// @dev CAUTION: this is NOT anchored to `Permit2ClaimPolicy`. It builds its own header and
+    ///      asserts only that `abi.encodePacked` puts a 32-byte word after a 20-byte address —
+    ///      swap that decoder's nonce and deadline windows and this stays green. Kept as a
+    ///      readable statement of the layout the constant assumes; the offset is actually held by
+    ///      `BridgeSessionEndToEnd.test_realPermit2SettlementThroughTheMultiplexer`, where a wrong
+    ///      value makes a real settlement fail.
+    function test_permit2NonceOffsetMatchesTheAssumedHeaderLayout() public {
         bytes memory header = abi.encodePacked(makeAddr("arbiter"), PINNED, block.timestamp + 1);
 
         uint256 read;

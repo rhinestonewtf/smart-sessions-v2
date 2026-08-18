@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IIntentExecutorNonces } from "@policies/bridge/interfaces/IIntentExecutorNonces.sol";
+import { IBridgeSessionPolicy } from "@policies/bridge/interfaces/IBridgeSessionPolicy.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 
 // Types
@@ -52,7 +53,11 @@ library BridgeSessionValidationLib {
     /// @param layer The settlement layer
     /// @return start The offset of the nonce
     function nonceStart(uint8 layer) internal pure returns (uint256 start) {
-        return layer == LAYER_PERMIT2 ? PERMIT2_NONCE_START : INTENT_EXECUTOR_NONCE_START;
+        if (layer == LAYER_PERMIT2) return PERMIT2_NONCE_START;
+        if (layer == LAYER_INTENT_EXECUTOR) return INTENT_EXECUTOR_NONCE_START;
+        // Exhaustive, not a catch-all else: a third layer inheriting the executor's offset would
+        // read the pin from the wrong window rather than being refused.
+        revert IBridgeSessionPolicy.UnknownLayer(layer);
     }
 
     /// @notice Checks the settlement carries the pinned nonce and no other layer has spent it
@@ -143,24 +148,5 @@ library BridgeSessionValidationLib {
         uint256 word = permit2.nonceBitmap(account, nonce >> 8);
 
         return word & (uint256(1) << (nonce & 0xff)) != 0;
-    }
-
-    /// @notice Whether the intent executor has spent this nonce in any of its three namespaces
-    /// @param executor The intent executor to consult
-    /// @param nonce The nonce to check
-    /// @param account The account the nonce belongs to
-    /// @return True if any namespace has consumed it
-    function executorSpent(
-        IIntentExecutorNonces executor,
-        uint256 nonce,
-        address account
-    )
-        internal
-        view
-        returns (bool)
-    {
-        return executor.isStandaloneIntentNonceConsumed(nonce, account)
-            || executor.isPermit2IntentNonceConsumed(nonce, account)
-            || executor.isCompactIntentNonceConsumed(nonce, account);
     }
 }
