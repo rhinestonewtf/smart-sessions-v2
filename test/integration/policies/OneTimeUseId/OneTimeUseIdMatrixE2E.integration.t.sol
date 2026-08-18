@@ -32,24 +32,21 @@ import {
 } from "@compact-utils/executor/interfaces/IStandaloneIntent.sol";
 import { FIELD_ARBITER, MODE_CHECK_STORAGE } from "@policies/claim/base/types/BaseDataTypes.sol";
 
-/// @title OneTimeUseIdPolicy — the full matrix, end to end
-/// @notice Both routes settle for real, and BOTH reach the policy through the same surface:
+/// @title OneTimeUseIdPolicy — the E2E harness
+/// @notice Both routes settle for real. The policy sits on BOTH surfaces and neither of them
+///         knows anything about a settlement layer:
 ///
 ///   Permit2   router -> arbiter -> _permit2PreClaimOps
-///                     -> executePreClaimOpsWithPermit2Stub
-///                     -> sigMode EMISSARY_EXECUTION -> emissary.verifyExecution
-///                     -> _enforceActionPolicies -> checkAction        (read)
-///                     -> executeOps(preClaimOps)  -> consume          (burn)
-///                     then _unlockPermit2 -> real Permit2 -> isValidSignature
+///                       |- isValidSignature          -> check1271SignedAction  (read)
+///                       `- executeOps(preClaimOps)   -> consume                (BURN)
+///                     -> _unlockPermit2 -> Permit2.permitWitnessTransferFrom
+///                       `- account.isValidSignature  -> check1271SignedAction  (read, tolerated)
 ///
 ///   executor  solver -> StandaloneIntentExecutor.executeSinglechainOps
 ///                     -> sigMode EMISSARY_EXECUTION -> emissary.verifyExecution
-///                     -> _enforceActionPolicies -> checkAction        (read)
-///                     -> executeOps               -> consume          (burn)
-///
-/// One read site and one burn site serve both families, which is the whole point: nothing here
-/// names a settlement layer, parses a settlement payload, or pins a settlement nonce.
-contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
+///                       |- _enforceActionPolicies    -> checkAction            (read)
+///                       `- executeOps                -> consume                (BURN)
+abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     using SmartExecutionLib for *;
     using ModuleKitHelpers for *;
     using TestHelperLib for *;
@@ -75,7 +72,7 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         vm.prank(env.smartAccount1.account);
         env.compact.assignEmissary(env.lockTag, address(smartSessionEmissary));
 
-        _setPreClaimOpsToConsume(SmartExecutionLib.SigMode.EMISSARY_EXECUTION);
+        _injectConsumeIntoPreClaimOps();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -83,9 +80,9 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev Puts the injected `consume` into the order's pre-claim ops and re-derives the hashes
-    ///      it feeds. The sigMode is a parameter because only three of the seven reach the action
-    ///      surface at all — see the sigMode tests at the bottom.
-    function _setPreClaimOpsToConsume(SmartExecutionLib.SigMode sigMode) internal {
+    ///      that cover them. The default sigMode is a 1271 one, which is what the arbiter route
+    ///      needs: the pre-claim validation and the unlock share one signature envelope.
+    function _injectConsumeIntoPreClaimOps() internal {
         Execution[] memory ops = new Execution[](1);
         ops[0] = Execution({
             target: address(oncePolicy),
@@ -93,7 +90,7 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
             callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID))
         });
 
-        $intent.element.mandate.originOps = ops.toOperation(sigMode);
+        $intent.element.mandate.originOps = ops.toOperation();
 
         $intent.permit2Hash = hashPermit2(
             $intent.sponsor, $intent.nonce, $intent.expires, arbiter, $intent.element
@@ -101,23 +98,25 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         $intent.digest = _hashTypedDataPermit2(block.chainid, $intent.permit2Hash);
     }
 
-    /// @dev The once-policy goes on EVERY action the session permits — that is the install-time
-    ///      requirement, and it is what stops a settler composing a batch out of some other
-    ///      permitted action to dodge the read. It is NOT on the 1271 list: the arbiter route
-    ///      validates 1271 twice with the burn in between, so a policy there would refuse its own
-    ///      settlement.
-    /// @param bounded false swaps the once-policy for a permissive one, so the list is non-empty
+    /// @dev The once-policy goes on the 1271 list AND on EVERY action. The 1271 list is an AND, so
+    ///      `Permit2ClaimPolicy` still bounds WHAT may settle while this bounds HOW MANY TIMES.
+    /// @param bounded false swaps the once-policy for permissive ones, so the lists are non-empty
     ///        but nothing bounds repetition. An EMPTY list is not the control — minPolicies is 1.
     function _enableSession(bool bounded) internal {
         activeFieldMode = FIELD_ARBITER;
 
-        PolicyData[] memory erc1271Policies = new PolicyData[](1);
+        PolicyData[] memory erc1271Policies = new PolicyData[](bounded ? 2 : 1);
         erc1271Policies[0] = PolicyData({
             policy: address(permit2ClaimPolicy),
             initData: abi.encodePacked(
                 _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE), uint8(1), arbiter
             )
         });
+        if (bounded) {
+            erc1271Policies[1] = PolicyData({
+                policy: address(oncePolicy), initData: abi.encodePacked(bytes32(ID))
+            });
+        }
 
         PolicyData[] memory actionPolicies = new PolicyData[](1);
         actionPolicies[0] = bounded
@@ -164,6 +163,8 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
                             PERMIT2 ROUTE (REAL)
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev Split from the claim because `_createPolicyData` makes an external staticcall — an
+    ///      `expectRevert` armed before it binds to THAT call and passes on the prepare step.
     function _preparePermit2Settlement() internal returns (bytes memory) {
         Types.Order memory order = _getPermit2Order();
         $intent.userEmissarySig = _createSmartSessionSignature(_createPolicyData());
@@ -184,8 +185,8 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
                            EXECUTOR ROUTE (REAL)
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev The emissary path takes a different envelope from the 1271 path: the mode,
-    ///      permissionId and packed signature directly, with no module-address prefix.
+    /// @dev The emissary path takes a different envelope from the 1271 path: mode, permissionId
+    ///      and packed signature directly, with no module-address prefix.
     function _emissarySig() internal view returns (bytes memory) {
         bytes memory validatorSig =
             abi.encodePacked(bytes32(uint256(0x1234)), bytes32(uint256(0x5678)), uint8(27));
@@ -198,7 +199,9 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         );
     }
 
-    /// @dev A REAL executor settlement carrying the same injected `consume`
+    /// @dev Parameterised on the executor nonce because the executor refuses a REPLAY of the same
+    ///      nonce on its own. A "second settlement fails" test on a reused nonce would be refused
+    ///      by the executor before any policy runs, and would prove nothing.
     function _settleViaExecutor(uint256 executorNonce, uint256 param) internal {
         Execution[] memory calls = new Execution[](2);
         calls[0] = Execution({
@@ -229,33 +232,14 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
     function _burned() internal view returns (bool) {
         return oncePolicy.isConsumed($intent.sponsor, ID);
     }
+}
 
-    /*//////////////////////////////////////////////////////////////
-             THE FOUNDATION: THE ARBITER ROUTE REACHES checkAction
-    //////////////////////////////////////////////////////////////*/
-
-    /// @dev THE claim the whole design rests on. If the Permit2 arbiter route never reached the
-    ///      action surface, this policy could not bound it at all — there is no 1271 half to fall
-    ///      back on, by design. Asserted by call, not inferred from behaviour.
-    function test_theArbiterRouteReachesTheActionSurface() public {
-        _enableSession(true);
-
-        vm.expectCall(
-            address(oncePolicy), abi.encodeWithSelector(OneTimeUseIdPolicy.checkAction.selector)
-        );
-        _settleViaPermit2();
-    }
-
-    /// @dev ...and the injected execution really does burn, on that same real settlement
-    function test_theArbiterRouteBurnsTheId() public {
-        _enableSession(true);
-
-        assertFalse(_burned(), "clean before");
-        _settleViaPermit2();
-
-        assertTrue(_burned(), "the pre-claim ops consumed the id");
-    }
-
+/// @title Orderings that can be proven inside one transaction
+/// @notice Every ordering here ENDS in an executor settlement, and `checkAction` is strict — it
+///         has no same-transaction tolerance — so the refusal is observable without splitting the
+///         transaction. The orderings that end in a Permit2 settlement cannot be proven this way
+///         and live in their own contracts below.
+contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
     /*//////////////////////////////////////////////////////////////
                           EITHER ROUTE WORKS ALONE
     //////////////////////////////////////////////////////////////*/
@@ -264,7 +248,7 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         _enableSession(true);
         _settleViaPermit2();
 
-        assertTrue(_burned(), "the Permit2 settlement completed and burned");
+        assertTrue(_burned(), "the Permit2 settlement completed, and its pre-claim ops burned");
     }
 
     function test_executorRouteSettles() public {
@@ -276,21 +260,12 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                           ...BUT ONLY ONE OF THEM
+                             ...BUT ONLY ONCE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev ORDERING: executor -> Permit2, the cross-family diagonal
-    function test_executorThenPermit2_refused() public {
-        _enableSession(true);
-        _settleViaExecutor(0);
-
-        bytes memory adapterCalldata = _preparePermit2Settlement();
-
-        vm.expectRevert();
-        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
-    }
-
-    /// @dev ORDERING: Permit2 -> executor, the other diagonal
+    /// @dev ORDERING: Permit2 -> executor. The cross-family diagonal that needed an external
+    ///      consumable in every earlier design. Here the Permit2 settlement's own pre-claim ops
+    ///      burn OUR record, so the executor route reads it directly.
     function test_permit2ThenExecutor_refused() public {
         _enableSession(true);
         _settleViaPermit2();
@@ -309,24 +284,23 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         _settleViaExecutor(1);
     }
 
-    /// @dev ORDERING: Permit2 -> Permit2. Closed by Permit2 itself before any policy runs, so it
-    ///      is asserted here only to say which mechanism owns it.
-    function test_permit2ThenPermit2_refused() public {
+    function test_noFurtherExecutorSettlementOnAnyNonce() public {
         _enableSession(true);
-        _settleViaPermit2();
+        _settleViaExecutor(0);
 
-        bytes memory adapterCalldata = _preparePermit2Settlement();
-
-        vm.expectRevert();
-        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+        for (uint256 i = 1; i <= 5; ++i) {
+            vm.expectRevert();
+            _settleViaExecutor(i);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
                                  CONTROLS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev CONTROL for executor -> executor. Swap in a permissive action policy and the same
-    ///      second settlement on a fresh nonce goes through, so the refusal above is this policy.
+    /// @dev CONTROL for executor -> executor. Swap in permissive policies and the identical second
+    ///      settlement on a fresh nonce lands, so the refusals above are this policy's doing and
+    ///      not the executor's nonce or the harness.
     function test_control_executorRouteIsUnboundedWithoutThePolicy() public {
         _enableSession(false);
 
@@ -336,14 +310,17 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         assertEq(env.target.param(), 43, "the SECOND executor settlement executed");
     }
 
-    /// @dev CONTROL for executor -> Permit2
-    function test_control_executorThenPermit2IsOpenWithoutThePolicy() public {
-        _enableSession(false);
-
-        _settleViaExecutor(0);
+    /// @dev ORDERING: Permit2 -> Permit2, which this policy does NOT own. Permit2 refuses the
+    ///      replay of its own nonce before any policy runs, so this is asserted to record which
+    ///      mechanism covers the cell — not to claim credit for it.
+    function test_permit2ThenPermit2_refusedByPermit2Itself() public {
+        _enableSession(true);
         _settleViaPermit2();
 
-        assertTrue(true, "the Permit2 route is open when nothing bounds it");
+        bytes memory adapterCalldata = _preparePermit2Settlement();
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
     }
 
     /// @dev CONTROL for Permit2 -> executor
@@ -355,35 +332,68 @@ contract OneTimeUseIdMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
 
         assertEq(env.target.param(), 43, "the executor route is open when nothing bounds it");
     }
+}
 
-    /*//////////////////////////////////////////////////////////////
-                      THE sigMode CAVEAT, MADE EXPLICIT
-    //////////////////////////////////////////////////////////////*/
-
-    /// @dev Only three of the seven sigModes route to verifyExecution, and the pre-claim ops carry
-    ///      that byte. Under a 1271-only mode the action surface is never reached on the arbiter
-    ///      route, nothing burns, and the session is not bounded there at all. This is the
-    ///      operational requirement the design carries; it is asserted rather than described.
-    function test_underA1271OnlySigModeTheArbiterRouteNeverReachesThePolicy() public {
-        _setPreClaimOpsToConsume(SmartExecutionLib.SigMode.ERC1271_EMISSARY);
-        _enableSession(true);
-
-        _settleViaPermit2();
-
-        assertFalse(_burned(), "a 1271-only pre-claim mode never reaches the action surface");
+/// @title The orderings that END in a Permit2 settlement
+/// @notice These CANNOT be proven inside one test body, and the reason is the design itself.
+///         The 1271 read tolerates a burn from the transaction currently running — it has to,
+///         because the arbiter route reads 1271 again after its own pre-claim ops have burned.
+///         A forge test body IS one transaction, so a same-body "settle twice" test would be
+///         tolerated and would pass while proving nothing.
+///
+///         Transient storage IS cleared between `setUp` and the test body. Running the first
+///         settlement in `setUp` is therefore the only way to make the second one a genuinely
+///         later transaction.
+abstract contract OneTimeUseIdCrossTx_Base is OneTimeUseIdE2E_Base {
+    /// @dev Overridden by the controls
+    function _bounded() internal view virtual returns (bool) {
+        return true;
     }
 
-    /// @dev ...and the consequence: a second settlement is then NOT refused
-    function test_underA1271OnlySigModeTheArbiterRouteIsUnbounded() public {
-        _setPreClaimOpsToConsume(SmartExecutionLib.SigMode.ERC1271_EMISSARY);
-        _enableSession(true);
+    /// @dev Settlement ONE. Runs in setUp so the test body is a different transaction.
+    function _firstSettlement() internal virtual;
 
+    function setUp() public virtual override {
+        super.setUp();
+        _enableSession(_bounded());
+        _firstSettlement();
+    }
+}
+
+/// @dev ORDERING: executor -> Permit2
+contract OneTimeUseId_ExecutorThenPermit2_Test is OneTimeUseIdCrossTx_Base {
+    function _firstSettlement() internal override {
         _settleViaExecutor(0);
+    }
 
-        assertTrue(_burned(), "the executor route still burns");
+    function test_theFirstSettlementBurned() public view {
+        assertTrue(_burned(), "setUp's executor settlement burned the id");
+    }
 
-        // and yet the Permit2 route, which never consults the action surface under this mode,
-        // is unaffected by that burn
+    function test_permit2IsRefusedInALaterTransaction() public {
+        bytes memory adapterCalldata = _preparePermit2Settlement();
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+}
+
+/// @dev CONTROL for executor -> Permit2
+contract OneTimeUseId_ExecutorThenPermit2_Control_Test is OneTimeUseIdCrossTx_Base {
+    function _bounded() internal view override returns (bool) {
+        return false;
+    }
+
+    function _firstSettlement() internal override {
+        _settleViaExecutor(0);
+    }
+
+    /// @dev The burn still happens — the injected `consume` is in the order either way — so the
+    ///      control is that the settlement LANDS despite it, which isolates the refusal above to
+    ///      the policy reading that burn rather than to anything about the settlement itself.
+    function test_permit2LandsWhenNothingBoundsIt() public {
+        assertTrue(_burned(), "setUp's settlement burned, exactly as in the bounded case");
+
         _settleViaPermit2();
     }
 }
