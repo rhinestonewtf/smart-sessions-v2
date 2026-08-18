@@ -117,6 +117,18 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
             actionPolicies: actionPolicies
         });
 
+        _enable(erc1271Policies, actions, "onceMatrix");
+    }
+
+    /// @dev Enables a session and records its permissionId. Extracted so the tests that need a
+    ///      non-standard policy list can build one without duplicating the session shape.
+    function _enable(
+        PolicyData[] memory erc1271Policies,
+        ActionData[] memory actions,
+        string memory salt
+    )
+        internal
+    {
         ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
         allowedContent[0].contentNames = new string[](1);
         allowedContent[0].contentNames[0] = "";
@@ -124,7 +136,7 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
 
         Session memory session = Session({
             sessionValidator: ISessionValidator(address(yesSessionValidator)),
-            salt: keccak256(abi.encodePacked("onceMatrix", block.timestamp)),
+            salt: keccak256(abi.encodePacked(salt, block.timestamp)),
             sessionValidatorInitData: "mockInitData",
             erc7739Policies: ERC7739Data({
                 allowedERC7739Content: allowedContent, erc1271Policies: erc1271Policies
@@ -139,6 +151,33 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         vm.prank(env.smartAccount1.account);
         PermissionId[] memory ids = smartSessionEmissary.enableSessions(sessions, bytes12(0));
         defaultPermissionId = ids[0];
+    }
+
+    /// @dev The UNSAFE configuration the policy's install-time requirement warns about: the
+    ///      once-policy is the ONLY 1271 policy, so nothing binds the blob it reads to the digest
+    ///      Permit2 actually settles. `minPoliciesToEnforce` is 1, so this is a legal config and
+    ///      nothing rejects it.
+    function _enableOnceSessionAloneOn1271() internal {
+        activeFieldMode = FIELD_ARBITER;
+
+        PolicyData[] memory erc1271Policies = new PolicyData[](1);
+        erc1271Policies[0] = PolicyData({
+            policy: address(oncePolicy), initData: abi.encodePacked(bytes32(PINNED))
+        });
+
+        PolicyData[] memory actionPolicies = new PolicyData[](1);
+        actionPolicies[0] = PolicyData({
+            policy: address(oncePolicy), initData: abi.encodePacked(bytes32(PINNED))
+        });
+
+        ActionData[] memory actions = new ActionData[](1);
+        actions[0] = ActionData({
+            actionTarget: address(env.target),
+            actionTargetSelector: MockTarget.targetFn.selector,
+            actionPolicies: actionPolicies
+        });
+
+        _enable(erc1271Policies, actions, "onceAlone");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -159,6 +198,46 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
 
     function _settleViaPermit2() internal {
         _claim(block.chainid, abi.encodePacked(env.solver.addr), _preparePermit2Settlement());
+    }
+
+    /// @dev Settles for real on `realNonce` while the blob handed to the 1271 policies claims
+    ///      `blobNonce`. Both are built from `$intent.nonce`, so they are built one at a time —
+    ///      which is precisely the divergence a policy that only reads the blob cannot see.
+    /// @dev Builds a settlement that lands for real on `realNonce` while the blob handed to the
+    ///      1271 policies claims `blobNonce`. Both are built from `$intent.nonce`, so they are
+    ///      built one at a time — precisely the divergence a policy that only reads the blob
+    ///      cannot see.
+    ///
+    ///      Kept separate from the claim because `_createPolicyData` makes an external staticcall:
+    ///      an `expectRevert` armed before this would bind to THAT call and pass on the prepare
+    ///      step, never reaching the settlement it is supposed to be asserting about.
+    function _preparePermit2Claiming(
+        uint256 realNonce,
+        uint256 blobNonce
+    )
+        internal
+        returns (bytes memory)
+    {
+        $intent.nonce = blobNonce;
+        $intent.userEmissarySig = _createSmartSessionSignature(_createPolicyData());
+
+        $intent.nonce = realNonce;
+        Types.Order memory order = _getPermit2Order();
+
+        return abi.encodeCall(
+            MockAdapter.mock_permit2_handleClaim,
+            (MockAdapter.ClaimDataPermit2({
+                    order: order, userSigs: Types.Signatures($intent.userEmissarySig, "")
+                }))
+        );
+    }
+
+    function _settleViaPermit2Claiming(uint256 realNonce, uint256 blobNonce) internal {
+        _claim(
+            block.chainid,
+            abi.encodePacked(env.solver.addr),
+            _preparePermit2Claiming(realNonce, blobNonce)
+        );
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -402,5 +481,66 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
 
         vm.expectRevert();
         _settleViaExecutor(0);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    THE CO-INSTALLATION REQUIREMENT, PROVEN
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev The policy documents that its 1271 half MUST share a list with a policy that binds the
+    ///      blob to the digest, and that nothing enforces it. Nothing did — so here is what the
+    ///      unsafe config actually costs.
+    ///
+    ///      The 1271 half reads the nonce out of a caller-supplied blob. Installed alone, a
+    ///      settler presents the pinned nonce on every claim while Permit2 settles a different one
+    ///      each time. The half is `view`, so it burns nothing and has nothing to compare against.
+    function test_aloneOn1271_thePinIsFictionAndTheRouteIsUnbounded() public {
+        _enableOnceSessionAloneOn1271();
+
+        _settleViaPermit2Claiming({ realNonce: 9001, blobNonce: PINNED });
+        _settleViaPermit2Claiming({ realNonce: 9002, blobNonce: PINNED });
+
+        assertTrue(_permit2Burned(9001), "first settlement landed on a nonce nobody pinned");
+        assertTrue(_permit2Burned(9002), "and so did the second");
+        assertFalse(_permit2Burned(PINNED), "while the pinned nonce was never spent at all");
+    }
+
+    /// @dev And it is worse than an unbounded Permit2 route: because the pinned nonce is never
+    ///      actually burned, `checkAction`'s `_permit2Spent` read stays false, so the executor
+    ///      route is still open on top. Two families, one session, three settlements.
+    function test_aloneOn1271_theExecutorRouteStaysOpenOnTop() public {
+        _enableOnceSessionAloneOn1271();
+
+        _settleViaPermit2Claiming({ realNonce: 9001, blobNonce: PINNED });
+        _settleViaExecutor({ executorNonce: 0, param: 43 });
+
+        assertEq(env.target.param(), 43, "the executor settled after a Permit2 settlement");
+    }
+
+    /// @dev The other half of the requirement: with `Permit2ClaimPolicy` co-installed the exact
+    ///      same lie is refused, because the claim policy recomputes the digest from the blob and
+    ///      compares it to `hash`. The 1271 list is an AND, so one honest reader is enough.
+    ///
+    ///      This pair is the requirement — alone it is fiction, together it holds — and it is
+    /// the
+    ///      reason the doc block calls the partner load-bearing rather than advisory.
+    function test_withTheClaimPolicyCoInstalledTheSameLieIsRefused() public {
+        _enableOnceSession(true, true);
+
+        bytes memory adapterCalldata =
+            _preparePermit2Claiming({ realNonce: 9001, blobNonce: PINNED });
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
+    /// @dev CONTROL for the test above: the identical call with a blob that tells the truth
+    ///      settles, so the refusal is the nonce lie and not the unusual nonce.
+    function test_control_anHonestBlobOnTheSameNonceSettles() public {
+        _enableOnceSession(true, true);
+
+        _settleViaPermit2Claiming({ realNonce: PINNED, blobNonce: PINNED });
+
+        assertTrue(_permit2Burned(PINNED), "an honest blob on the pinned nonce settles");
     }
 }
