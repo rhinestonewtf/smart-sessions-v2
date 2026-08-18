@@ -12,9 +12,14 @@ import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.so
 import { VALIDATION_SUCCESS } from "erc7579/interfaces/IERC7579Module.sol";
 
 /// @title SettlementOncePolicy against the REAL Permit2
-/// @notice The unit suite hands this policy a `MockPermit2Bitmap` whose word/bit arithmetic is a
-/// copy of the policy's own — so it could never have caught a mismatch between them. This drives
-/// the same logic against the canonical Permit2 deployed by `CompactEnvironment`.
+/// @notice Drives the policy against the canonical Permit2 deployed by `CompactEnvironment`
+/// rather than a mock bitmap, and against the REAL ConfigId derivations.
+///
+/// NOTE on what this does NOT establish. `_burnRealPermit2Nonce` computes the word and bit itself
+/// and calls `invalidateUnorderedNonces`, so Permit2's own `bitmapPositions()` is not exercised on
+/// the burn side — the formula is still hand-written, just in the test instead of a mock. The
+/// arithmetic IS genuinely cross-checked, but by `SettlementOnceMatrixE2E`, where a real
+/// settlement burns via `_useUnorderedNonce` and the policy has to find the bit Permit2 wrote.
 ///
 /// It also uses the REAL ConfigId derivations, so the two halves are addressed exactly as
 /// SmartSessions addresses them:
@@ -156,9 +161,11 @@ contract SettlementOnceRealPermit2_Test is Test, CompactEnvironment {
                 ACROSS AND ECO SHARE ONE REAL NONCE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev The premise that collapses three settlement layers into two: Permit2's bitmap is keyed
-    ///      (owner, nonce) with no arbiter component, so two distinct arbiters contend for one bit.
-    function test_acrossAndEcoContendForOneRealNonce() public {
+    /// @dev Establishes the STRUCTURAL half of the premise only: Permit2's bitmap is keyed
+    ///      (owner, nonce) with no arbiter component, so an arbiter cannot have its own nonce
+    ///      space. It does NOT settle via either arbiter — no contention is demonstrated here.
+    ///      A real two-arbiter contention test still does not exist on this branch.
+    function test_permit2BitmapHasNoArbiterComponent() public {
         assertTrue(acrossArbiter != ecoArbiter, "two distinct arbiters");
 
         _burnRealPermit2Nonce(PINNED);

@@ -226,9 +226,13 @@ contract ActionSurfaceOnce_Test is Test {
                         LIMITATIONS, ASSERTED NOT ASSUMED
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev checkAction fires once per execution in the batch and cannot tell two actions of one
-    ///      settlement from two settlements. The actionId must occur exactly once per settlement.
-    function test_twoActionsInOneSettlementConsumeTwoSpends() public {
+    /// @dev The install-time requirement, at the policy's own surface: two calls are two spends,
+    ///      and the policy cannot tell whether they came from one batch or two settlements.
+    ///
+    ///      This drives `checkAction` directly, so it does NOT exercise the batch iteration in
+    ///      `PolicyLibV2.checkBatch7579Exec` that would produce the two calls in production. It
+    ///      asserts the policy's behaviour given two calls, not that a batch produces them.
+    function test_twoCallsConsumeTwoSpends() public {
         assertTrue(_executorSettles(), "first action in the batch");
 
         assertFalse(

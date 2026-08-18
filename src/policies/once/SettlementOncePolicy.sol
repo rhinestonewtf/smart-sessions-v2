@@ -47,7 +47,21 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      invisible to the other and the cross-family exclusion silently never fires. The nonce is
 ///      the only value both surfaces can name identically.
 ///
-/// @dev INSTALL-TIME REQUIREMENT, third, and a direct consequence of the above: the two surfaces
+/// @dev INSTALL-TIME REQUIREMENT, and the load-bearing one on the Permit2 side. This policy's
+///      1271 half reads the nonce out of a CALLER-SUPPLIED blob and never binds it to `hash` —
+///      it cannot tell whether the settlement in front of it actually spends the nonce it was
+///      shown. It MUST therefore share its 1271 list with a policy that recomputes the settlement
+///      digest from the same blob and compares it to `hash`; `Permit2ClaimPolicy` does exactly
+///      that and is the intended partner.
+///
+///      Installed ALONE, the pin means nothing: a settler presents the pinned nonce in the blob
+///      on every claim while Permit2 settles a different one each time. The 1271 half is `view`
+///      so it burns nothing, and `_permit2Spent` keeps reading the untouched pinned bit — which
+///      leaves the executor route open too. That is the eleven-settlements shape on the other
+///      surface. `minPoliciesToEnforce` is 1, so installing this alone is a legal configuration
+///      that nothing rejects.
+///
+/// @dev INSTALL-TIME REQUIREMENT, and a direct consequence of the storage note above: the two surfaces
 ///      are configured by SEPARATE initData blobs, and both must pin the SAME nonce. Neither half
 ///      can see the other's config, so nothing here can check it. Pin different values and the
 ///      halves key different records and stop excluding each other - the same silent failure the
