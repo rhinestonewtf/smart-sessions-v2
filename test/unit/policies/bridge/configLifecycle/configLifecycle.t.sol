@@ -9,6 +9,9 @@ import {
 // Interfaces
 import { IBridgeSessionPolicy } from "@policies/bridge/interfaces/IBridgeSessionPolicy.sol";
 
+// Contracts
+import { BridgeSessionPolicy } from "@policies/bridge/BridgeSessionPolicy.sol";
+
 // Mocks
 import { MockSettlementLayerPolicy } from "@mocks/MockSettlementLayer.sol";
 
@@ -157,5 +160,51 @@ contract BridgeSessionPolicy_configLifecycle_Test is BridgeSessionPolicy_Unit_Te
         bytes memory second =
             permit2Layer.getConfig(address(policy), _layerConfigId(2, LAYER_PERMIT2), account);
         assertEq(second.length, 8, "generation 2 has its own config");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        THE TWO SETTLEMENT CONTRACTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev `_expectedSettlerFor` maps each layer to one of the two immutables, so if they are
+    ///      equal every tag validates against the same settler and the binding that makes the
+    ///      unsigned layer tag safe silently becomes a no-op. Refuse the deployment instead.
+    function test_theTwoSettlementContractsMustBeDistinct() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IBridgeSessionPolicy.InvalidSettlementContracts.selector,
+                address(permit2),
+                address(permit2)
+            )
+        );
+        new BridgeSessionPolicy(address(permit2), address(permit2));
+    }
+
+    function test_neitherSettlementContractMayBeZero() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IBridgeSessionPolicy.InvalidSettlementContracts.selector,
+                address(0),
+                address(permit2)
+            )
+        );
+        new BridgeSessionPolicy(address(0), address(permit2));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IBridgeSessionPolicy.InvalidSettlementContracts.selector,
+                address(executor),
+                address(0)
+            )
+        );
+        new BridgeSessionPolicy(address(executor), address(0));
+    }
+
+    /// @dev Lenses and indexers discover the view surface through ERC-165
+    function test_advertisesItsOwnViewSurface() public view {
+        assertTrue(
+            policy.supportsInterface(type(IBridgeSessionPolicy).interfaceId),
+            "the bridge view surface must be discoverable"
+        );
     }
 }

@@ -19,6 +19,9 @@ interface IBridgeSessionPolicy is I1271Policy {
     /// @param length The length supplied
     error InvalidInitDataLength(uint256 length);
 
+    /// @notice Thrown when the two settlement contracts are zero or indistinguishable
+    error InvalidSettlementContracts(address intentExecutor, address permit2);
+
     /// @notice Thrown when init data names a layer this policy does not know
     /// @param layer The layer identifier supplied
     error UnknownLayer(uint8 layer);

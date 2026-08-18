@@ -17,6 +17,7 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 import {
     BridgeSession,
     LAYER_COUNT,
+    LAYER_INTENT_EXECUTOR,
     LAYER_PERMIT2,
     LAYER_TAG_LENGTH
 } from "@policies/bridge/types/BridgeSessionDataTypes.sol";
@@ -108,6 +109,13 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
     /// @param intentExecutor The intent executor to consult for executor-side settlements
     /// @param permit2 The Permit2 deployment to consult for arbiter-side settlements
     constructor(address intentExecutor, address permit2) {
+        // Distinctness is load-bearing, not hygiene: `_expectedSettlerFor` maps each layer to one
+        // of these two addresses, so if they collide every layer tag validates against the same
+        // settler and the tag reverts to fully caller-chosen.
+        if (intentExecutor == address(0) || permit2 == address(0) || intentExecutor == permit2) {
+            revert InvalidSettlementContracts(intentExecutor, permit2);
+        }
+
         INTENT_EXECUTOR = IIntentExecutorNonces(intentExecutor);
         PERMIT2 = ISignatureTransfer(permit2);
     }
@@ -268,7 +276,11 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
     /// @param layer The settlement layer, already bounds-checked by the caller
     /// @return The address that must have called `isValidSignature` for this layer
     function _expectedSettlerFor(uint8 layer) internal view returns (address) {
-        return layer == LAYER_PERMIT2 ? address(PERMIT2) : address(INTENT_EXECUTOR);
+        if (layer == LAYER_PERMIT2) return address(PERMIT2);
+        if (layer == LAYER_INTENT_EXECUTOR) return address(INTENT_EXECUTOR);
+        // Exhaustive rather than a ternary else-branch, so adding a layer is a compile-time
+        // obligation here instead of silently inheriting the executor's settler.
+        revert UnknownLayer(layer);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -319,7 +331,8 @@ contract BridgeSessionPolicy is IBridgeSessionPolicy {
     /// @param interfaceId The interface identifier to check
     /// @return True if the interface is supported
     function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
-        return
-            interfaceId == type(I1271Policy).interfaceId || interfaceId == type(IERC165).interfaceId;
+        return interfaceId == type(I1271Policy).interfaceId
+            || interfaceId == type(IBridgeSessionPolicy).interfaceId
+            || interfaceId == type(IERC165).interfaceId;
     }
 }

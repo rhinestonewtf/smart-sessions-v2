@@ -247,9 +247,17 @@ contract BridgeSessionPolicy_exactlyOnce_Test is BridgeSessionPolicy_Unit_Test {
     function test_settlementPolicyRejectionIsHonoured() public {
         _enable(PINNED);
 
+        // POSITIVE CONTROL FIRST. Without it, the assertion below is satisfied by anything that
+        // returns false, including a tag binding that never reaches the sub-policy at all.
+        assertTrue(_check(_permit2Payload(PINNED)), "the matching digest settles");
+
         vm.prank(multiplexer);
         bool result = policy.check1271SignedAction(
-            configId, address(0), account, keccak256("a different digest"), _permit2Payload(PINNED)
+            configId,
+            _settlerFor(LAYER_PERMIT2),
+            account,
+            keccak256("a different digest"),
+            _permit2Payload(PINNED)
         );
 
         assertFalse(result, "the settlement policy's rejection must be honoured");
