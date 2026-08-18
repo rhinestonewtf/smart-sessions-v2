@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
-import { IActionPolicy } from "@smartsessions/interfaces/IPolicy.sol";
+import { IActionPolicy, I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 // Types
@@ -37,23 +37,30 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      that is a live failure, not a corner case. Reading during validation and burning during
 ///      execution removes the question: nothing in a batch can observe its own burn.
 ///
-/// @dev THIS IS NOT AN `I1271Policy`, and that is deliberate rather than an omission.
+/// @dev THE 1271 READ IS SAME-TRANSACTION TOLERANT, and that is the whole trick.
 ///
 ///      The Permit2 arbiter route validates ERC-1271 TWICE in one settlement, with the pre-claim
-///      execution in between:
+///      execution - and therefore the burn - in between:
 ///
 ///        _permit2PreClaimOps -> executePreClaimOpsWithPermit2Stub
-///                                 |- isValidSignature        <- 1271 check #1
-///                                 `- executeOps(preClaimOps) <- `consume` burns here
+///                                 |- isValidSignature         <- 1271 check #1, nothing burned
+///                                 `- executeOps(preClaimOps)  <- `consume` burns here
 ///        _unlockPermit2      -> Permit2.permitWitnessTransferFrom
 ///                                 `- account.isValidSignature <- 1271 check #2, sees the burn
 ///
-///      A policy on that surface would refuse check #2 and so refuse its own settlement. Not
-///      implementing the interface makes that configuration unrepresentable instead of leaving it
-///      as a warning nobody reads.
+///      A strict read would refuse check #2 and so refuse its own settlement. A transient marker
+///      distinguishes "burned by the settlement currently running" from "burned earlier", which is
+///      exactly the distinction needed: check #2 is tolerated, any later transaction is not.
 ///
-///      The route is still bounded, because the pre-claim validation reaches the ACTION surface:
-///      settlement one reads a clean record and burns, settlement two reads the burn and fails.
+///      This is also why the burn must be durable rather than transient-only. The arbiter route
+///      swallows pre-claim failures on purpose (PreClaimExecution is failure-tolerant so a failed
+///      pre-claim cannot void a claim and strand a solver), so a refusal raised there is ignored.
+///      The refusal that MATTERS is check #2, inside `permitWitnessTransferFrom`, which reverts.
+///
+/// @dev `checkAction` is strict - no tolerance. Action policies run during validation, before any
+///      execution in the batch, so a settlement can never observe its own burn there. Adding
+///      tolerance would only widen it to accept a burn from a Permit2 settlement riding in the
+///      same transaction, which is a SECOND spend rather than a second execution of one.
 ///
 /// @dev THE RECORD IS KEYED ON (account, id) - not ConfigId, not the multiplexer. That is forced:
 ///      `consume` is called by the account, which knows neither. It is also the keying the
@@ -77,7 +84,7 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      yields a session that cannot settle - denial, never a second spend. A random 256-bit
 ///      value is the intended shape; the small integers in the tests are for readability.
 // forgefmt: disable-end
-contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy {
+contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @param configured Whether an id has been pinned for this configuration
     /// @param id The pinned id, the key the burn site and the read site agree on
     struct Config {
@@ -131,6 +138,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy {
     /// @dev Idempotent. A settlement may legitimately carry more than one `consume`, and a
     ///      revert-on-already-burned would fail the settlement it is meant to mark.
     function consume(uint256 id) external override {
+        _markThisTx(msg.sender, id);
+
         if ($used[msg.sender][id]) return;
 
         $used[msg.sender][id] = true;
@@ -163,6 +172,32 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy {
         return $used[account][$config.id] ? VALIDATION_FAILED : VALIDATION_SUCCESS;
     }
 
+    /// @notice Refuses an ERC-1271 settlement once the id was burned by an EARLIER transaction
+    /// @dev Tolerates a burn from the transaction currently running - see the contract note. This
+    ///      surface is `view` and cannot burn; the durable record is written by `consume`.
+    /// @param id The configuration
+    /// @param account The account settling
+    /// @return True if the settlement may proceed
+    function check1271SignedAction(
+        ConfigId id,
+        address,
+        address account,
+        bytes32,
+        bytes calldata
+    )
+        external
+        view
+        override
+        returns (bool)
+    {
+        Config storage $config = $configs[id][msg.sender][account];
+        if (!$config.configured) return false;
+
+        uint256 pinned = $config.id;
+
+        return !$used[account][pinned] || _burnedThisTx(account, pinned);
+    }
+
     /*//////////////////////////////////////////////////////////////
                                   VIEWS
     //////////////////////////////////////////////////////////////*/
@@ -190,10 +225,35 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy {
         return $configs[id][msg.sender][account].configured;
     }
 
-    /// @notice ERC-165. Deliberately does NOT advertise `I1271Policy` - see the contract note.
+    /// @notice ERC-165 for both policy surfaces and the view surface
     function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
         return interfaceId == type(IActionPolicy).interfaceId
+            || interfaceId == type(I1271Policy).interfaceId
             || interfaceId == type(IOneTimeUseIdPolicy).interfaceId
             || interfaceId == type(IERC165).interfaceId;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 INTERNAL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Marks the id as burned by the transaction currently running. Cleared by the EVM at
+    ///      the end of it, which is precisely the lifetime the 1271 tolerance needs.
+    function _markThisTx(address account, uint256 id) internal {
+        bytes32 slot = _txSlot(account, id);
+        assembly ("memory-safe") {
+            tstore(slot, 1)
+        }
+    }
+
+    function _burnedThisTx(address account, uint256 id) internal view returns (bool burned) {
+        bytes32 slot = _txSlot(account, id);
+        assembly ("memory-safe") {
+            burned := tload(slot)
+        }
+    }
+
+    function _txSlot(address account, uint256 id) internal pure returns (bytes32) {
+        return keccak256(abi.encode(account, id));
     }
 }

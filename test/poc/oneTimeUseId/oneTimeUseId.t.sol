@@ -186,24 +186,91 @@ contract OneTimeUseId_Test is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                        THE DELIBERATE NON-INTERFACE
+                              BOTH SURFACES
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Not an oversight. The Permit2 arbiter route validates ERC-1271 twice with the
-    ///      pre-claim execution in between, so a policy on that surface would see its own burn at
-    ///      the second check and refuse its own settlement. Not implementing the interface makes
-    ///      that configuration unrepresentable — `enable` rejects a policy that does not
-    /// advertise
-    ///      the type of the slot it is being installed into.
-    function test_itIsDeliberatelyNotAn1271Policy() public view {
+    function test_servesBothPolicySurfaces() public view {
         assertTrue(policy.supportsInterface(type(IActionPolicy).interfaceId), "action surface");
-        assertFalse(
-            policy.supportsInterface(type(I1271Policy).interfaceId),
-            "must NOT be installable on the 1271 surface"
-        );
+        assertTrue(policy.supportsInterface(type(I1271Policy).interfaceId), "1271 surface");
     }
 
     function test_advertisesItsOwnViewSurface() public view {
         assertTrue(policy.supportsInterface(type(IOneTimeUseIdPolicy).interfaceId));
+    }
+    /*//////////////////////////////////////////////////////////////
+                     THE SAME-TRANSACTION TOLERANCE
+    //////////////////////////////////////////////////////////////*/
+
+    function _read1271(ConfigId c) internal returns (bool) {
+        vm.prank(multiplexer);
+        return policy.check1271SignedAction(c, address(0), account, bytes32(0), "");
+    }
+
+    /// @dev The arbiter route reads 1271 AFTER the pre-claim ops burned, in the same transaction.
+    ///      A strict read would refuse the settlement that just burned. This is the case that
+    ///      makes the Permit2 family work at all.
+    function test_the1271ReadToleratesABurnFromThisTransaction() public {
+        _settlementBurns(ID);
+
+        assertTrue(_read1271(cfgA), "a settlement must not be refused by its own burn");
+    }
+
+    /// @dev The action surface never needs that tolerance — action policies run before any
+    ///      execution in the batch — so it stays strict. A Permit2 settlement riding in the same
+    ///      transaction is a SECOND spend, not a second execution of one.
+    function test_checkActionStaysStrictEvenInTheSameTransaction() public {
+        _settlementBurns(ID);
+
+        assertEq(_validate(cfgA), VALIDATION_FAILED, "the action surface does not tolerate");
+    }
+}
+
+/// @title The cross-transaction half of the tolerance
+/// @notice Split into its own contract deliberately. Transient storage survives every call inside
+///         one test body — a forge test body IS one transaction — but it IS cleared between
+///         `setUp` and the body. Burning in `setUp` is therefore the only way to observe a LATER
+///         transaction, and without this split the tolerance would be indistinguishable from no
+///         protection at all.
+contract OneTimeUseId_AcrossTransactions_Test is Test {
+    OneTimeUseIdPolicy internal policy;
+
+    address internal multiplexer = makeAddr("multiplexer");
+    address internal account = makeAddr("account");
+
+    ConfigId internal cfg = ConfigId.wrap(keccak256("action.slot.A"));
+    uint256 internal constant ID = 0xBEEF;
+
+    /// @dev Settlement one happens HERE, so the test body is a different transaction
+    function setUp() public {
+        policy = new OneTimeUseIdPolicy();
+
+        vm.prank(multiplexer);
+        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));
+
+        vm.prank(account);
+        policy.consume(ID);
+    }
+
+    /// @dev THE property. The same read that was tolerated inside the burning transaction refuses.
+    function test_the1271ReadRefusesABurnFromAnEarlierTransaction() public {
+        vm.prank(multiplexer);
+        bool ok = policy.check1271SignedAction(cfg, address(0), account, bytes32(0), "");
+
+        assertFalse(ok, "a later transaction must be refused");
+    }
+
+    function test_theActionSurfaceAlsoRefuses() public {
+        vm.prank(multiplexer);
+        assertEq(
+            policy.checkAction(cfg, account, address(0), 0, ""),
+            VALIDATION_FAILED,
+            "and so does the action surface"
+        );
+    }
+
+    /// @dev Guards the split itself: the durable burn must survive setUp, or the two tests above
+    ///      would be passing because nothing happened rather than because the tolerance expired.
+    function test_theDurableBurnSurvivesSetUp() public view {
+        assertTrue(policy.isConsumed(account, ID), "the durable record crossed the boundary");
     }
 }
