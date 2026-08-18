@@ -260,13 +260,43 @@ contract ActionSurfaceOnce_Test is Test {
         );
     }
 
-    /// @dev Re-enable restores the spend, matching #53's generation bump.
-    function test_reEnableRestoresTheSpend() public {
+    /// @dev Re-enabling on the SAME nonce does NOT restore the spend. The record is keyed on the
+    ///      nonce and never cleared, precisely so that a re-enable cannot be used as a reset —
+    ///      `initializeWithMultiplexer` runs during ENABLE-mode settlements, so a clear there
+    ///      would hand every such settlement a fresh spend.
+    function test_reEnableOnTheSameNonceDoesNotRestoreTheSpend() public {
         assertTrue(_executorSettles(), "the first settlement must pass");
         assertFalse(_executorSettles(), "the second must not");
 
         _enable(PINNED);
 
-        assertTrue(_executorSettles(), "a re-enabled session may settle again");
+        assertFalse(_executorSettles(), "a re-enable on a spent nonce must stay closed");
+    }
+
+    /// @dev …and a re-enable on a FRESH nonce works, which is the supported way to reauthorise
+    function test_reEnableOnAFreshNonceSettlesAgain() public {
+        assertTrue(_executorSettles(), "the first settlement must pass");
+
+        _enable(PINNED + 1);
+
+        assertTrue(_executorSettles(), "a re-enable on an unspent nonce may settle");
+    }
+
+    /// @dev The cross-session case the sticky record exists to make safe: a second session pinned
+    ///      to a nonce the first already spent is DENIED, not granted a reset. Modelled by a
+    ///      second install under a different configId — the record ignores session identity.
+    function test_aSecondSessionOnASpentNonceCannotSettle() public {
+        assertTrue(_executorSettles(), "session A settles");
+
+        ConfigId other = ConfigId.wrap(keccak256("another.session"));
+        vm.prank(multiplexer);
+        policy.initializeWithMultiplexer(account, other, abi.encodePacked(bytes32(PINNED)));
+
+        vm.prank(multiplexer);
+        assertEq(
+            policy.checkAction(other, account, target, 0, hex""),
+            VALIDATION_FAILED,
+            "a second session on a spent nonce must be denied, never reset it"
+        );
     }
 }

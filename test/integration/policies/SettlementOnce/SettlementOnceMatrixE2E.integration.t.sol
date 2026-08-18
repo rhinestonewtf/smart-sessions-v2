@@ -90,16 +90,18 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
     function _enableOnceSession(bool boundExecutor, bool bound1271) internal {
         activeFieldMode = FIELD_ARBITER;
 
-        PolicyData[] memory erc1271Policies = new PolicyData[](2);
+        PolicyData[] memory erc1271Policies = new PolicyData[](bound1271 ? 2 : 1);
         erc1271Policies[0] = PolicyData({
             policy: address(permit2ClaimPolicy),
             initData: abi.encodePacked(
                 _createModeConfig(FIELD_ARBITER, MODE_CHECK_STORAGE), uint8(1), arbiter
             )
         });
-        erc1271Policies[1] = PolicyData({
-            policy: address(oncePolicy), initData: abi.encodePacked(bytes32(PINNED))
-        });
+        if (bound1271) {
+            erc1271Policies[1] = PolicyData({
+                policy: address(oncePolicy), initData: abi.encodePacked(bytes32(PINNED))
+            });
+        }
 
         PolicyData[] memory actionPolicies = new PolicyData[](1);
         actionPolicies[0] = boundExecutor
@@ -243,17 +245,9 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
                            ...BUT ONLY ONE OF THEM
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev ORDERING: executor -> Permit2. UNATTRIBUTABLE — do not count this as proof.
-    ///
-    ///      It passes, but so does its control (`test_control_executorThenPermit2...`, marked
-    ///      skipped below): after an executor settlement the Permit2 route fails with Permit2's
-    ///      `InvalidContractSignature` EVEN WITH the once-policy absent from the 1271 surface. So
-    ///      something in the harness, not this policy, closes the route — and this test would
-    ///      pass with the policy doing nothing.
-    ///
-    ///      The diagnostic above rules out the configuration: Permit2 settles fine in the same
-    ///      setup with nothing spent first. So the cause is the preceding executor settlement,
-    ///      and it is not yet identified. Until it is, this ordering is UNPROVEN on this branch.
+    /// @dev ORDERING: executor -> Permit2. The action half burned the shared record; the 1271
+    ///      half reads it and refuses. Attributable via the control below, which shows the same
+    ///      sequence settling once the once-policy is off the 1271 surface.
     function test_executorThenPermit2_refused() public {
         _enableOnceSession(true, true);
 
@@ -329,19 +323,26 @@ contract SettlementOnceMatrixE2E_Test is Permit2ClaimPolicy_Integration_Test {
         assertTrue(_permit2Burned(PINNED), "Permit2 settles with only the claim policy on 1271");
     }
 
-    /// @dev CONTROL for executor -> Permit2, and it FAILS — deliberately left in, marked skip.
-    ///
-    ///      The control asserts what must be true for the ordering test above to mean anything:
-    ///      remove the once-policy from the 1271 surface and the same sequence should settle.
-    ///      It does not. Permit2 reverts `InvalidContractSignature` regardless, so the refusal
-    ///      above is somebody else's doing.
-    ///
-    ///      Kept as a failing-shaped record rather than deleted, because a deleted control is
-    ///      indistinguishable from a control that was never written. Un-skip it once the cause is
-    ///      found; if it then passes, the ordering test above becomes real evidence.
-    function test_control_executorThenPermit2IsOpenWithoutTheOncePolicy() public {
-        vm.skip(true); // FAILS TODAY — see the note above. Un-skip once the cause is found.
+    /// @dev Diagnostic: with the once-policy on NEITHER surface, does an executor settlement
+    ///      still break a following Permit2 settlement? If yes, the interference is the harness
+    ///      or the protocol, and has nothing to do with this policy.
+    function test_diag_executorSettlementBreaksPermit2WithNoOncePolicyAtAll() public {
+        _enableOnceSession(false, false);
 
+        _settleViaExecutor(0);
+        _settleViaPermit2();
+
+        assertTrue(_permit2Burned(PINNED), "Permit2 settles after an executor settlement");
+    }
+
+    /// @dev CONTROL for executor -> Permit2: with the once-policy off the 1271 surface the same
+    ///      sequence settles, so the refusal above is this policy's doing.
+    ///
+    ///      This control spent a while failing, and the cause was the control itself — the
+    ///      `bound1271` parameter was silently dead (the array was hardcoded to length 2), so
+    ///      "without the once-policy" still installed it. Worth remembering that a failing
+    ///      control is not automatically evidence about the subject.
+    function test_control_executorThenPermit2IsOpenWithoutTheOncePolicy() public {
         _enableOnceSession(true, false);
 
         _settleViaExecutor(0);

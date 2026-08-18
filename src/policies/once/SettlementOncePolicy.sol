@@ -61,6 +61,14 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      surface. `minPoliciesToEnforce` is 1, so installing this alone is a legal configuration
 ///      that nothing rejects.
 ///
+/// @dev INSTALL-TIME REQUIREMENT: the pinned nonce must be FRESH for every enable, and unique
+///      per account across every session using this policy. The spend record is keyed on
+///      (multiplexer, account, nonce) with no session identity and is never cleared, so reusing a
+///      nonce that has already settled yields a session that cannot settle at all. That is the
+///      deliberate trade — a stale pin denies, it never grants a second spend — but it means a
+///      re-enable needs a new nonce, not the old one. A random 256-bit value is the intended
+///      shape; the small integers in the tests are for readability only.
+///
 /// @dev INSTALL-TIME REQUIREMENT, and a direct consequence of the storage note above: the two surfaces
 ///      are configured by SEPARATE initData blobs, and both must pin the SAME nonce. Neither half
 ///      can see the other's config, so nothing here can check it. Pin different values and the
@@ -172,10 +180,17 @@ contract SettlementOncePolicy is IActionPolicy, I1271Policy {
         $session.nonce = nonce;
         $session.configured = true;
 
-        // Re-enabling restores the session's single spend. Note this clears the SHARED record,
-        // so installing the second surface of the same session also clears it - which is
-        // harmless only because both installs happen before either can settle.
-        $spent[msg.sender][account][nonce] = false;
+        // The spend record is deliberately NOT cleared here. Clearing it was a reset primitive:
+        //
+        //   - `initializeWithMultiplexer` runs DURING a settlement in ENABLE mode (the ENABLE
+        //     branch of SmartSessionMixin -> ConfigLibV2.enable), immediately before the action
+        //     policies run, so every ENABLE-mode settlement would start from a fresh spend
+        //   - the record is keyed on the nonce, not on any session identity, so enabling ANY
+        //     session pinned to the same nonce would clear an unrelated session's spend
+        //
+        // Leaving it set makes every failure direction closed: a re-enable on a spent nonce
+        // yields a session that cannot settle, and two sessions pinning one nonce contend rather
+        // than reset each other. Both are denial, never a second spend.
     }
 
     /*//////////////////////////////////////////////////////////////
