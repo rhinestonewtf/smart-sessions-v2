@@ -27,6 +27,7 @@ import { MODULE_TYPE_VALIDATOR } from "@modulekit/accounts/common/interfaces/IER
 import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
 import { TestHelperLib } from "@compact-utils/tests/Environment.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
+import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 import {
     IStandaloneIntentExecutor
 } from "@compact-utils/executor/interfaces/IStandaloneIntent.sol";
@@ -58,7 +59,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     function setUp() public virtual override {
         super.setUp();
 
-        oncePolicy = new OneTimeUseIdPolicy();
+        oncePolicy = new OneTimeUseIdPolicy(ISignatureTransfer(address(env.permit2)));
 
         // The base harness builds the emissary against a MOCK intent executor, so verifyExecution
         // rejects the real one with UnauthorizedSource. Redeploy against the real ADDRESSBOOK so
@@ -82,12 +83,19 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     /// @dev Puts the injected `consume` into the order's pre-claim ops and re-derives the hashes
     ///      that cover them. The default sigMode is a 1271 one, which is what the arbiter route
     ///      needs: the pre-claim validation and the unlock share one signature envelope.
+    /// @dev Re-points the order at a different real Permit2 nonce, re-injecting the consume so
+    ///      its witness still names THIS settlement, and re-deriving the covering hashes.
+    function _useNonce(uint256 nonce) internal {
+        $intent.nonce = nonce;
+        _injectConsumeIntoPreClaimOps();
+    }
+
     function _injectConsumeIntoPreClaimOps() internal {
         Execution[] memory ops = new Execution[](1);
         ops[0] = Execution({
             target: address(oncePolicy),
             value: 0,
-            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID))
+            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID, $intent.nonce))
         });
 
         $intent.element.mandate.originOps = ops.toOperation();
@@ -207,7 +215,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         calls[0] = Execution({
             target: address(oncePolicy),
             value: 0,
-            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID))
+            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID, executorNonce + 1))
         });
         calls[1] = Execution({
             target: address(env.target),

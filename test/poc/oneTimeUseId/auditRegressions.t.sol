@@ -5,18 +5,30 @@ import { Test } from "forge-std/Test.sol";
 
 import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
-import { I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
+import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC7579Module.sol";
 
 /// @title Audit regressions
-/// @notice Every test here reproduced a working exploit before the fix. They are kept as the
-///         permanent record that it stays closed. The first settlement runs in `setUp` where the
-///         property needs a real transaction boundary — transient storage is cleared there, and
-///         nowhere inside a test body.
+/// @notice Every test here reproduced a working exploit before its fix. They are kept as the
+///         permanent record that it stays closed.
+///
+///         The two ERC-1271 checks of one settlement arrive from DIFFERENT callers, and the
+///         policy now treats them differently:
+///
+///           pre-claim check  <- the executor  : runs BEFORE the burn, so it can only ask
+///                                               "is this unspent?" — and its refusal is
+///                                               swallowed by the arbiter anyway
+///           settling check   <- Permit2       : runs AFTER the burn, moves the money, and is
+///                                               the only refusal that is not swallowed — so it
+///                                               demands positive proof that THIS settlement
+///                                               burned
 contract OneTimeUseIdAuditRegressions_Test is Test {
     OneTimeUseIdPolicy internal policy;
+
+    address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    address internal executor = makeAddr("intentExecutor");
 
     address internal multiplexer = makeAddr("multiplexer");
     address internal account = makeAddr("account");
@@ -27,22 +39,34 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
     uint256 internal constant ID_A = 0xBEEF;
     uint256 internal constant ID_B = 0xCAFE;
 
+    /// @dev Stands in for a settlement's Permit2 nonce
+    uint256 internal constant WITNESS_1 = 1337;
+    uint256 internal constant WITNESS_2 = 4242;
+
     function setUp() public {
-        policy = new OneTimeUseIdPolicy();
+        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2));
 
         vm.startPrank(multiplexer);
         policy.initializeWithMultiplexer(account, cfgA, abi.encodePacked(bytes32(ID_A)));
         policy.initializeWithMultiplexer(account, cfgB, abi.encodePacked(bytes32(ID_B)));
         vm.stopPrank();
-
-        // Session A settles legitimately, in an EARLIER transaction.
-        vm.prank(account);
-        policy.consume(ID_A);
     }
 
-    function _read(ConfigId c) internal returns (bool) {
+    /// @dev A claim blob shaped like `Permit2ClaimPolicy`'s: arbiter(20) ‖ nonce(32) ‖ …
+    function _blob(uint256 nonce) internal pure returns (bytes memory) {
+        return abi.encodePacked(address(0xA4B17E4), bytes32(nonce), bytes32(uint256(99)));
+    }
+
+    /// @dev The check that moves the money
+    function _settlingCheck(ConfigId c, uint256 nonce) internal returns (bool) {
         vm.prank(multiplexer);
-        return policy.check1271SignedAction(c, address(0), account, bytes32(0), "");
+        return policy.check1271SignedAction(c, PERMIT2, account, bytes32(0), _blob(nonce));
+    }
+
+    /// @dev The pre-claim check, which runs before the burn
+    function _preClaimCheck(ConfigId c, uint256 nonce) internal returns (bool) {
+        vm.prank(multiplexer);
+        return policy.check1271SignedAction(c, executor, account, bytes32(0), _blob(nonce));
     }
 
     function _validate(ConfigId c) internal returns (uint256) {
@@ -50,59 +74,77 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
         return policy.checkAction(c, account, address(0), 0, "");
     }
 
+    function _settlementBurns(uint256 id, uint256 witness) internal {
+        vm.prank(account);
+        policy.consume(id, witness);
+    }
+
     /*//////////////////////////////////////////////////////////////
-                    F1 — TOLERANCE SCOPED TO THE SETTLEMENT
+                        AN HONEST SETTLEMENT COMPLETES
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Was: after one burn, EVERY 1271 read in the transaction returned true, unboundedly —
-    ///      so a second settlement rode the first one's marker. Two real Permit2 settlements on
-    ///      distinct nonces landed in one transaction.
-    ///
-    ///      Now: the second `consume` sees the id already spent, knows it is not the burn, and
-    ///      poisons the transaction. Only the burning settlement is tolerated.
+    function test_theHonestSettlementCompletes() public {
+        assertTrue(_preClaimCheck(cfgA, WITNESS_1), "pre-claim, nothing burned yet");
+        _settlementBurns(ID_A, WITNESS_1);
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "settling check, proof presented");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+              F1 — A SECOND SETTLEMENT CANNOT RIDE THE FIRST
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Was: the tolerance was a bare "something burned in this transaction" flag, so a
+    ///      second settlement read it as its own. It did not even need its own `consume`.
     function test_F1_aSecondSettlementCannotRideTheFirstsBurn() public {
-        uint256 fresh = 0xF00D;
-        ConfigId cfg = ConfigId.wrap(keccak256("fresh"));
-        vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(fresh)));
+        _settlementBurns(ID_A, WITNESS_1);
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "settlement one completes");
 
-        // settlement 1 burns
-        vm.prank(account);
-        policy.consume(fresh);
+        // Settlement two, different nonce, SAME transaction. It never calls consume — which was
+        // the whole attack, because the poison rule only fired if the attacker volunteered it.
+        assertFalse(_settlingCheck(cfgA, WITNESS_2), "settlement two cannot ride it");
+    }
 
-        assertTrue(_read(cfg), "settlement 1 check #2 must still be tolerated");
+    /// @dev ...and it cannot help itself by calling consume either: the id is already spent, so
+    ///      the nomination is cleared rather than re-issued.
+    function test_F1_aSecondSettlementCannotRenominateItself() public {
+        _settlementBurns(ID_A, WITNESS_1);
+        _settlementBurns(ID_A, WITNESS_2);
 
-        // settlement 2 carries its own injected consume, as every settlement does
-        vm.prank(account);
-        policy.consume(fresh);
-
-        assertFalse(_read(cfg), "settlement 2 must be refused");
-        assertFalse(_read(cfg), "...and stay refused");
+        assertFalse(_settlingCheck(cfgA, WITNESS_2), "a repeat consume nominates nothing");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "and revokes the original nomination");
     }
 
     /*//////////////////////////////////////////////////////////////
-                  F2 — A STALE consume CANNOT RESURRECT A SESSION
+                  F2 — THE BURN IS NOW MANDATORY, NOT OPTIONAL
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Was: `_markThisTx` ran above the already-burned early return, so a no-op `consume` on
-    ///      a session spent in an earlier transaction re-opened its 1271 gate.
-    function test_F2_reConsumingASpentIdDoesNotReopenTheGate() public {
-        assertFalse(_read(cfgA), "baseline: the spent session is refused");
+    /// @dev THE headline fix. The burn lives in the pre-claim, which the arbiter is designed to
+    ///      let fail — so it was skippable five different ways and the settlement completed
+    ///      anyway. Demanding positive proof at the settling check inverts that: skipping the
+    ///      burn now means not settling.
+    function test_F2_aSettlementThatSkipsItsBurnCannotSettle() public {
+        assertTrue(_preClaimCheck(cfgA, WITNESS_1), "the pre-claim check still passes");
 
-        vm.prank(account);
-        policy.consume(ID_A);
+        // ...and then the burn does not happen — starved gas, a failing sigMode, a decoy id, a
+        // reverting sibling op, or no pre-claim at all. All identical from here.
 
-        assertFalse(_read(cfgA), "a stale consume must not resurrect it");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "so the settlement cannot complete");
+    }
+
+    /// @dev A burn that nominates a DIFFERENT settlement does not help either
+    function test_F2_aBurnNominatingAnotherSettlementDoesNotCount() public {
+        _settlementBurns(ID_A, WITNESS_2);
+
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "the nomination must name THIS settlement");
     }
 
     /*//////////////////////////////////////////////////////////////
-                 F3 — ONE SESSION CANNOT BURN ANOTHER'S ID
+                    F3 — ONE SESSION CANNOT BURN ANOTHER'S ID
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Was: `checkAction` discarded `target` and `data`, so session B — authorised to call
-    ///      `consume` — passed session A's id and killed it permanently, for free.
     function test_F3_aSessionMayNotAuthoriseBurningAnotherSessionsId() public {
-        bytes memory burnSomeoneElse = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_A));
+        bytes memory burnSomeoneElse =
+            abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_A, WITNESS_1));
 
         vm.prank(multiplexer);
         uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnSomeoneElse);
@@ -110,9 +152,8 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
         assertEq(result, VALIDATION_FAILED, "session B may not burn session A's id");
     }
 
-    /// @dev CONTROL: session B burning its OWN id is exactly what it is for.
     function test_F3_control_aSessionMayBurnItsOwnId() public {
-        bytes memory burnOwn = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_B));
+        bytes memory burnOwn = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_B, WITNESS_1));
 
         vm.prank(multiplexer);
         uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnOwn);
@@ -120,7 +161,6 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
         assertEq(result, VALIDATION_SUCCESS, "its own id is permitted");
     }
 
-    /// @dev ...and an unrelated action is untouched by the binding
     function test_F3_control_anUnrelatedActionIsUnaffected() public {
         vm.prank(multiplexer);
         uint256 result = policy.checkAction(cfgB, account, makeAddr("someToken"), 0, hex"a9059cbb");
@@ -129,23 +169,39 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                THE COST: EXACTLY ONE consume PER SETTLEMENT
+                              THE ACTION SURFACE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev The price of the poison rule, asserted rather than described. A settlement carrying
-    ///      two `consume` calls refuses itself, so the ops must carry exactly one — pinnable via
-    ///      Permit2ClaimPolicy's FIELD_ORIGIN_OPS sub-policy mode.
-    function test_aSettlementCarryingTwoConsumesRefusesItself() public {
-        uint256 fresh = 0xD00D;
-        ConfigId cfg = ConfigId.wrap(keccak256("twice"));
+    function test_theActionSurfaceStaysStrict() public {
+        assertEq(_validate(cfgA), VALIDATION_SUCCESS, "unspent");
+        _settlementBurns(ID_A, WITNESS_1);
+        assertEq(_validate(cfgA), VALIDATION_FAILED, "spent, with no tolerance at all");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                  SHAPE
+    //////////////////////////////////////////////////////////////*/
+
+    function test_aZeroWitnessIsRejected() public {
+        vm.prank(account);
+        vm.expectRevert(IOneTimeUseIdPolicy.InvalidWitness.selector);
+        policy.consume(ID_A, 0);
+    }
+
+    function test_aShortBlobIsRefused() public {
+        _settlementBurns(ID_A, WITNESS_1);
+
         vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(fresh)));
+        assertFalse(
+            policy.check1271SignedAction(cfgA, PERMIT2, account, bytes32(0), hex"1234"),
+            "a blob too short to carry a nonce cannot prove anything"
+        );
+    }
 
-        vm.startPrank(account);
-        policy.consume(fresh);
-        policy.consume(fresh);
-        vm.stopPrank();
+    function test_unconfigured_refused() public {
+        ConfigId never = ConfigId.wrap(keccak256("never"));
 
-        assertFalse(_read(cfg), "two consumes in one settlement poison it");
+        assertFalse(_settlingCheck(never, WITNESS_1), "fails closed");
+        assertEq(_validate(never), VALIDATION_FAILED, "on both surfaces");
     }
 }

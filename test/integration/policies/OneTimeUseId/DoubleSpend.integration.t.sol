@@ -13,14 +13,6 @@ import { OneTimeUseIdE2E_Base } from "./OneTimeUseIdMatrixE2E.integration.t.sol"
 ///         second one can see the id is already spent, conclude it is not the burn, and poison the
 ///         transaction. Only the burning settlement is tolerated.
 contract OneTimeUseIdDoubleSpend_Test is OneTimeUseIdE2E_Base {
-    function _useNonce(uint256 nonce) internal {
-        $intent.nonce = nonce;
-        $intent.permit2Hash = hashPermit2(
-            $intent.sponsor, $intent.nonce, $intent.expires, arbiter, $intent.element
-        );
-        $intent.digest = _hashTypedDataPermit2(block.chainid, $intent.permit2Hash);
-    }
-
     function _nonceBurned(uint256 nonce) internal view returns (bool) {
         return (env.permit2.nonceBitmap($intent.sponsor, nonce >> 8) >> (nonce & 0xff)) & 1 == 1;
     }

@@ -7,6 +7,7 @@ import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
 import { IActionPolicy, I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 
+import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC7579Module.sol";
 
@@ -29,7 +30,7 @@ contract OneTimeUseId_Test is Test {
     uint256 internal constant ID = 0xBEEF;
 
     function setUp() public {
-        policy = new OneTimeUseIdPolicy();
+        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2));
         _install(cfgA, ID);
         _install(cfgB, ID);
     }
@@ -46,9 +47,17 @@ contract OneTimeUseId_Test is Test {
     }
 
     /// @dev The injected execution: the ACCOUNT calls the policy
+    address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    uint256 internal constant WITNESS = 1337;
+
     function _settlementBurns(uint256 id) internal {
         vm.prank(account);
-        policy.consume(id);
+        policy.consume(id, WITNESS);
+    }
+
+    /// @dev A claim blob shaped like `Permit2ClaimPolicy`'s: arbiter(20) ‖ nonce(32) ‖ …
+    function _blob(uint256 nonce) internal pure returns (bytes memory) {
+        return abi.encodePacked(address(0xA4B17E4), bytes32(nonce), bytes32(uint256(9)));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -119,7 +128,7 @@ contract OneTimeUseId_Test is Test {
         address stranger = makeAddr("stranger");
 
         vm.prank(stranger);
-        policy.consume(ID);
+        policy.consume(ID, WITNESS);
 
         assertFalse(policy.isConsumed(account, ID), "the account's id is untouched");
         assertEq(_validate(cfgA), VALIDATION_SUCCESS, "and its session still settles");
@@ -203,13 +212,13 @@ contract OneTimeUseId_Test is Test {
 
     function _read1271(ConfigId c) internal returns (bool) {
         vm.prank(multiplexer);
-        return policy.check1271SignedAction(c, address(0), account, bytes32(0), "");
+        return policy.check1271SignedAction(c, PERMIT2, account, bytes32(0), _blob(WITNESS));
     }
 
     /// @dev The arbiter route reads 1271 AFTER the pre-claim ops burned, in the same transaction.
     ///      A strict read would refuse the settlement that just burned. This is the case that
     ///      makes the Permit2 family work at all.
-    function test_the1271ReadToleratesABurnFromThisTransaction() public {
+    function test_theSettlingCheckAcceptsProofFromItsOwnBurn() public {
         _settlementBurns(ID);
 
         assertTrue(_read1271(cfgA), "a settlement must not be refused by its own burn");
@@ -240,21 +249,28 @@ contract OneTimeUseId_AcrossTransactions_Test is Test {
     ConfigId internal cfg = ConfigId.wrap(keccak256("action.slot.A"));
     uint256 internal constant ID = 0xBEEF;
 
+    address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    uint256 internal constant WITNESS = 1337;
+
+    function _blob(uint256 nonce) internal pure returns (bytes memory) {
+        return abi.encodePacked(address(0xA4B17E4), bytes32(nonce), bytes32(uint256(9)));
+    }
+
     /// @dev Settlement one happens HERE, so the test body is a different transaction
     function setUp() public {
-        policy = new OneTimeUseIdPolicy();
+        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2));
 
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));
 
         vm.prank(account);
-        policy.consume(ID);
+        policy.consume(ID, WITNESS);
     }
 
     /// @dev THE property. The same read that was tolerated inside the burning transaction refuses.
-    function test_the1271ReadRefusesABurnFromAnEarlierTransaction() public {
+    function test_theSettlingCheckRefusesABurnFromAnEarlierTransaction() public {
         vm.prank(multiplexer);
-        bool ok = policy.check1271SignedAction(cfg, address(0), account, bytes32(0), "");
+        bool ok = policy.check1271SignedAction(cfg, PERMIT2, account, bytes32(0), _blob(WITNESS));
 
         assertFalse(ok, "a later transaction must be refused");
     }

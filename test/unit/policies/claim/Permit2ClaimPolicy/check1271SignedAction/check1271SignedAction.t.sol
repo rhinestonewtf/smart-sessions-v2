@@ -2612,7 +2612,8 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             SAMPLE_QUALIFICATION_HASH
         );
 
-        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is
+        // bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
@@ -2661,7 +2662,8 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             SAMPLE_QUALIFICATION_HASH
         );
 
-        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is
+        // bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
@@ -2710,7 +2712,8 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             SAMPLE_QUALIFICATION_HASH
         );
 
-        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is
+        // bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
@@ -2759,7 +2762,8 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             SAMPLE_QUALIFICATION_HASH
         );
 
-        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is
+        // bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
@@ -2901,7 +2905,8 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             targetHash, SAMPLE_MIN_GAS, Constants.NO_OPS, SAMPLE_OPS_HASH, SAMPLE_QUALIFICATION_HASH
         );
 
-        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is
+        // bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
@@ -2947,7 +2952,8 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
             targetHash, SAMPLE_MIN_GAS, Constants.NO_OPS, SAMPLE_OPS_HASH, SAMPLE_QUALIFICATION_HASH
         );
 
-        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is bound
+        // Expanded target (recipient, targetChainId, fillExpiry, tokenOutHash) so targetChainId is
+        // bound
         bytes memory permit2Data = abi.encodePacked(
             _createPermit2Header(arbiter, nonce, deadline),
             _createTokenPermissionsHash(tokenPermissionsHash),
@@ -3838,8 +3844,9 @@ contract Permit2ClaimPolicy_check1271SignedAction_Test is
 
     /// @notice Initialize policy with destOps check
     function _initializePolicyWithDestOps(bool required, uint256 targetChainId) internal {
-        // Per-chain destOps keys its requirement on the mandate target chain id, which is only bound
-        // to the signed mandate when a target check is enabled; recipientIsSponsor is the minimal one.
+        // Per-chain destOps keys its requirement on the mandate target chain id, which is only
+        // bound to the signed mandate when a target check is enabled; recipientIsSponsor is the
+        // minimal one.
         uint32 modeConfig = _createModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
             | _createModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         bytes memory initData =

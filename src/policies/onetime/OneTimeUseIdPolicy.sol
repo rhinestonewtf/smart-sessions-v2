@@ -5,6 +5,7 @@ pragma solidity ^0.8.28;
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
 import { IActionPolicy, I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -106,22 +107,41 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @param configured Whether an id has been pinned for this configuration
     /// @param id The pinned id, the key the burn site and the read site agree on
-    struct Config {
+    struct UsageConfig {
         bool configured;
         uint256 id;
     }
 
-    /// @dev configId => multiplexer => account => config. Holds the PIN only.
-    mapping(ConfigId => mapping(address => mapping(address => Config))) internal $configs;
+    /// @dev Holds the PIN only.
+    mapping(
+        ConfigId configId => mapping(address multiplexer => mapping(address account => UsageConfig))
+    ) internal $configs;
 
-    /// @dev id => account => burned. Holds the SPEND, reachable from `consume`, which knows only
-    ///      the account and the id.
+    /// @dev Start of the nonce in `Permit2ClaimPolicy`'s claim blob, after the arbiter
+    uint256 internal constant PERMIT2_NONCE_START = 20;
+
+    /// @dev Width of the nonce
+    uint256 internal constant NONCE_LENGTH = 32;
+
+    /// @notice The Permit2 deployment. Used ONLY to tell the settling ERC-1271 check apart from
+    ///         the pre-claim one - they arrive from different callers.
+    ISignatureTransfer public immutable PERMIT2;
+
+    /// @dev Holds the SPEND. Separate from `$configs` because it has to be reachable from
+    ///      `consume`, which is called BY THE ACCOUNT and therefore knows only `(account, id)` -
+    ///      never the ConfigId. Keying the spend under a ConfigId would make it invisible to the
+    ///      burn site, and invisible across surfaces too: SmartSessions derives a different
+    ///      ConfigId per policy slot, so the action half and the 1271 half never share one.
     ///
     ///      The account is the INNER key deliberately. ERC-7562 counts a slot as associated
     ///      storage of the sender only when the final keccak preimage begins with the account, and
     ///      `checkAction` reads this during the 4337 validation phase - account-first nesting
     ///      yields `keccak(id . keccak(account . p))`, which a compliant bundler rejects.
-    mapping(uint256 => mapping(address => bool)) internal $used;
+    mapping(uint256 id => mapping(address account => bool burned)) internal $used;
+
+    constructor(ISignatureTransfer permit2) {
+        PERMIT2 = permit2;
+    }
 
     /*//////////////////////////////////////////////////////////////
                                   INIT
@@ -144,7 +164,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 id = uint256(bytes32(initData[0:32]));
         if (id == 0) revert InvalidId();
 
-        Config storage $config = $configs[configId][msg.sender][account];
+        UsageConfig storage $config = $configs[configId][msg.sender][account];
         $config.id = id;
         $config.configured = true;
 
@@ -163,16 +183,17 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     ///      transaction, because the only honest reading of it is "a settlement other than the
     ///      burning one is running". That is what closes the same-transaction double-spend, and it
     ///      is why a settlement must carry EXACTLY ONE `consume` - see the install requirements.
-    function consume(uint256 id) external override {
+    function consume(uint256 id, uint256 witness) external override {
+        if (witness == 0) revert InvalidWitness();
+
         if ($used[id][msg.sender]) {
-            // Already burned — either by an earlier settlement in THIS transaction, or in a past
-            // one. Either way this call is not the burn, so poison the transaction rather than
-            // vouching for it.
-            _setTxState(msg.sender, id, POISONED);
+            // Already burned, so this call is not the burn. Clear the nomination rather than
+            // re-issuing it: zero matches no settlement, so nothing rides it.
+            _setWitness(msg.sender, id, 0);
             return;
         }
 
-        _setTxState(msg.sender, id, BURNING);
+        _setWitness(msg.sender, id, witness);
         $used[id][msg.sender] = true;
         emit IdConsumed(msg.sender, id);
     }
@@ -197,7 +218,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (uint256)
     {
-        Config storage $config = $configs[id][msg.sender][account];
+        UsageConfig storage $config = $configs[id][msg.sender][account];
         if (!$config.configured) return VALIDATION_FAILED;
 
         uint256 pinned = $config.id;
@@ -222,22 +243,38 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @return True if the settlement may proceed
     function check1271SignedAction(
         ConfigId id,
-        address,
+        address requestSender,
         address account,
         bytes32,
-        bytes calldata
+        bytes calldata signature
     )
         external
         view
         override
         returns (bool)
     {
-        Config storage $config = $configs[id][msg.sender][account];
+        UsageConfig storage $config = $configs[id][msg.sender][account];
         if (!$config.configured) return false;
 
         uint256 pinned = $config.id;
 
-        return !$used[pinned][account] || _txState(account, pinned) == BURNING;
+        // The PRE-CLAIM check, which runs BEFORE the burn and so cannot demand proof of it. It
+        // is also the check whose refusal the arbiter swallows, so nothing here is load-bearing;
+        // allowing it while unspent is what lets the burn happen at all.
+        if (requestSender != address(PERMIT2)) return !$used[pinned][account];
+
+        // The SETTLING check, inside `permitWitnessTransferFrom`. This one moves the money and is
+        // the only refusal that is not swallowed, so it demands POSITIVE PROOF that the settlement
+        // in front of it performed the burn - rather than merely that nobody has burned yet.
+        //
+        // That inversion is the whole fix. Under the old default a settlement that skipped its
+        // burn was indistinguishable from the first settlement ever, so skipping was free. Now
+        // skipping the burn means not settling.
+        if (signature.length < PERMIT2_NONCE_START + NONCE_LENGTH) return false;
+        uint256 presented =
+            uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));
+
+        return presented != 0 && _witness(account, pinned) == presented;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -281,24 +318,19 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @dev Marks the id as burned by the transaction currently running. Cleared by the EVM at
     ///      the end of it, which is precisely the lifetime the 1271 tolerance needs.
-    /// @dev No burn has happened in this transaction
-    uint256 internal constant UNTOUCHED = 0;
-    /// @dev THIS transaction performed the burn — the one settlement allowed to be tolerated
-    uint256 internal constant BURNING = 1;
-    /// @dev A second consume was seen, so some settlement other than the burning one is running
-    uint256 internal constant POISONED = 2;
-
-    function _setTxState(address account, uint256 id, uint256 state) internal {
+    /// @dev Records which settlement performed the burn, for the rest of this transaction. Zero
+    ///      means "none", and is also what a repeat `consume` writes, since zero matches nothing.
+    function _setWitness(address account, uint256 id, uint256 witness) internal {
         bytes32 slot = _txSlot(account, id);
         assembly ("memory-safe") {
-            tstore(slot, state)
+            tstore(slot, witness)
         }
     }
 
-    function _txState(address account, uint256 id) internal view returns (uint256 state) {
+    function _witness(address account, uint256 id) internal view returns (uint256 witness) {
         bytes32 slot = _txSlot(account, id);
         assembly ("memory-safe") {
-            state := tload(slot)
+            witness := tload(slot)
         }
     }
 

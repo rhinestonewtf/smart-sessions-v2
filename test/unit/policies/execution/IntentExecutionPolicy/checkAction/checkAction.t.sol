@@ -70,8 +70,7 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
         bytes memory callData = abi.encodeWithSelector(transferSelector, address(0xBEEF), 100);
 
         // Act
-        uint256 result =
-            policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
+        uint256 result = policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
 
         // Assert
         assertEq(result, FAILED);
@@ -106,8 +105,7 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
         bytes memory callData = _encodeApprove(whitelistedTarget2, 100);
 
         // Act
-        uint256 result =
-            policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
+        uint256 result = policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
 
         // Assert
         assertEq(result, SUCCESS);
@@ -124,8 +122,7 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
         bytes memory callData = _encodeApprove(randomSpender, 100);
 
         // Act
-        uint256 result =
-            policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
+        uint256 result = policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
 
         // Assert
         assertEq(result, FAILED);
@@ -141,8 +138,7 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
         bytes memory callData = _encodeCall(APPROVE_SELECTOR);
 
         // Act
-        uint256 result =
-            policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
+        uint256 result = policy.checkAction(configId, address(0), nonWhitelistedTarget, 0, callData);
 
         // Assert
         assertEq(result, FAILED);
@@ -175,5 +171,4 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
         // Assert - denied again
         assertEq(policy.checkAction(configId, address(0), newTarget, 0, callData), FAILED);
     }
-
 }
