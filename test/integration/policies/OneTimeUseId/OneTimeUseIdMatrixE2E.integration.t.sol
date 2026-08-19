@@ -106,6 +106,12 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         $intent.digest = _hashTypedDataPermit2(block.chainid, $intent.permit2Hash);
     }
 
+    /// @dev Override to register further actions on the session. Empty by default: the matrix
+    ///      registers only what an honest settlement calls.
+    function _extraActions(PolicyData[] memory) internal virtual returns (ActionData[] memory) {
+        return new ActionData[](0);
+    }
+
     /// @dev The once-policy goes on the 1271 list AND on EVERY action. The 1271 list is an AND, so
     ///      `Permit2ClaimPolicy` still bounds WHAT may settle while this bounds HOW MANY TIMES.
     /// @param bounded false swaps the once-policy for permissive ones, so the lists are non-empty
@@ -131,7 +137,8 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
             ? PolicyData({ policy: address(oncePolicy), initData: abi.encodePacked(bytes32(ID)) })
             : PolicyData({ policy: address(sudoPolicy), initData: "" });
 
-        ActionData[] memory actions = new ActionData[](2);
+        ActionData[] memory extra = _extraActions(actionPolicies);
+        ActionData[] memory actions = new ActionData[](2 + extra.length);
         actions[0] = ActionData({
             actionTarget: address(oncePolicy),
             actionTargetSelector: IOneTimeUseIdPolicy.consume.selector,
@@ -142,6 +149,9 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
             actionTargetSelector: MockTarget.targetFn.selector,
             actionPolicies: actionPolicies
         });
+        for (uint256 i; i < extra.length; ++i) {
+            actions[2 + i] = extra[i];
+        }
 
         ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
         allowedContent[0].contentNames = new string[](1);

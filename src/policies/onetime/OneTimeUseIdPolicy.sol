@@ -51,11 +51,17 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///        - it carries no other unpoliced executions; the pre-claim's action surface is not
 ///          dispatched on the ERC-1271 route, so ops there are bounded by the signer, not by us
 ///        - its sigMode is the one the 1271 route expects
+///        - no executor-route op calls `consumeFor`. Only the ERC-1271 route has any business
+///          nominating, and nothing on-chain stops another route from doing it: an executor
+///          settlement that nominated a Permit2 nonce would let a settlement that never burned
+///          ride that nomination. `checkAction` cannot refuse it - a permissive
+///          `FALLBACK_ACTIONID` shadows any guard placed there, so a guard would read as
+///          protection while never running. Better absent than decorative.
 ///
-///      All four are properties of a blob the orchestrator builds and signs. They are build
-///      requirements on the intent, not invariants this contract enforces. The executor route is
-///      the exception: `checkAction` DOES run there, so the id binding and the `consumeFor` ban
-///      are enforced on-chain on that route alone.
+///      All five are properties of a blob the orchestrator builds and signs. They are build
+///      requirements on the intent, not invariants this contract enforces. The executor route
+///      enforces exactly one thing on-chain, via `checkAction`: a `consume` may only name the
+///      session's OWN id.
 ///
 /// @dev READ HERE, BURN THERE. `checkAction` does not write. The burn is `consume`, an execution
 ///      the settlement carries, with the ACCOUNT as msg.sender.
@@ -299,14 +305,6 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         if (target == address(this) && data.length >= 4) {
             bytes4 selector = bytes4(data[0:4]);
 
-            // `consumeFor` NOMINATES a settlement, and this surface cannot tell a legitimate
-            // nomination from a forged one - the witness names a settlement it does not own. An
-            // executor settlement could otherwise nominate a Permit2 nonce and let a settlement
-            // that never burned ride it. Only the ERC-1271 route, which is not gated here, may
-            // nominate.
-            if (selector == this.consumeFor.selector) return VALIDATION_FAILED;
-
-            // And a session may only ever burn its OWN id
             if (
                 selector == this.consume.selector && data.length >= 36
                     && uint256(bytes32(data[4:36])) != pinned

@@ -214,18 +214,22 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
         );
     }
 
-    /// @dev THE new one. `checkAction` cannot tell a legitimate nomination from a forged one, so
-    ///      the nominating entrypoint is forbidden on the action surface entirely. Otherwise an
-    ///      executor settlement nominates a Permit2 nonce it does not own, and a Permit2
-    ///      settlement that never burned rides it.
-    function test_theActionSurfaceForbidsNominating() public {
+    /// @dev PINS A KNOWN GAP, deliberately. The action surface does NOT stop a caller from
+    ///      nominating, and that is a build requirement on the orchestrator rather than a control
+    ///      here - see WHO IS TRUSTED on the policy.
+    ///
+    ///      A ban used to live here. It never ran: a permissive `FALLBACK_ACTIONID` routes
+    ///      `consumeFor` around any guard on this surface, so the ban read as protection while
+    ///      `checkAction` appeared zero times in the trace. If you are adding it back because
+    ///      this test failed, read that block first - the guard is not the missing piece.
+    function test_theActionSurfaceDoesNotForbidNominating() public {
         bytes memory nominate = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, 4242));
 
         vm.prank(multiplexer);
         assertEq(
             policy.checkAction(cfgB, account, address(policy), 0, nominate),
-            VALIDATION_FAILED,
-            "the action route may burn, but never nominate"
+            VALIDATION_SUCCESS,
+            "nominating is bounded by the signed ops, not by this surface"
         );
     }
 
