@@ -32,6 +32,31 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 /// │  dependency on `Permit2ClaimPolicy` binding that blob to the digest.     │
 /// └──────────────────────────────────────────────────────────────────────────┘
 ///
+/// @dev WHO IS TRUSTED. This policy assumes the ORCHESTRATOR composes the settlement's ops. It
+///      makes the exactly-once guarantee against a hostile SUBMITTER, not a hostile ops AUTHOR.
+///
+///      The split follows from what is signed. The ops sit inside the signed digest, so a solver
+///      can submit the settlement or withhold it and nothing else. Every unsigned input therefore
+///      has to fail closed, and one exists: `preClaimGasStipend` is the low half of
+///      `packedGasValues` and never enters `hashMandateRaw`, so the submitter picks the gas budget
+///      of a call the user signed. Starving it skips the burn - and a skipped burn leaves no
+///      nomination, so check #2 refuses. No burn, no settle. Held by `GasStarve` and
+///      `BurnSkippable`.
+///
+///      What the orchestrator must get right off-chain, because nothing here can check it:
+///
+///        - the pre-claim carries the `consume`/`consumeFor` call at all
+///        - it names THIS account's own id, not another session's - burning a foreign id is a
+///          cross-session denial of service
+///        - it carries no other unpoliced executions; the pre-claim's action surface is not
+///          dispatched on the ERC-1271 route, so ops there are bounded by the signer, not by us
+///        - its sigMode is the one the 1271 route expects
+///
+///      All four are properties of a blob the orchestrator builds and signs. They are build
+///      requirements on the intent, not invariants this contract enforces. The executor route is
+///      the exception: `checkAction` DOES run there, so the id binding and the `consumeFor` ban
+///      are enforced on-chain on that route alone.
+///
 /// @dev READ HERE, BURN THERE. `checkAction` does not write. The burn is `consume`, an execution
 ///      the settlement carries, with the ACCOUNT as msg.sender.
 ///
