@@ -105,17 +105,12 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      value is the intended shape; the small integers in the tests are for readability.
 // forgefmt: disable-end
 contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
-    /// @param configured Whether an id has been pinned for this configuration
-    /// @param id The pinned id, the key the burn site and the read site agree on
-    struct UsageConfig {
-        bool configured;
-        uint256 id;
-    }
-
-    /// @dev Holds the PIN only.
+    /// @dev Holds the PIN. Zero means "not configured" - `initializeWithMultiplexer` rejects a
+    ///      zero id precisely so one slot can carry both facts. A `bool configured` beside the id
+    ///      would not pack with it, so every read cost two SLOADs of two different slots.
     mapping(
-        ConfigId configId => mapping(address multiplexer => mapping(address account => UsageConfig))
-    ) internal $configs;
+        ConfigId configId => mapping(address multiplexer => mapping(address account => uint256 id))
+    ) internal $pinnedId;
 
     /// @dev Start of the nonce in `Permit2ClaimPolicy`'s claim blob, after the arbiter
     uint256 internal constant PERMIT2_NONCE_START = 20;
@@ -164,9 +159,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 id = uint256(bytes32(initData[0:32]));
         if (id == 0) revert InvalidId();
 
-        UsageConfig storage $config = $configs[configId][msg.sender][account];
-        $config.id = id;
-        $config.configured = true;
+        $pinnedId[configId][msg.sender][account] = id;
 
         // The spend is deliberately NOT cleared. `initializeWithMultiplexer` runs DURING a
         // settlement in ENABLE mode, so clearing here hands every ENABLE-mode settlement a fresh
@@ -218,10 +211,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (uint256)
     {
-        UsageConfig storage $config = $configs[id][msg.sender][account];
-        if (!$config.configured) return VALIDATION_FAILED;
-
-        uint256 pinned = $config.id;
+        uint256 pinned = $pinnedId[id][msg.sender][account];
+        if (pinned == 0) return VALIDATION_FAILED;
 
         // A session permitted to call `consume` may only burn its OWN id. The argument was
         // otherwise unconstrained: a session holder passes ANOTHER session's id and kills it
@@ -253,10 +244,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (bool)
     {
-        UsageConfig storage $config = $configs[id][msg.sender][account];
-        if (!$config.configured) return false;
-
-        uint256 pinned = $config.id;
+        uint256 pinned = $pinnedId[id][msg.sender][account];
+        if (pinned == 0) return false;
 
         // The PRE-CLAIM check, which runs BEFORE the burn and so cannot demand proof of it. It
         // is also the check whose refusal the arbiter swallows, so nothing here is load-bearing;
@@ -286,22 +275,20 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         return $used[id][account];
     }
 
-    /// @notice The id pinned for this configuration
-    function getId(
+    /// @notice The id pinned for a configuration, and whether it has been spent
+    /// @return pinned The pinned id, or zero if this configuration was never initialized
+    /// @return consumed Whether that id has been burned
+    function usage(
         ConfigId id,
         address multiplexer,
         address account
     )
         external
         view
-        returns (uint256)
+        returns (uint256 pinned, bool consumed)
     {
-        return $configs[id][multiplexer][account].id;
-    }
-
-    /// @notice Whether this configuration is initialized for an account, keyed on the caller
-    function isInitialized(address account, ConfigId id) external view returns (bool) {
-        return $configs[id][msg.sender][account].configured;
+        pinned = $pinnedId[id][multiplexer][account];
+        consumed = $used[pinned][account];
     }
 
     /// @notice ERC-165 for both policy surfaces and the view surface
