@@ -26,7 +26,7 @@ contract OneTimeUseIdBurnSkippable_Test is OneTimeUseIdE2E_Base {
         ops[0] = Execution({
             target: address(oncePolicy),
             value: 0,
-            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID, $intent.nonce))
+            callData: abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID, $intent.nonce))
         });
 
         $intent.element.mandate.originOps = ops.toOperation(mode);

@@ -25,8 +25,11 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 /// │  supplied blob at a fixed byte offset, and to pin a value the            │
 /// │  orchestrator only mints days later.                                     │
 /// │                                                                          │
-/// │  Here the marker is OURS. Nothing caller-supplied is parsed, no layer is │
-/// │  named, and adding a settlement layer needs no change to this file.      │
+/// │  Here the marker is OURS, and no nonce is pinned in advance. The ERC-1271│
+/// │  route does read ONE caller-supplied field - the settlement's own Permit2│
+/// │  nonce, used purely as a witness so the settling check can recognise its │
+/// │  own burn. That is the design's one concession, and it costs a           │
+/// │  dependency on `Permit2ClaimPolicy` binding that blob to the digest.     │
 /// └──────────────────────────────────────────────────────────────────────────┘
 ///
 /// @dev READ HERE, BURN THERE. `checkAction` does not write. The burn is `consume`, an execution
@@ -38,34 +41,31 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      that is a live failure, not a corner case. Reading during validation and burning during
 ///      execution removes the question: nothing in a batch can observe its own burn.
 ///
-/// @dev THE 1271 READ IS SAME-TRANSACTION TOLERANT, and that is the whole trick.
+/// @dev THE SETTLING 1271 READ DEMANDS PROOF, and that is the whole trick.
 ///
 ///      The Permit2 arbiter route validates ERC-1271 TWICE in one settlement, with the pre-claim
-///      execution - and therefore the burn - in between:
+///      execution - and therefore the burn - in between, and the two arrive from DIFFERENT
+///      callers:
 ///
 ///        _permit2PreClaimOps -> executePreClaimOpsWithPermit2Stub
-///                                 |- isValidSignature         <- 1271 check #1, nothing burned
-///                                 `- executeOps(preClaimOps)  <- `consume` burns here
+///                                 |- isValidSignature         <- check #1, from the executor
+///                                 `- executeOps(preClaimOps)  <- `consumeFor` burns here
 ///        _unlockPermit2      -> Permit2.permitWitnessTransferFrom
-///                                 `- account.isValidSignature <- 1271 check #2, sees the burn
+///                                 `- account.isValidSignature <- check #2, from PERMIT2
 ///
-///      A strict read refuses check #2 and so refuses its own settlement. But a bare "something
-///      burned in this transaction" flag is far too generous: a SECOND settlement riding in the
-///      same transaction reads it as its own and spends again, because check #2 of settlement one
-///      and check #1 of settlement two present the identical state. That was a real double-spend,
-///      demonstrated end to end - two Permit2 settlements on distinct nonces, one transaction.
+///      Only check #2 blocks anything: a refusal at check #1 is swallowed by the failure-tolerant
+///      arbiter, so nothing enforced there is load-bearing. Check #1 therefore only asks "is this
+///      unspent?", which is what lets the burn happen at all.
 ///
-///      The read cannot tell them apart, and being `view` it cannot consume a credit either. So
-///      the discrimination is done by the WRITE side, which is not view and can see that it is
-///      not the burn:
+///      Check #2 asks the opposite question. Not "has anyone burned this?" - which passes when
+///      nobody has, so a settlement that SKIPPED its burn looks exactly like the first settlement
+///      ever, forever - but "can you prove YOU burned it?". `consumeFor` records a nomination
+///      naming its own settlement; check #2 requires that nomination to match the settlement in
+///      front of it. Skipping the burn therefore means not settling.
 ///
-///        UNTOUCHED -> BURNING     first `consume`: this transaction performed the burn
-///        anything  -> POISONED    a later `consume` on an id already spent, so the caller is
-///                                 NOT the burning settlement - refuse everything afterwards
-///
-///      Only BURNING is tolerated. A second settlement's own injected `consume` is what poisons
-///      the transaction against it, which is why the fix needs no partner policy and no knowledge
-///      of any settlement layer.
+///      A second settlement cannot borrow the first's nomination, because it cannot name it - and
+///      its own `consumeFor` clears the nomination rather than re-issuing it, since an id already
+///      spent means the caller is not the burn.
 ///
 ///      This is also why the burn must be durable rather than transient-only. The arbiter route
 ///      swallows pre-claim failures on purpose (PreClaimExecution is failure-tolerant so a failed
@@ -81,6 +81,42 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      `consume` is called by the account, which knows neither. It is also the keying the
 ///      predecessor had to be corrected into, since SmartSessions hands each policy SLOT its own
 ///      ConfigId and a flag written under one is invisible to the other.
+///
+/// @dev LIMIT, and the sharpest one. The settling proof exists for the PERMIT2 caller only.
+///      Every other ERC-1271 caller takes the advisory read - "is this unspent?" - which is the
+///      permissive default a settlement can satisfy without burning anything. Two consequences,
+///      both real in this repo:
+///
+///        - installed in `Session.claimPolicies`, a Compact settlement carrying no `consume`
+///          reads unspent and settles, repeatedly
+///        - a Compact settlement that DOES burn runs its pre-claim before `verifyClaim`, so the
+///          advisory read sees the burn and refuses ITS OWN settlement
+///
+///      So this policy currently bounds the Permit2 arbiter route and the executor route, and
+///      NOT the Compact claim route. Supporting another layer means teaching this file which
+///      caller settles it and how to prove a burn there - it is not layer-agnostic, whatever the
+///      shape of the marker suggests.
+///
+/// @dev INSTALL-TIME REQUIREMENT: the 1271 list must also carry a policy that binds the claim
+///      blob to the digest - `Permit2ClaimPolicy` is the intended partner. `signature[20:52]` is
+///      the settlement's nonce only because that policy recomputes the digest from the same blob
+///      and compares it to `hash`. Installed alone, `presented` is caller-chosen and the proof
+///      degenerates to "some nomination is live", which proves nothing. `minPoliciesToEnforce`
+///      is 1, so installing this alone is a legal configuration that nothing rejects.
+///
+/// @dev INSTALL-TIME REQUIREMENT, and the one @zeroknots asked about. ConfigId is generated BY
+///      SmartSessions, per policy SLOT - `keccak(account, keccak(permissionId, actionId))` for an
+///      action, `keccak(account, keccak("ERC1271: ", permissionId))` for the 1271 list. So even
+///      within ONE session the two halves of this policy are handed DIFFERENT ConfigIds, and each
+///      is initialized from its own initData blob.
+///
+///      Every one of those blobs must carry the SAME id. Nothing here can check it: no slot can
+///      see another's config. Pin different values and the halves key different records, the
+///      cross-route exclusion silently never fires, and both surfaces still report "configured".
+///
+///      This is also why ONE session must cover every settlement layer. Give each layer its own
+///      permissionId and each gets its own ConfigIds AND its own spend - exactly-once then holds
+///      per layer instead of across them, which is the opposite of the point.
 ///
 /// @dev INSTALL-TIME REQUIREMENT: a settlement must carry EXACTLY ONE `consume`. Two of them
 ///      poison the settlement that carries them, so it refuses itself. This is enforceable rather
@@ -176,17 +212,28 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     ///      transaction, because the only honest reading of it is "a settlement other than the
     ///      burning one is running". That is what closes the same-transaction double-spend, and it
     ///      is why a settlement must carry EXACTLY ONE `consume` - see the install requirements.
-    function consume(uint256 id, uint256 witness) external override {
-        if (witness == 0) revert InvalidWitness();
+    function consume(uint256 id) external override {
+        _burn(id, NOT_NOMINATED);
+    }
+
+    /// @inheritdoc IOneTimeUseIdPolicy
+    function consumeFor(uint256 id, uint256 witness) external override {
+        _burn(id, _nominationOf(witness));
+    }
+
+    /// @dev One burn, one nomination slot. `nomination` is NOT_NOMINATED for the action route,
+    ///      which needs none, and a settlement-specific value for the ERC-1271 route.
+    function _burn(uint256 id, uint256 nomination) internal {
+        bytes32 slot = _txSlot(msg.sender, id);
 
         if ($used[id][msg.sender]) {
             // Already burned, so this call is not the burn. Clear the nomination rather than
-            // re-issuing it: zero matches no settlement, so nothing rides it.
-            _setWitness(msg.sender, id, 0);
+            // re-issuing it - nothing may ride a burn it did not perform.
+            _setNomination(slot, NOT_NOMINATED);
             return;
         }
 
-        _setWitness(msg.sender, id, witness);
+        _setNomination(slot, nomination);
         $used[id][msg.sender] = true;
         emit IdConsumed(msg.sender, id);
     }
@@ -217,18 +264,29 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         // A session permitted to call `consume` may only burn its OWN id. The argument was
         // otherwise unconstrained: a session holder passes ANOTHER session's id and kills it
         // permanently and for free, while its own id stays clean.
-        if (
-            target == address(this) && data.length >= 36
-                && bytes4(data[0:4]) == this.consume.selector
-                && uint256(bytes32(data[4:36])) != pinned
-        ) return VALIDATION_FAILED;
+        if (target == address(this) && data.length >= 4) {
+            bytes4 selector = bytes4(data[0:4]);
+
+            // `consumeFor` NOMINATES a settlement, and this surface cannot tell a legitimate
+            // nomination from a forged one - the witness names a settlement it does not own. An
+            // executor settlement could otherwise nominate a Permit2 nonce and let a settlement
+            // that never burned ride it. Only the ERC-1271 route, which is not gated here, may
+            // nominate.
+            if (selector == this.consumeFor.selector) return VALIDATION_FAILED;
+
+            // And a session may only ever burn its OWN id
+            if (
+                selector == this.consume.selector && data.length >= 36
+                    && uint256(bytes32(data[4:36])) != pinned
+            ) return VALIDATION_FAILED;
+        }
 
         return $used[pinned][account] ? VALIDATION_FAILED : VALIDATION_SUCCESS;
     }
 
-    /// @notice Refuses an ERC-1271 settlement once the id was burned by an EARLIER transaction
-    /// @dev Tolerates a burn from the transaction currently running - see the contract note. This
-    ///      surface is `view` and cannot burn; the durable record is written by `consume`.
+    /// @notice Refuses any ERC-1271 settlement that cannot prove it performed the burn
+    /// @dev The settling caller must PROVE it burned; every other caller gets the advisory read.
+    ///      This surface is `view` and cannot burn - the record is written by `consumeFor`.
     /// @param id The configuration
     /// @param account The account settling
     /// @return True if the settlement may proceed
@@ -263,7 +321,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 presented =
             uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));
 
-        return presented != 0 && _witness(account, pinned) == presented;
+        return _nomination(_txSlot(account, pinned)) == _nominationOf(presented);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -288,7 +346,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         returns (uint256 pinned, bool consumed)
     {
         pinned = $pinnedId[id][multiplexer][account];
-        consumed = $used[pinned][account];
+        consumed = pinned != 0 && $used[pinned][account];
     }
 
     /// @notice ERC-165 for both policy surfaces and the view surface
@@ -305,19 +363,24 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @dev Marks the id as burned by the transaction currently running. Cleared by the EVM at
     ///      the end of it, which is precisely the lifetime the 1271 tolerance needs.
-    /// @dev Records which settlement performed the burn, for the rest of this transaction. Zero
-    ///      means "none", and is also what a repeat `consume` writes, since zero matches nothing.
-    function _setWitness(address account, uint256 id, uint256 witness) internal {
-        bytes32 slot = _txSlot(account, id);
+    /// @dev No settlement has been nominated in this transaction
+    uint256 internal constant NOT_NOMINATED = 0;
+
+    /// @dev Hashed so that NO witness value collides with NOT_NOMINATED - Permit2 does not
+    ///      reserve nonce zero, and neither end of the uint256 range may be unspendable.
+    function _nominationOf(uint256 witness) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode(witness)));
+    }
+
+    function _setNomination(bytes32 slot, uint256 nomination) internal {
         assembly ("memory-safe") {
-            tstore(slot, witness)
+            tstore(slot, nomination)
         }
     }
 
-    function _witness(address account, uint256 id) internal view returns (uint256 witness) {
-        bytes32 slot = _txSlot(account, id);
+    function _nomination(bytes32 slot) internal view returns (uint256 nomination) {
         assembly ("memory-safe") {
-            witness := tload(slot)
+            nomination := tload(slot)
         }
     }
 

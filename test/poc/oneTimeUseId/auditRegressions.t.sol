@@ -76,7 +76,13 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
 
     function _settlementBurns(uint256 id, uint256 witness) internal {
         vm.prank(account);
-        policy.consume(id, witness);
+        policy.consumeFor(id, witness);
+    }
+
+    /// @dev The action route's burn, which nominates nothing
+    function _actionBurns(uint256 id) internal {
+        vm.prank(account);
+        policy.consume(id);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -143,8 +149,7 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
     //////////////////////////////////////////////////////////////*/
 
     function test_F3_aSessionMayNotAuthoriseBurningAnotherSessionsId() public {
-        bytes memory burnSomeoneElse =
-            abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_A, WITNESS_1));
+        bytes memory burnSomeoneElse = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_A));
 
         vm.prank(multiplexer);
         uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnSomeoneElse);
@@ -153,7 +158,7 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
     }
 
     function test_F3_control_aSessionMayBurnItsOwnId() public {
-        bytes memory burnOwn = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_B, WITNESS_1));
+        bytes memory burnOwn = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_B));
 
         vm.prank(multiplexer);
         uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnOwn);
@@ -182,10 +187,57 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
                                   SHAPE
     //////////////////////////////////////////////////////////////*/
 
-    function test_aZeroWitnessIsRejected() public {
+    /// @dev Permit2 does not reserve nonce zero, so a settlement on it must be spendable. The
+    ///      nomination is hashed precisely so no witness value collides with "nothing nominated".
+    function test_aSettlementOnPermit2NonceZeroCanSettle() public {
         vm.prank(account);
-        vm.expectRevert(IOneTimeUseIdPolicy.InvalidWitness.selector);
-        policy.consume(ID_A, 0);
+        policy.consumeFor(ID_A, 0);
+
+        vm.prank(multiplexer);
+        assertTrue(
+            policy.check1271SignedAction(cfgA, PERMIT2, account, bytes32(0), _blob(0)),
+            "nonce zero is a valid settlement"
+        );
+    }
+
+    /// @dev ...and the top of the range too, which a naive `witness + 1` sentinel would break
+    function test_aSettlementOnTheMaxNonceCanSettle() public {
+        vm.prank(account);
+        policy.consumeFor(ID_A, type(uint256).max);
+
+        vm.prank(multiplexer);
+        assertTrue(
+            policy.check1271SignedAction(
+                cfgA, PERMIT2, account, bytes32(0), _blob(type(uint256).max)
+            ),
+            "the max nonce is a valid settlement"
+        );
+    }
+
+    /// @dev THE new one. `checkAction` cannot tell a legitimate nomination from a forged one, so
+    ///      the nominating entrypoint is forbidden on the action surface entirely. Otherwise an
+    ///      executor settlement nominates a Permit2 nonce it does not own, and a Permit2
+    ///      settlement that never burned rides it.
+    function test_theActionSurfaceForbidsNominating() public {
+        bytes memory nominate = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, 4242));
+
+        vm.prank(multiplexer);
+        assertEq(
+            policy.checkAction(cfgB, account, address(policy), 0, nominate),
+            VALIDATION_FAILED,
+            "the action route may burn, but never nominate"
+        );
+    }
+
+    function test_control_theActionSurfaceStillAllowsAPlainBurn() public {
+        bytes memory burn = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_B));
+
+        vm.prank(multiplexer);
+        assertEq(
+            policy.checkAction(cfgB, account, address(policy), 0, burn),
+            VALIDATION_SUCCESS,
+            "a plain burn of its own id is what the action route is for"
+        );
     }
 
     function test_aShortBlobIsRefused() public {

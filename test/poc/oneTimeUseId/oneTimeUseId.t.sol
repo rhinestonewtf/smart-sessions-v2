@@ -52,7 +52,7 @@ contract OneTimeUseId_Test is Test {
 
     function _settlementBurns(uint256 id) internal {
         vm.prank(account);
-        policy.consume(id, WITNESS);
+        policy.consumeFor(id, WITNESS);
     }
 
     /// @dev A claim blob shaped like `Permit2ClaimPolicy`'s: arbiter(20) ‖ nonce(32) ‖ …
@@ -128,7 +128,7 @@ contract OneTimeUseId_Test is Test {
         address stranger = makeAddr("stranger");
 
         vm.prank(stranger);
-        policy.consume(ID, WITNESS);
+        policy.consumeFor(ID, WITNESS);
 
         assertFalse(policy.isConsumed(account, ID), "the account's id is untouched");
         assertEq(_validate(cfgA), VALIDATION_SUCCESS, "and its session still settles");
@@ -264,7 +264,7 @@ contract OneTimeUseId_AcrossTransactions_Test is Test {
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));
 
         vm.prank(account);
-        policy.consume(ID, WITNESS);
+        policy.consumeFor(ID, WITNESS);
     }
 
     /// @dev THE property. The same read that was tolerated inside the burning transaction refuses.

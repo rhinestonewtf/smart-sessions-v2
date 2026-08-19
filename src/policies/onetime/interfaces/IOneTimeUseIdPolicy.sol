@@ -14,16 +14,19 @@ interface IOneTimeUseIdPolicy {
     /// @notice Emitted when an account's id is consumed, by either burn site
     event IdConsumed(address indexed account, uint256 indexed id);
 
-    /// @notice Thrown when the witness is zero, which no settlement can present
-    error InvalidWitness();
+    /// @notice Burns `id` for the caller WITHOUT nominating any settlement. The caller IS the
+    ///         account. This is the burn for routes gated by `checkAction`, which is strict and
+    ///         reads the durable record directly, so it needs no nomination.
+    function consume(uint256 id) external;
 
-    /// @notice Burns `id` for the caller, nominating the settlement doing it. The caller IS the
-    ///         account.
+    /// @notice Burns `id` AND nominates the settlement doing it. The caller IS the account.
+    /// @dev Only the ERC-1271 route needs this: it validates twice with the burn in between, so
+    ///      its settling check must be able to tell its own burn from someone else's.
     /// @param id The pinned id
-    /// @param witness A value unique to THIS settlement that its ERC-1271 check can also name -
+    /// @param witness A value unique to THIS settlement that its settling check can also name -
     ///        the Permit2 nonce. Not known at install time; it only has to match within one
     ///        settlement, which is why this design still needs no nonce pinned in advance.
-    function consume(uint256 id, uint256 witness) external;
+    function consumeFor(uint256 id, uint256 witness) external;
 
     /// @notice Whether an account's id has been consumed
     function isConsumed(address account, uint256 id) external view returns (bool);

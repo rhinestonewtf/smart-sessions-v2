@@ -95,7 +95,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         ops[0] = Execution({
             target: address(oncePolicy),
             value: 0,
-            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID, $intent.nonce))
+            callData: abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID, $intent.nonce))
         });
 
         $intent.element.mandate.originOps = ops.toOperation();
@@ -215,7 +215,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         calls[0] = Execution({
             target: address(oncePolicy),
             value: 0,
-            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID, executorNonce + 1))
+            callData: abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID))
         });
         calls[1] = Execution({
             target: address(env.target),
