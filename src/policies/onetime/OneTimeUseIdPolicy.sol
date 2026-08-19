@@ -48,24 +48,43 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///        _unlockPermit2      -> Permit2.permitWitnessTransferFrom
 ///                                 `- account.isValidSignature <- 1271 check #2, sees the burn
 ///
-///      A strict read would refuse check #2 and so refuse its own settlement. A transient marker
-///      distinguishes "burned by the settlement currently running" from "burned earlier", which is
-///      exactly the distinction needed: check #2 is tolerated, any later transaction is not.
+///      A strict read refuses check #2 and so refuses its own settlement. But a bare "something
+///      burned in this transaction" flag is far too generous: a SECOND settlement riding in the
+///      same transaction reads it as its own and spends again, because check #2 of settlement one
+///      and check #1 of settlement two present the identical state. That was a real double-spend,
+///      demonstrated end to end - two Permit2 settlements on distinct nonces, one transaction.
+///
+///      The read cannot tell them apart, and being `view` it cannot consume a credit either. So
+///      the discrimination is done by the WRITE side, which is not view and can see that it is
+///      not the burn:
+///
+///        UNTOUCHED -> BURNING     first `consume`: this transaction performed the burn
+///        anything  -> POISONED    a later `consume` on an id already spent, so the caller is
+///                                 NOT the burning settlement - refuse everything afterwards
+///
+///      Only BURNING is tolerated. A second settlement's own injected `consume` is what poisons
+///      the transaction against it, which is why the fix needs no partner policy and no knowledge
+///      of any settlement layer.
 ///
 ///      This is also why the burn must be durable rather than transient-only. The arbiter route
 ///      swallows pre-claim failures on purpose (PreClaimExecution is failure-tolerant so a failed
-///      pre-claim cannot void a claim and strand a solver), so a refusal raised there is ignored.
-///      The refusal that MATTERS is check #2, inside `permitWitnessTransferFrom`, which reverts.
+///      pre-claim cannot void a claim and strand a solver), so a refusal raised there is ignored -
+///      verified by experiment, not assumed. The refusal that MATTERS is check #2, inside
+///      `permitWitnessTransferFrom`, which reverts. Narrowing the tolerance by caller does NOT
+///      work for the same reason: it only closes the advisory gate.
 ///
-/// @dev `checkAction` is strict - no tolerance. Action policies run during validation, before any
-///      execution in the batch, so a settlement can never observe its own burn there. Adding
-///      tolerance would only widen it to accept a burn from a Permit2 settlement riding in the
-///      same transaction, which is a SECOND spend rather than a second execution of one.
+/// @dev `checkAction` is strict - no tolerance at all. Action policies run during validation,
+///      before any execution in the batch, so a settlement can never observe its own burn there.
 ///
-/// @dev THE RECORD IS KEYED ON (account, id) - not ConfigId, not the multiplexer. That is forced:
+/// @dev THE RECORD IS KEYED ON (id, account) - not ConfigId, not the multiplexer. That is forced:
 ///      `consume` is called by the account, which knows neither. It is also the keying the
 ///      predecessor had to be corrected into, since SmartSessions hands each policy SLOT its own
 ///      ConfigId and a flag written under one is invisible to the other.
+///
+/// @dev INSTALL-TIME REQUIREMENT: a settlement must carry EXACTLY ONE `consume`. Two of them
+///      poison the settlement that carries them, so it refuses itself. This is enforceable rather
+///      than hopeful: `Permit2ClaimPolicy`'s FIELD_ORIGIN_OPS in sub-policy mode receives the
+///      pre-claim ops hash, so pinning that hash fixes the ops to exactly `[consume(id)]`.
 ///
 /// @dev INSTALL-TIME REQUIREMENT, and the load-bearing one. Install this on EVERY action the
 ///      session permits. Any execution the settlement performs then reads the record, so a
@@ -95,9 +114,14 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev configId => multiplexer => account => config. Holds the PIN only.
     mapping(ConfigId => mapping(address => mapping(address => Config))) internal $configs;
 
-    /// @dev account => id => burned. Holds the SPEND, reachable from `consume`, which knows only
+    /// @dev id => account => burned. Holds the SPEND, reachable from `consume`, which knows only
     ///      the account and the id.
-    mapping(address => mapping(uint256 => bool)) internal $used;
+    ///
+    ///      The account is the INNER key deliberately. ERC-7562 counts a slot as associated
+    ///      storage of the sender only when the final keccak preimage begins with the account, and
+    ///      `checkAction` reads this during the 4337 validation phase - account-first nesting
+    ///      yields `keccak(id . keccak(account . p))`, which a compliant bundler rejects.
+    mapping(uint256 => mapping(address => bool)) internal $used;
 
     /*//////////////////////////////////////////////////////////////
                                   INIT
@@ -135,14 +159,21 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IOneTimeUseIdPolicy
-    /// @dev Idempotent. A settlement may legitimately carry more than one `consume`, and a
-    ///      revert-on-already-burned would fail the settlement it is meant to mark.
+    /// @dev NOT idempotent, deliberately. A second `consume` of an already-spent id POISONS the
+    ///      transaction, because the only honest reading of it is "a settlement other than the
+    ///      burning one is running". That is what closes the same-transaction double-spend, and it
+    ///      is why a settlement must carry EXACTLY ONE `consume` - see the install requirements.
     function consume(uint256 id) external override {
-        _markThisTx(msg.sender, id);
+        if ($used[id][msg.sender]) {
+            // Already burned — either by an earlier settlement in THIS transaction, or in a past
+            // one. Either way this call is not the burn, so poison the transaction rather than
+            // vouching for it.
+            _setTxState(msg.sender, id, POISONED);
+            return;
+        }
 
-        if ($used[msg.sender][id]) return;
-
-        $used[msg.sender][id] = true;
+        _setTxState(msg.sender, id, BURNING);
+        $used[id][msg.sender] = true;
         emit IdConsumed(msg.sender, id);
     }
 
@@ -158,9 +189,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     function checkAction(
         ConfigId id,
         address account,
-        address,
+        address target,
         uint256,
-        bytes calldata
+        bytes calldata data
     )
         external
         override
@@ -169,7 +200,18 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         Config storage $config = $configs[id][msg.sender][account];
         if (!$config.configured) return VALIDATION_FAILED;
 
-        return $used[account][$config.id] ? VALIDATION_FAILED : VALIDATION_SUCCESS;
+        uint256 pinned = $config.id;
+
+        // A session permitted to call `consume` may only burn its OWN id. The argument was
+        // otherwise unconstrained: a session holder passes ANOTHER session's id and kills it
+        // permanently and for free, while its own id stays clean.
+        if (
+            target == address(this) && data.length >= 36
+                && bytes4(data[0:4]) == this.consume.selector
+                && uint256(bytes32(data[4:36])) != pinned
+        ) return VALIDATION_FAILED;
+
+        return $used[pinned][account] ? VALIDATION_FAILED : VALIDATION_SUCCESS;
     }
 
     /// @notice Refuses an ERC-1271 settlement once the id was burned by an EARLIER transaction
@@ -195,7 +237,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
         uint256 pinned = $config.id;
 
-        return !$used[account][pinned] || _burnedThisTx(account, pinned);
+        return !$used[pinned][account] || _txState(account, pinned) == BURNING;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -204,7 +246,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @inheritdoc IOneTimeUseIdPolicy
     function isConsumed(address account, uint256 id) external view override returns (bool) {
-        return $used[account][id];
+        return $used[id][account];
     }
 
     /// @notice The id pinned for this configuration
@@ -239,17 +281,24 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @dev Marks the id as burned by the transaction currently running. Cleared by the EVM at
     ///      the end of it, which is precisely the lifetime the 1271 tolerance needs.
-    function _markThisTx(address account, uint256 id) internal {
+    /// @dev No burn has happened in this transaction
+    uint256 internal constant UNTOUCHED = 0;
+    /// @dev THIS transaction performed the burn — the one settlement allowed to be tolerated
+    uint256 internal constant BURNING = 1;
+    /// @dev A second consume was seen, so some settlement other than the burning one is running
+    uint256 internal constant POISONED = 2;
+
+    function _setTxState(address account, uint256 id, uint256 state) internal {
         bytes32 slot = _txSlot(account, id);
         assembly ("memory-safe") {
-            tstore(slot, 1)
+            tstore(slot, state)
         }
     }
 
-    function _burnedThisTx(address account, uint256 id) internal view returns (bool burned) {
+    function _txState(address account, uint256 id) internal view returns (uint256 state) {
         bytes32 slot = _txSlot(account, id);
         assembly ("memory-safe") {
-            burned := tload(slot)
+            state := tload(slot)
         }
     }
 
