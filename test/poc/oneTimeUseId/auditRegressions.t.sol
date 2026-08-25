@@ -173,25 +173,42 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
         assertEq(result, VALIDATION_SUCCESS, "the binding only applies to self-calls");
     }
 
-    /// @dev The binding must cover `consumeFor` too, not just `consume`. Without it a second
-    ///      session on the account could name another session's id here and brick it permanently.
-    function test_F3_aSessionMayNotBurnAnotherSessionsIdViaConsumeFor() public {
-        bytes memory burnSomeoneElse =
+    /// @dev The executor route burns via `consume`; `consumeFor` (which nominates a settlement)
+    ///      is only for the ERC-1271 route and `checkAction` refuses it - even for the session's
+    ///      OWN id, because an executor `consumeFor` would set a nomination a Permit2 settlement
+    ///      could ride without performing its own burn.
+    function test_theExecutorRouteMayNotConsumeForItsOwnId() public {
+        bytes memory nominateOwn = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, WITNESS_1));
+
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(cfgB, account, address(policy), 0, nominateOwn);
+
+        assertEq(result, VALIDATION_FAILED, "the executor route may not nominate");
+    }
+
+    function test_theExecutorRouteMayNotConsumeForAnotherSessionsId() public {
+        bytes memory nominateOther =
             abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_A, WITNESS_1));
 
         vm.prank(multiplexer);
-        uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnSomeoneElse);
+        uint256 result = policy.checkAction(cfgB, account, address(policy), 0, nominateOther);
 
-        assertEq(result, VALIDATION_FAILED, "session B may not consumeFor session A's id");
+        assertEq(result, VALIDATION_FAILED, "and certainly not another session's id");
     }
 
-    function test_F3_control_aSessionMayConsumeForItsOwnId() public {
-        bytes memory burnOwn = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, WITNESS_1));
-
+    /// @dev A Permit2 settlement's proof must come from ITS OWN burn. An executor-route op cannot
+    ///      set a nomination on its behalf: `checkAction` refuses the `consumeFor`, so a Permit2
+    ///      settlement that skipped its own burn finds no nomination to ride.
+    function test_theExecutorRouteCannotNominateASettlementItDoesNotOwn() public {
+        bytes memory nominate = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_A, WITNESS_1));
         vm.prank(multiplexer);
-        uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnOwn);
+        assertEq(
+            policy.checkAction(cfgA, account, address(policy), 0, nominate),
+            VALIDATION_FAILED,
+            "the executor route cannot nominate"
+        );
 
-        assertEq(result, VALIDATION_SUCCESS, "its own id is permitted");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "a starved settlement has nothing to ride");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -232,25 +249,6 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
                 cfgA, PERMIT2, account, bytes32(0), _blob(type(uint256).max)
             ),
             "the max nonce is a valid settlement"
-        );
-    }
-
-    /// @dev PINS A KNOWN GAP, deliberately. The action surface does NOT stop a caller from
-    ///      nominating, and that is a build requirement on the orchestrator rather than a control
-    ///      here - see WHO IS TRUSTED on the policy.
-    ///
-    ///      A ban used to live here. It never ran: a permissive `FALLBACK_ACTIONID` routes
-    ///      `consumeFor` around any guard on this surface, so the ban read as protection while
-    ///      `checkAction` appeared zero times in the trace. If you are adding it back because
-    ///      this test failed, read that block first - the guard is not the missing piece.
-    function test_theActionSurfaceDoesNotForbidNominating() public {
-        bytes memory nominate = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, 4242));
-
-        vm.prank(multiplexer);
-        assertEq(
-            policy.checkAction(cfgB, account, address(policy), 0, nominate),
-            VALIDATION_SUCCESS,
-            "nominating is bounded by the signed ops, not by this surface"
         );
     }
 
