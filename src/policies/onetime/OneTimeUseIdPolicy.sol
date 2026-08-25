@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 // Interfaces
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
+import { OneTimeUseIdStorageLib } from "@policies/onetime/lib/OneTimeUseIdStorageLib.sol";
 import { IActionPolicy, I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
@@ -129,34 +130,15 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      intended shape.
 // forgefmt: disable-end
 contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
-    /// @dev Holds the PIN. Zero means "not configured" - `initializeWithMultiplexer` rejects a
-    ///      zero id precisely so one slot can carry both facts. A `bool configured` beside the id
-    ///      would not pack with it, so every read cost two SLOADs of two different slots.
-    mapping(
-        ConfigId configId => mapping(address multiplexer => mapping(address account => uint256 id))
-    ) internal $pinnedId;
-
     /// @dev Start of the nonce in `Permit2ClaimPolicy`'s claim blob, after the arbiter
     uint256 internal constant PERMIT2_NONCE_START = 20;
 
     /// @dev Width of the nonce
     uint256 internal constant NONCE_LENGTH = 32;
 
-    /// @notice The Permit2 deployment. Used ONLY to tell the settling ERC-1271 check apart from
-    ///         the pre-claim one - they arrive from different callers.
+    /// @notice The Permit2 deployment. Used only to tell the settling ERC-1271 check apart from the
+    ///         pre-claim one - they arrive from different callers.
     ISignatureTransfer public immutable PERMIT2;
-
-    /// @dev Holds the SPEND. Separate from `$configs` because it has to be reachable from
-    ///      `consume`, which is called BY THE ACCOUNT and therefore knows only `(account, id)` -
-    ///      never the ConfigId. Keying the spend under a ConfigId would make it invisible to the
-    ///      burn site, and invisible across surfaces too: SmartSessions derives a different
-    ///      ConfigId per policy slot, so the action half and the 1271 half never share one.
-    ///
-    ///      The account is the INNER key deliberately. ERC-7562 counts a slot as associated
-    ///      storage of the sender only when the final keccak preimage begins with the account, and
-    ///      `checkAction` reads this during the 4337 validation phase - account-first nesting
-    ///      yields `keccak(id . keccak(account . p))`, which a compliant bundler rejects.
-    mapping(uint256 id => mapping(address account => bool burned)) internal $used;
 
     constructor(ISignatureTransfer permit2) {
         PERMIT2 = permit2;
@@ -183,12 +165,10 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 id = uint256(bytes32(initData[0:32]));
         if (id == 0) revert InvalidId();
 
-        $pinnedId[configId][msg.sender][account] = id;
+        OneTimeUseIdStorageLib.pin(configId, msg.sender, account).id = id;
 
-        // The spend is deliberately NOT cleared. `initializeWithMultiplexer` runs DURING a
-        // settlement in ENABLE mode, so clearing here hands every ENABLE-mode settlement a fresh
-        // spend; and the record carries no session identity, so it would clear an unrelated
-        // session pinned to the same id.
+        // The spend is not cleared here: this runs during an ENABLE-mode settlement, and the record
+        // carries no session identity, so clearing would free an unrelated session on the same id.
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -196,33 +176,30 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IOneTimeUseIdPolicy
-    /// @dev NOT idempotent, deliberately. A second `consume` of an already-spent id POISONS the
-    ///      transaction, because the only honest reading of it is "a settlement other than the
-    ///      burning one is running". That is what closes the same-transaction double-spend, and it
-    ///      is why a settlement must carry EXACTLY ONE `consume` - see the install requirements.
+    /// @dev Not idempotent: a second `consume` of a spent id reverts the transaction, which closes
+    ///      the same-transaction double-spend. A settlement must carry exactly one `consume`.
     function consume(uint256 id) external override {
-        _burn(id, NOT_NOMINATED);
+        _burn(id, OneTimeUseIdStorageLib.NOT_NOMINATED);
     }
 
     /// @inheritdoc IOneTimeUseIdPolicy
     function consumeFor(uint256 id, uint256 witness) external override {
-        _burn(id, _nominationOf(witness));
+        _burn(id, OneTimeUseIdStorageLib.nominationOf(witness));
     }
 
-    /// @dev One burn, one nomination slot. `nomination` is NOT_NOMINATED for the action route,
-    ///      which needs none, and a settlement-specific value for the ERC-1271 route.
+    /// @dev `nomination` is NOT_NOMINATED for the action route and a settlement-specific value for
+    ///      the ERC-1271 route.
     function _burn(uint256 id, uint256 nomination) internal {
-        bytes32 slot = _txSlot(msg.sender, id);
-
-        if ($used[id][msg.sender]) {
-            // Already burned, so this call is not the burn. Clear the nomination rather than
-            // re-issuing it - nothing may ride a burn it did not perform.
-            _setNomination(slot, NOT_NOMINATED);
+        if (OneTimeUseIdStorageLib.spend(id, msg.sender).burned) {
+            // Already burned: this call is not the burn, so clear any nomination it left.
+            OneTimeUseIdStorageLib.setNomination(
+                id, msg.sender, OneTimeUseIdStorageLib.NOT_NOMINATED
+            );
             return;
         }
 
-        _setNomination(slot, nomination);
-        $used[id][msg.sender] = true;
+        OneTimeUseIdStorageLib.setNomination(id, msg.sender, nomination);
+        OneTimeUseIdStorageLib.spend(id, msg.sender).burned = true;
         emit IdConsumed(msg.sender, id);
     }
 
@@ -246,7 +223,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (uint256)
     {
-        uint256 pinned = $pinnedId[id][msg.sender][account];
+        uint256 pinned = OneTimeUseIdStorageLib.pin(id, msg.sender, account).id;
         if (pinned == 0) return VALIDATION_FAILED;
 
         if (target == address(this) && data.length >= 4) {
@@ -269,7 +246,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             ) return VALIDATION_FAILED;
         }
 
-        return $used[pinned][account] ? VALIDATION_FAILED : VALIDATION_SUCCESS;
+        return OneTimeUseIdStorageLib.spend(pinned, account).burned
+            ? VALIDATION_FAILED
+            : VALIDATION_SUCCESS;
     }
 
     /// @notice Refuses any ERC-1271 settlement that cannot prove it performed the burn
@@ -290,13 +269,14 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (bool)
     {
-        uint256 pinned = $pinnedId[id][msg.sender][account];
+        uint256 pinned = OneTimeUseIdStorageLib.pin(id, msg.sender, account).id;
         if (pinned == 0) return false;
 
-        // The PRE-CLAIM check, which runs BEFORE the burn and so cannot demand proof of it. It
-        // is also the check whose refusal the arbiter swallows, so nothing here is load-bearing;
-        // allowing it while unspent is what lets the burn happen at all.
-        if (requestSender != address(PERMIT2)) return !$used[pinned][account];
+        // The pre-claim check runs before the burn, so it can only ask "is this unspent?". Its
+        // refusal is swallowed by the arbiter, so nothing here is load-bearing.
+        if (requestSender != address(PERMIT2)) {
+            return !OneTimeUseIdStorageLib.spend(pinned, account).burned;
+        }
 
         // The SETTLING check, inside `permitWitnessTransferFrom`. This one moves the money and is
         // the only refusal that is not swallowed, so it demands POSITIVE PROOF that the settlement
@@ -305,7 +285,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 presented =
             uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));
 
-        return _nomination(_txSlot(account, pinned)) == _nominationOf(presented);
+        return OneTimeUseIdStorageLib.nomination(pinned, account)
+            == OneTimeUseIdStorageLib.nominationOf(presented);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -314,7 +295,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @inheritdoc IOneTimeUseIdPolicy
     function isConsumed(address account, uint256 id) external view override returns (bool) {
-        return $used[id][account];
+        return OneTimeUseIdStorageLib.spend(id, account).burned;
     }
 
     /// @notice The id pinned for a configuration, and whether it has been spent
@@ -329,8 +310,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         view
         returns (uint256 pinned, bool consumed)
     {
-        pinned = $pinnedId[id][multiplexer][account];
-        consumed = pinned != 0 && $used[pinned][account];
+        pinned = OneTimeUseIdStorageLib.pin(id, multiplexer, account).id;
+        consumed = pinned != 0 && OneTimeUseIdStorageLib.spend(pinned, account).burned;
     }
 
     /// @notice ERC-165 for both policy surfaces and the view surface
@@ -339,36 +320,5 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             || interfaceId == type(I1271Policy).interfaceId
             || interfaceId == type(IOneTimeUseIdPolicy).interfaceId
             || interfaceId == type(IERC165).interfaceId;
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                 INTERNAL
-    //////////////////////////////////////////////////////////////*/
-
-    /// @dev Marks the id as burned by the transaction currently running. Cleared by the EVM at
-    ///      the end of it, which is precisely the lifetime the 1271 tolerance needs.
-    /// @dev No settlement has been nominated in this transaction
-    uint256 internal constant NOT_NOMINATED = 0;
-
-    /// @dev Hashed so that NO witness value collides with NOT_NOMINATED - Permit2 does not
-    ///      reserve nonce zero, and neither end of the uint256 range may be unspendable.
-    function _nominationOf(uint256 witness) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(witness)));
-    }
-
-    function _setNomination(bytes32 slot, uint256 nomination) internal {
-        assembly ("memory-safe") {
-            tstore(slot, nomination)
-        }
-    }
-
-    function _nomination(bytes32 slot) internal view returns (uint256 nomination) {
-        assembly ("memory-safe") {
-            nomination := tload(slot)
-        }
-    }
-
-    function _txSlot(address account, uint256 id) internal pure returns (bytes32) {
-        return keccak256(abi.encode(account, id));
     }
 }
