@@ -46,22 +46,17 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      What the orchestrator must get right off-chain, because nothing here can check it:
 ///
 ///        - the pre-claim carries the `consume`/`consumeFor` call at all
-///        - it names THIS account's own id, not another session's - burning a foreign id is a
-///          cross-session denial of service
 ///        - it carries no other unpoliced executions; the pre-claim's action surface is not
 ///          dispatched on the ERC-1271 route, so ops there are bounded by the signer, not by us
 ///        - its sigMode is the one the 1271 route expects
-///        - no executor-route op calls `consumeFor`. Only the ERC-1271 route has any business
-///          nominating, and nothing on-chain stops another route from doing it: an executor
-///          settlement that nominated a Permit2 nonce would let a settlement that never burned
-///          ride that nomination. `checkAction` cannot refuse it - a permissive
-///          `FALLBACK_ACTIONID` shadows any guard placed there, so a guard would read as
-///          protection while never running. Better absent than decorative.
 ///
-///      All five are properties of a blob the orchestrator builds and signs. They are build
-///      requirements on the intent, not invariants this contract enforces. The executor route
-///      enforces exactly one thing on-chain, via `checkAction`: a `consume` may only name the
-///      session's OWN id.
+///      Those are properties of a blob the orchestrator builds and signs - build requirements on
+///      the intent, not invariants this contract enforces. Where the action surface IS dispatched
+///      (the executor route), `checkAction` enforces one thing on-chain: a `consume` or
+///      `consumeFor` may only name the session's OWN id, so a session cannot burn another
+///      session's id and brick it (a permanent cross-session denial of service). The guard runs
+///      wherever the once-policy sits in the dispatched action list - including the fallback
+///      action - so it is enforcement, not decoration.
 ///
 /// @dev READ HERE, BURN THERE. `checkAction` does not write. The burn is `consume`, an execution
 ///      the settlement carries, with the ACCOUNT as msg.sender.
@@ -299,15 +294,17 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 pinned = $pinnedId[id][msg.sender][account];
         if (pinned == 0) return VALIDATION_FAILED;
 
-        // A session permitted to call `consume` may only burn its OWN id. The argument was
-        // otherwise unconstrained: a session holder passes ANOTHER session's id and kills it
-        // permanently and for free, while its own id stays clean.
+        // A session may only ever burn its OWN id. The id argument is otherwise
+        // unconstrained: a second session on the same account could name this one's id and
+        // brick it permanently (a cross-session DoS), while its own id stays clean.
+        // `consume(id)` and `consumeFor(id, witness)` both take the id first, so data[4:36]
+        // is the id for either selector.
         if (target == address(this) && data.length >= 4) {
             bytes4 selector = bytes4(data[0:4]);
 
             if (
-                selector == this.consume.selector && data.length >= 36
-                    && uint256(bytes32(data[4:36])) != pinned
+                (selector == this.consume.selector || selector == this.consumeFor.selector)
+                    && data.length >= 36 && uint256(bytes32(data[4:36])) != pinned
             ) return VALIDATION_FAILED;
         }
 
@@ -342,11 +339,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
         // The SETTLING check, inside `permitWitnessTransferFrom`. This one moves the money and is
         // the only refusal that is not swallowed, so it demands POSITIVE PROOF that the settlement
-        // in front of it performed the burn - rather than merely that nobody has burned yet.
-        //
-        // That inversion is the whole fix. Under the old default a settlement that skipped its
-        // burn was indistinguishable from the first settlement ever, so skipping was free. Now
-        // skipping the burn means not settling.
+        // in front of it performed the burn - not merely that nobody has burned yet.
         if (signature.length < PERMIT2_NONCE_START + NONCE_LENGTH) return false;
         uint256 presented =
             uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));

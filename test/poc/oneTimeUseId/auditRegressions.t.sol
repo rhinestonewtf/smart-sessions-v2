@@ -173,6 +173,27 @@ contract OneTimeUseIdAuditRegressions_Test is Test {
         assertEq(result, VALIDATION_SUCCESS, "the binding only applies to self-calls");
     }
 
+    /// @dev The binding must cover `consumeFor` too, not just `consume`. Without it a second
+    ///      session on the account could name another session's id here and brick it permanently.
+    function test_F3_aSessionMayNotBurnAnotherSessionsIdViaConsumeFor() public {
+        bytes memory burnSomeoneElse =
+            abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_A, WITNESS_1));
+
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnSomeoneElse);
+
+        assertEq(result, VALIDATION_FAILED, "session B may not consumeFor session A's id");
+    }
+
+    function test_F3_control_aSessionMayConsumeForItsOwnId() public {
+        bytes memory burnOwn = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, WITNESS_1));
+
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(cfgB, account, address(policy), 0, burnOwn);
+
+        assertEq(result, VALIDATION_SUCCESS, "its own id is permitted");
+    }
+
     /*//////////////////////////////////////////////////////////////
                               THE ACTION SURFACE
     //////////////////////////////////////////////////////////////*/
