@@ -14,69 +14,44 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 // forgefmt: disable-start
 /// @title One Time Use Id Policy
 /// @author Rhinestone
-/// @notice One session, any number of settlement layers, one spend - while knowing nothing about
-///         any of them. The session pins an ID it invents; the settlement burns that id by
-///         CALLING this contract; the action surface refuses every later settlement.
+/// @notice Lets one session spend at most once across any number of settlement layers. The session
+///         pins an id it invents; a settlement burns that id by calling this contract; every later
+///         settlement is refused. The witness the ERC-1271 route reads is the settlement's own
+///         Permit2 nonce, used only so the settling check can recognise its own burn - which is why
+///         a `Permit2ClaimPolicy` binding that blob to the digest must be installed alongside.
 ///
-/// ┌──────────────────────────────────────────────────────────────────────────┐
-/// │  The predecessors pinned a NONCE and read the layers' own consumables -  │
-/// │  Permit2's bitmap, the executor's three namespaces. That forced this     │
-/// │  contract to know each layer's payload layout, to parse a caller-        │
-/// │  supplied blob at a fixed byte offset, and to pin a value the            │
-/// │  orchestrator only mints days later.                                     │
-/// │                                                                          │
-/// │  Here the marker is OURS, and no nonce is pinned in advance. The ERC-1271│
-/// │  route does read ONE caller-supplied field - the settlement's own Permit2│
-/// │  nonce, used purely as a witness so the settling check can recognise its │
-/// │  own burn. That is the design's one concession, and it costs a           │
-/// │  dependency on `Permit2ClaimPolicy` binding that blob to the digest.     │
-/// └──────────────────────────────────────────────────────────────────────────┘
+/// @dev Trust model. The policy assumes the orchestrator composes the settlement's ops, and makes
+///      the exactly-once guarantee against a hostile SUBMITTER, not a hostile ops author. The ops
+///      sit inside the signed digest, so a solver can only submit or withhold the settlement. Every
+///      unsigned input must fail closed: `preClaimGasStipend` is the low half of `packedGasValues`
+///      and never enters `hashMandateRaw`, so a submitter can starve the burn's gas - but a skipped
+///      burn leaves no nomination, so the settling check refuses. No burn, no settle. Covered by
+///      `GasStarve` and `BurnSkippable`.
 ///
-/// @dev WHO IS TRUSTED. This policy assumes the ORCHESTRATOR composes the settlement's ops. It
-///      makes the exactly-once guarantee against a hostile SUBMITTER, not a hostile ops AUTHOR.
-///
-///      The split follows from what is signed. The ops sit inside the signed digest, so a solver
-///      can submit the settlement or withhold it and nothing else. Every unsigned input therefore
-///      has to fail closed, and one exists: `preClaimGasStipend` is the low half of
-///      `packedGasValues` and never enters `hashMandateRaw`, so the submitter picks the gas budget
-///      of a call the user signed. Starving it skips the burn - and a skipped burn leaves no
-///      nomination, so check #2 refuses. No burn, no settle. Held by `GasStarve` and
-///      `BurnSkippable`.
-///
-///      What the orchestrator must get right off-chain, because nothing here can check it:
-///
-///        - the pre-claim carries the `consume`/`consumeFor` call at all
+///      Build requirements the contract cannot check (properties of the signed blob):
+///        - the pre-claim carries the `consume`/`consumeFor` call
 ///        - it carries no other unpoliced executions; the pre-claim's action surface is not
-///          dispatched on the ERC-1271 route, so ops there are bounded by the signer, not by us
+///          dispatched on the ERC-1271 route, so ops there are bounded by the signer
 ///        - its sigMode is the one the 1271 route expects
 ///
-///      Those are properties of a blob the orchestrator builds and signs - build requirements on
-///      the intent, not invariants this contract enforces. Where the action surface IS dispatched
-///      (the executor route), `checkAction` enforces two things on-chain, wherever the once-policy
-///      sits in the dispatched action list - including the fallback action, so it is enforcement,
-///      not decoration:
+///      Where the action surface IS dispatched (the executor route), `checkAction` enforces two
+///      things on-chain, wherever the once-policy sits in the dispatched action list (including the
+///      fallback action):
+///        - a `consume` may only name the session's own id, so a session cannot burn another
+///          session's id (a permanent cross-session denial of service)
+///        - a `consumeFor` is refused. Only the ERC-1271 route nominates, and its action surface is
+///          never dispatched here; a `consumeFor` on the executor route would set a nomination a
+///          Permit2 settlement that skipped its own burn could ride, breaking exactly-once across
+///          layers.
 ///
-///        - a `consume` may only name the session's OWN id, so a session cannot burn another
-///          session's id and brick it (a permanent cross-session denial of service)
-///        - a `consumeFor` is refused outright. Only the ERC-1271 route nominates, and its action
-///          surface is never dispatched here; a `consumeFor` on the executor route would set a
-///          nomination a Permit2 settlement that skipped its own burn could ride, breaking
-///          exactly-once across layers.
+/// @dev Read here, burn there. `checkAction` does not write; the burn is `consume`, an execution
+///      the settlement carries with the account as msg.sender. A policy that burned during
+///      validation would refuse the second covered execution of the settlement it just authorized,
+///      and pre-claim ops are routinely more than one execution. Reading during validation and
+///      burning during execution means nothing in a batch can observe its own burn.
 ///
-/// @dev READ HERE, BURN THERE. `checkAction` does not write. The burn is `consume`, an execution
-///      the settlement carries, with the ACCOUNT as msg.sender.
-///
-///      The split is forced by batch size. Action policies run once per execution, so a policy
-///      that burned during validation would refuse the SECOND covered execution of the very
-///      settlement it just authorized. Pre-claim ops are routinely more than one execution, so
-///      that is a live failure, not a corner case. Reading during validation and burning during
-///      execution removes the question: nothing in a batch can observe its own burn.
-///
-/// @dev THE SETTLING 1271 READ DEMANDS PROOF, and that is the whole trick.
-///
-///      The Permit2 arbiter route validates ERC-1271 TWICE in one settlement, with the pre-claim
-///      execution - and therefore the burn - in between, and the two arrive from DIFFERENT
-///      callers:
+/// @dev The settling ERC-1271 read requires proof of the burn. The Permit2 arbiter route validates
+///      ERC-1271 twice in one settlement, with the burn in between, from different callers:
 ///
 ///        _permit2PreClaimOps -> executePreClaimOpsWithPermit2Stub
 ///                                 |- isValidSignature         <- check #1, from the executor
@@ -84,99 +59,74 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///        _unlockPermit2      -> Permit2.permitWitnessTransferFrom
 ///                                 `- account.isValidSignature <- check #2, from PERMIT2
 ///
-///      Only check #2 blocks anything: a refusal at check #1 is swallowed by the failure-tolerant
-///      arbiter, so nothing enforced there is load-bearing. Check #1 therefore only asks "is this
-///      unspent?", which is what lets the burn happen at all.
+///      Check #1 runs before the burn and its refusal is swallowed by the failure-tolerant arbiter,
+///      so it only asks "is this unspent?" - which is what lets the burn happen. Check #2 requires
+///      the nomination `consumeFor` recorded to match the settlement in front of it, so a settlement
+///      that skipped its burn cannot settle, and a second settlement cannot borrow the first's
+///      nomination (its own `consumeFor` clears the nomination once the id is spent). The burn must
+///      be durable rather than transient-only because the arbiter swallows pre-claim failures; the
+///      refusal that reverts is check #2, inside `permitWitnessTransferFrom`.
 ///
-///      Check #2 asks the opposite question. Not "has anyone burned this?" - which passes when
-///      nobody has, so a settlement that SKIPPED its burn looks exactly like the first settlement
-///      ever, forever - but "can you prove YOU burned it?". `consumeFor` records a nomination
-///      naming its own settlement; check #2 requires that nomination to match the settlement in
-///      front of it. Skipping the burn therefore means not settling.
+/// @dev `checkAction` is strict: action policies run during validation, before any execution in the
+///      batch, so a settlement never observes its own burn there.
 ///
-///      A second settlement cannot borrow the first's nomination, because it cannot name it - and
-///      its own `consumeFor` clears the nomination rather than re-issuing it, since an id already
-///      spent means the caller is not the burn.
+/// @dev The record is keyed on (id, account) - not ConfigId or the multiplexer - because `consume`
+///      is called by the account, which knows neither, and SmartSessions hands each policy slot its
+///      own ConfigId (a flag written under one is invisible to the other).
 ///
-///      This is also why the burn must be durable rather than transient-only. The arbiter route
-///      swallows pre-claim failures on purpose (PreClaimExecution is failure-tolerant so a failed
-///      pre-claim cannot void a claim and strand a solver), so a refusal raised there is ignored -
-///      verified by experiment, not assumed. The refusal that MATTERS is check #2, inside
-///      `permitWitnessTransferFrom`, which reverts. Narrowing the tolerance by caller does NOT
-///      work for the same reason: it only closes the advisory gate.
+/// @dev Limit: the settling proof exists for the PERMIT2 caller only. Every other ERC-1271 caller
+///      takes the advisory "is this unspent?" read, which a settlement can satisfy without burning.
+///      Consequences in this repo:
+///        - installed in `Session.claimPolicies`, a Compact settlement carrying no `consume` reads
+///          unspent and settles repeatedly
+///        - a Compact settlement that does burn runs its pre-claim before `verifyClaim`, so the
+///          advisory read sees the burn and refuses its own settlement
+///      So this policy bounds the Permit2 arbiter route and the executor route, not the Compact
+///      claim route. Supporting another layer requires teaching this file which caller settles it
+///      and how to prove a burn there.
 ///
-/// @dev `checkAction` is strict - no tolerance at all. Action policies run during validation,
-///      before any execution in the batch, so a settlement can never observe its own burn there.
+/// @dev Install-time requirement: the 1271 list must also carry a policy that binds the claim blob
+///      to the digest (`Permit2ClaimPolicy` is the intended partner). `signature[20:52]` is the
+///      settlement's nonce only because that policy recomputes the digest from the same blob and
+///      compares it to `hash`. Installed alone, `presented` is caller-chosen and the proof
+///      degenerates to "some nomination is live". `minPoliciesToEnforce` is 1, so installing this
+///      alone is a legal configuration nothing rejects.
 ///
-/// @dev THE RECORD IS KEYED ON (id, account) - not ConfigId, not the multiplexer. That is forced:
-///      `consume` is called by the account, which knows neither. It is also the keying the
-///      predecessor had to be corrected into, since SmartSessions hands each policy SLOT its own
-///      ConfigId and a flag written under one is invisible to the other.
-///
-/// @dev LIMIT, and the sharpest one. The settling proof exists for the PERMIT2 caller only.
-///      Every other ERC-1271 caller takes the advisory read - "is this unspent?" - which is the
-///      permissive default a settlement can satisfy without burning anything. Two consequences,
-///      both real in this repo:
-///
-///        - installed in `Session.claimPolicies`, a Compact settlement carrying no `consume`
-///          reads unspent and settles, repeatedly
-///        - a Compact settlement that DOES burn runs its pre-claim before `verifyClaim`, so the
-///          advisory read sees the burn and refuses ITS OWN settlement
-///
-///      So this policy currently bounds the Permit2 arbiter route and the executor route, and
-///      NOT the Compact claim route. Supporting another layer means teaching this file which
-///      caller settles it and how to prove a burn there - it is not layer-agnostic, whatever the
-///      shape of the marker suggests.
-///
-/// @dev INSTALL-TIME REQUIREMENT: the 1271 list must also carry a policy that binds the claim
-///      blob to the digest - `Permit2ClaimPolicy` is the intended partner. `signature[20:52]` is
-///      the settlement's nonce only because that policy recomputes the digest from the same blob
-///      and compares it to `hash`. Installed alone, `presented` is caller-chosen and the proof
-///      degenerates to "some nomination is live", which proves nothing. `minPoliciesToEnforce`
-///      is 1, so installing this alone is a legal configuration that nothing rejects.
-///
-/// @dev INSTALL-TIME REQUIREMENT: the id must match across surfaces. ConfigId is generated BY
-///      SmartSessions, and NOT one per policy list:
+/// @dev Install-time requirement: the id must match across surfaces. ConfigId is generated by
+///      SmartSessions, and not one per policy list:
 ///
 ///        action slot   keccak(account, keccak(permissionId, actionId))     - one PER ACTION
 ///        1271 list     keccak(account, keccak("ERC1271: ", permissionId))
 ///        claim list    keccak(account, keccak("ERC1271: ", permissionId))  - the SAME one
 ///
-///      So the action halves and the 1271 half are handed different ConfigIds and are initialized
-///      from different blobs - but the 1271 list and the claim list SHARE a ConfigId
-///      (SmartSessionManager `_enablePolicies`, both passing `toErc1271PolicyId().toConfigId`).
-///      Installing this policy on both with different ids does not key two records: the claim
-///      list is enabled SECOND, so its id silently overwrites the 1271 one for both surfaces.
+///      The action halves and the 1271 half get different ConfigIds initialized from different
+///      blobs, but the 1271 list and the claim list share a ConfigId (SmartSessionManager
+///      `_enablePolicies`, both passing `toErc1271PolicyId().toConfigId`); the claim list is enabled
+///      second, so its id overwrites the 1271 one for both surfaces. Every blob must carry the same
+///      id - nothing here can check it. Pin different values and the halves key different records,
+///      the cross-route exclusion never fires, and both surfaces still report "configured". This is
+///      also why one session must cover every settlement layer: separate permissionIds get separate
+///      ConfigIds and separate spends, so exactly-once holds per layer instead of across them.
 ///
-///      Every one of those blobs must carry the SAME id. Nothing here can check it: no slot can
-///      see another's config. Pin different values and the halves key different records, the
-///      cross-route exclusion silently never fires, and both surfaces still report "configured".
+/// @dev Install-time requirement: a settlement must carry exactly one `consume`. Two poison the
+///      settlement so it refuses itself. Enforceable via `Permit2ClaimPolicy`'s FIELD_ORIGIN_OPS in
+///      sub-policy mode, which receives the pre-claim ops hash, so pinning that hash fixes the ops
+///      to exactly `[consume(id)]`.
 ///
-///      This is also why ONE session must cover every settlement layer. Give each layer its own
-///      permissionId and each gets its own ConfigIds AND its own spend - exactly-once then holds
-///      per layer instead of across them, which is the opposite of the point.
+/// @dev Install-time requirement: install this on EVERY action the session permits, so any
+///      execution the settlement performs reads the record and a settler cannot dodge the check by
+///      composing a batch out of some other permitted action.
 ///
-/// @dev INSTALL-TIME REQUIREMENT: a settlement must carry EXACTLY ONE `consume`. Two of them
-///      poison the settlement that carries them, so it refuses itself. This is enforceable rather
-///      than hopeful: `Permit2ClaimPolicy`'s FIELD_ORIGIN_OPS in sub-policy mode receives the
-///      pre-claim ops hash, so pinning that hash fixes the ops to exactly `[consume(id)]`.
+/// @dev Install-time requirement: the injected `consume` must sit inside the signed intent (the
+///      pre-claim ops covered by the digest) so that removing it invalidates the signature. Nothing
+///      here can check it is present: if a settlement runs with no `consume`, nothing burns and the
+///      session is not spent. The guarantee is that a settlement which does burn cannot be followed
+///      by another, not that every settlement burns.
 ///
-/// @dev INSTALL-TIME REQUIREMENT, and the load-bearing one. Install this on EVERY action the
-///      session permits. Any execution the settlement performs then reads the record, so a
-///      settler cannot dodge the check by composing a batch out of some other permitted action.
-///      Installing it on one action only bounds settlements that happen to use that action.
-///
-/// @dev INSTALL-TIME REQUIREMENT: the injected `consume` must sit inside the SIGNED intent - in
-///      the pre-claim ops covered by the digest - so that removing it invalidates the signature.
-///      Nothing in this contract can check that it is present. If a settlement runs with no
-///      `consume` in it, nothing burns and the session is not spent; the guarantee is that a
-///      settlement which DOES burn cannot be followed by another, not that every settlement
-///      burns.
-///
-/// @dev INSTALL-TIME REQUIREMENT: the id must be fresh per enable and unique per account across
-///      every session using this policy. The record is never cleared, so reusing a burned id
-///      yields a session that cannot settle - denial, never a second spend. A random 256-bit
-///      value is the intended shape; the small integers in the tests are for readability.
+/// @dev Install-time requirement: the id must be fresh per enable and unique per account across
+///      every session using this policy. The record is never cleared, so reusing a burned id yields
+///      a session that cannot settle - denial, never a second spend. A random 256-bit value is the
+///      intended shape.
 // forgefmt: disable-end
 contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev Holds the PIN. Zero means "not configured" - `initializeWithMultiplexer` rejects a
