@@ -13,6 +13,12 @@ interface IOneTimeUseIdPolicy {
     /// @notice Thrown when initializing a session with the zero id, which marks "not configured"
     error InvalidId();
 
+    /// @notice Thrown when `consume` is called for an id already burned for the caller
+    error AlreadyConsumed(uint256 id);
+
+    /// @notice Thrown when the constructor's intent executor collides with Permit2 or is zero
+    error InvalidIntentExecutor();
+
     /// @notice Emitted when an account's id is consumed, by either burn site
     event IdConsumed(address indexed account, uint256 indexed id);
 

@@ -4,8 +4,12 @@ pragma solidity ^0.8.28;
 // Dependencies
 import { OneTimeUseIdPolicy_Unit_Test } from "../OneTimeUseIdPolicy.t.sol";
 
+// Contracts
+import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
+
 // Interfaces
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
+import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 
 /// @title OneTimeUseIdPolicy.consume Unit Tests
 /// @notice Unit tests for the consume function. `consume` burns the caller's own id and
@@ -23,12 +27,13 @@ contract OneTimeUseIdPolicy_consume_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
         assertTrue(policy.isConsumed(account, ID_A));
     }
 
-    /// @notice Test a second consume of an already-burned id does not revert
-    function test_consume_isIdempotent() external {
-        _consume(ID_A);
+    /// @notice Test a second consume of an already-burned id reverts (exactly one consume)
+    function test_consume_revertsOnSecondBurn() external {
         _consume(ID_A);
 
-        assertTrue(policy.isConsumed(account, ID_A), "still burned, no revert");
+        vm.prank(account);
+        vm.expectRevert(abi.encodeWithSelector(IOneTimeUseIdPolicy.AlreadyConsumed.selector, ID_A));
+        policy.consume(ID_A);
     }
 
     /// @notice Test consume trusts only msg.sender, so a stranger burns their own record
@@ -57,5 +62,14 @@ contract OneTimeUseIdPolicy_consume_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
             _settlingCheck(cfgA, WITNESS_1),
             "a plain consume leaves nothing for the settling check to recognise"
         );
+    }
+
+    /// @notice Test the constructor rejects an executor that collides with Permit2 or is zero
+    function test_constructor_rejectsInvalidExecutor() external {
+        vm.expectRevert(IOneTimeUseIdPolicy.InvalidIntentExecutor.selector);
+        new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), PERMIT2);
+
+        vm.expectRevert(IOneTimeUseIdPolicy.InvalidIntentExecutor.selector);
+        new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), address(0));
     }
 }

@@ -75,16 +75,12 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      is called by the account, which knows neither, and SmartSessions hands each policy slot its
 ///      own ConfigId (a flag written under one is invisible to the other).
 ///
-/// @dev Limit: the settling proof exists for the PERMIT2 caller only. Every other ERC-1271 caller
-///      takes the advisory "is this unspent?" read, which a settlement can satisfy without burning.
-///      Consequences in this repo:
-///        - installed in `Session.claimPolicies`, a Compact settlement carrying no `consume` reads
-///          unspent and settles repeatedly
-///        - a Compact settlement that does burn runs its pre-claim before `verifyClaim`, so the
-///          advisory read sees the burn and refuses its own settlement
-///      So this policy bounds the Permit2 arbiter route and the executor route, not the Compact
-///      claim route. Supporting another layer requires teaching this file which caller settles it
-///      and how to prove a burn there.
+/// @dev Limit: this policy proves a burn only for the Permit2 caller, and gives the executor the
+///      advisory "is this unspent?" read for its pre-claim. Every OTHER ERC-1271 caller - the
+///      Compact claim route included - fails closed, because the policy has no way to prove a burn
+///      on those layers. So it bounds the Permit2 arbiter route and the executor route only;
+///      supporting another layer requires teaching this file which caller settles it and how to
+///      prove a burn there.
 ///
 /// @dev Install-time requirement: the 1271 list must also carry a policy that binds the claim blob
 ///      to the digest (`Permit2ClaimPolicy` is the intended partner). `signature[20:52]` is the
@@ -109,10 +105,11 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      also why one session must cover every settlement layer: separate permissionIds get separate
 ///      ConfigIds and separate spends, so exactly-once holds per layer instead of across them.
 ///
-/// @dev Install-time requirement: a settlement must carry exactly one `consume`. Two poison the
-///      settlement so it refuses itself. Enforceable via `Permit2ClaimPolicy`'s FIELD_ORIGIN_OPS in
-///      sub-policy mode, which receives the pre-claim ops hash, so pinning that hash fixes the ops
-///      to exactly `[consume(id)]`.
+/// @dev Install-time requirement: a settlement must carry exactly one burn op - `consume(id)` on the
+///      executor route or `consumeFor(id, witness)` on the Permit2 route. A second burn poisons the
+///      settlement (`consume` reverts; `consumeFor` clears its nomination so the settling check
+///      fails). Enforceable via `Permit2ClaimPolicy`'s FIELD_ORIGIN_OPS in sub-policy mode, which
+///      receives the pre-claim ops hash, so pinning that hash fixes the ops to exactly the one burn.
 ///
 /// @dev Install-time requirement: install this on EVERY action the session permits, so any
 ///      execution the settlement performs reads the record and a settler cannot dodge the check by
@@ -145,6 +142,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     address public immutable INTENT_EXECUTOR;
 
     constructor(ISignatureTransfer permit2, address intentExecutor) {
+        if (intentExecutor == address(permit2) || intentExecutor == address(0)) {
+            revert InvalidIntentExecutor();
+        }
         PERMIT2 = permit2;
         INTENT_EXECUTOR = intentExecutor;
     }
@@ -181,9 +181,11 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IOneTimeUseIdPolicy
-    /// @dev Not idempotent: a second `consume` of a spent id reverts the transaction, which closes
-    ///      the same-transaction double-spend. A settlement must carry exactly one `consume`.
+    /// @dev Not idempotent: a second `consume` of a spent id reverts, which enforces "exactly one
+    ///      consume per settlement". `consumeFor` (the ERC-1271 route) instead clears its
+    /// nomination and returns, because its second call legitimately runs before the settling check.
     function consume(uint256 id) external override {
+        if (OneTimeUseIdStorageLib.spend(id, msg.sender).burned) revert AlreadyConsumed(id);
         _burn(id, OneTimeUseIdStorageLib.NOT_NOMINATED);
     }
 

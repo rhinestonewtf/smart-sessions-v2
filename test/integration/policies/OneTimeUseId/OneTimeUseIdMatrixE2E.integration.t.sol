@@ -339,16 +339,18 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
                                  CONTROLS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev CONTROL for executor -> executor. Swap in permissive policies and the identical second
-    ///      settlement on a fresh nonce lands, so the refusals above are this policy's doing and
-    ///      not the executor's nonce or the harness.
-    function test_control_executorRouteIsUnboundedWithoutThePolicy() public {
+    /// @dev CONTROL for executor -> executor. Even with the once-policy swapped for a permissive
+    ///      one, a same-id second settlement that injects `consume` is refused, because `consume`
+    ///      reverts on an already-burned id. The genuine unbounded residual is a settlement that
+    ///      OMITS the burn (see test_aSettlementOmittingConsumeIsUnbounded).
+    function test_control_executorDoubleConsumeIsRefusedEvenWithoutThePolicy() public {
         _enableSession(false);
 
         _settleViaExecutor(0, 42);
-        _settleViaExecutor(1, 43);
+        assertEq(env.target.param(), 42, "the first executor settlement executed");
 
-        assertEq(env.target.param(), 43, "the SECOND executor settlement executed");
+        vm.expectRevert();
+        _settleViaExecutor(1, 43);
     }
 
     /// @dev ORDERING: Permit2 -> Permit2, which this policy does NOT own. Permit2 refuses the
@@ -401,13 +403,16 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
     }
 
     /// @dev CONTROL for Permit2 -> executor
-    function test_control_permit2ThenExecutorIsOpenWithoutThePolicy() public {
+    function test_control_permit2ThenExecutorDoubleConsumeIsRefused() public {
         _enableSession(false);
 
+        // The Permit2 settlement's consumeFor burns the id; the executor settlement's injected
+        // consume then reverts on the already-burned id - the burn record is shared across routes
+        // independently of the once-policy being installed as an action guard.
         _settleViaPermit2();
-        _settleViaExecutor(0, 43);
 
-        assertEq(env.target.param(), 43, "the executor route is open when nothing bounds it");
+        vm.expectRevert();
+        _settleViaExecutor(0, 43);
     }
 }
 

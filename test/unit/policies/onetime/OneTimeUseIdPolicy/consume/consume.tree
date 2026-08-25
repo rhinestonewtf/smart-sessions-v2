@@ -2,7 +2,7 @@ OneTimeUseIdPolicy::consume
 ├── it should burn the id for the caller, and emit IdConsumed
 ├── given the id was already burned
 │   └── when consume is called again
-│       └── it should not revert, and stay burned
+│       └── it should revert with AlreadyConsumed (exactly one consume per settlement)
 ├── given a stranger calls with another account's id
 │   └── it should burn the stranger's own record and leave the account's untouched
 ├── given a different id is burned

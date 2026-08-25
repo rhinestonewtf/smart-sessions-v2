@@ -16,6 +16,10 @@ library OneTimeUseIdStorageLib {
     bytes32 internal constant SPEND_POSITION =
         bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.spend")) - 1);
 
+    /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.nomination") - 1
+    bytes32 internal constant NOMINATION_POSITION =
+        bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.nomination")) - 1);
+
     /// @dev Nomination value meaning no settlement was nominated in this transaction
     uint256 internal constant NOT_NOMINATED = 0;
 
@@ -54,14 +58,16 @@ library OneTimeUseIdStorageLib {
         }
     }
 
-    /// @notice Hashed so no witness value collides with NOT_NOMINATED
-    function nominationOf(uint256 witness) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(witness)));
+    /// @notice Hashed so no witness value collides with NOT_NOMINATED; the (unreachable) zero hash
+    ///         is remapped to 1 so the invariant holds without relying on "practically impossible".
+    function nominationOf(uint256 witness) internal pure returns (uint256 value) {
+        value = uint256(keccak256(abi.encode(witness)));
+        if (value == NOT_NOMINATED) value = 1;
     }
 
     /// @notice Records the nomination for an (id, account) in transient storage
     function setNomination(uint256 id, address account, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(account, id));
+        bytes32 slot = keccak256(abi.encode(NOMINATION_POSITION, account, id));
         assembly ("memory-safe") {
             tstore(slot, value)
         }
@@ -69,7 +75,7 @@ library OneTimeUseIdStorageLib {
 
     /// @notice The nomination recorded for an (id, account) in this transaction
     function nomination(uint256 id, address account) internal view returns (uint256 value) {
-        bytes32 slot = keccak256(abi.encode(account, id));
+        bytes32 slot = keccak256(abi.encode(NOMINATION_POSITION, account, id));
         assembly ("memory-safe") {
             value := tload(slot)
         }
