@@ -1,0 +1,11 @@
+OneTimeUseIdPolicy::supportsInterface
+├── given IActionPolicy interface
+│   └── it should return true
+├── given I1271Policy interface
+│   └── it should return true
+├── given IOneTimeUseIdPolicy interface
+│   └── it should return true
+├── given IERC165 interface
+│   └── it should return true
+└── given an unsupported interface
+    └── it should return false

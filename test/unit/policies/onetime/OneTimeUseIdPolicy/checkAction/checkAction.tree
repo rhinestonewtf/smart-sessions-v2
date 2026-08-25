@@ -1,0 +1,27 @@
+OneTimeUseIdPolicy::checkAction
+├── given the configId was never initialized
+│   └── it should return VALIDATION_FAILED
+├── given the pinned id is unburned
+│   └── it should return VALIDATION_SUCCESS
+├── given the pinned id has been burned
+│   └── it should return VALIDATION_FAILED
+├── given the burn happened in an earlier transaction
+│   └── it should still return VALIDATION_FAILED
+├── given the pinned id is shared with another action slot
+│   └── when that id is burned
+│       └── it should return VALIDATION_FAILED from every slot pinned to it
+├── given a batch of many executions in one settlement
+│   └── it should return VALIDATION_SUCCESS for every one of them while unburned
+├── it should never itself burn the id
+├── given the call targets this policy and the selector is consume
+│   ├── when the id argument is this session's OWN id
+│   │   └── it should return VALIDATION_SUCCESS
+│   └── when the id argument names ANOTHER session's id
+│       └── it should return VALIDATION_FAILED
+├── given the call targets this policy and the selector is consumeFor
+│   ├── when the id argument is this session's OWN id
+│   │   └── it should return VALIDATION_FAILED
+│   └── when the id argument names ANOTHER session's id
+│       └── it should return VALIDATION_FAILED
+└── given the call is unrelated to this policy
+    └── it should return VALIDATION_SUCCESS

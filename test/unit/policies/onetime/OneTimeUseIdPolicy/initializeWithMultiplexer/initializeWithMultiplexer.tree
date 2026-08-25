@@ -1,0 +1,13 @@
+OneTimeUseIdPolicy::initializeWithMultiplexer
+├── given initData is not exactly 32 bytes
+│   └── it should revert with InvalidInitDataLength
+├── given the id is zero
+│   └── it should revert with InvalidId
+├── given a different multiplexer never installed this configId
+│   └── it should see no configuration (checkAction fails closed)
+├── given the id was already burned
+│   └── when re-initializing with the same id
+│       └── it should not restore the spend
+└── given the id was already burned
+    └── when re-initializing with a fresh id
+        └── it should settle again

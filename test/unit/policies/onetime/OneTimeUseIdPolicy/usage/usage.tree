@@ -1,0 +1,7 @@
+OneTimeUseIdPolicy::usage
+├── given the configId was never initialized for this multiplexer
+│   └── it should return pinned = 0, consumed = false
+├── given the configId is initialized and unburned
+│   └── it should return the pinned id, consumed = false
+└── given the pinned id has been burned
+    └── it should return the pinned id, consumed = true
