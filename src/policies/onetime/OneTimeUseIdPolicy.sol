@@ -136,12 +136,17 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev Width of the nonce
     uint256 internal constant NONCE_LENGTH = 32;
 
-    /// @notice The Permit2 deployment. Used only to tell the settling ERC-1271 check apart from the
-    ///         pre-claim one - they arrive from different callers.
+    /// @notice The Permit2 deployment. Identifies the settling ERC-1271 check.
     ISignatureTransfer public immutable PERMIT2;
 
-    constructor(ISignatureTransfer permit2) {
+    /// @notice The IntentExecutor - the only non-Permit2 caller allowed the advisory pre-claim
+    /// read. Every other ERC-1271 caller (e.g. the Compact claim route) is refused, so this policy
+    ///         bounds only the Permit2 and executor routes.
+    address public immutable INTENT_EXECUTOR;
+
+    constructor(ISignatureTransfer permit2, address intentExecutor) {
         PERMIT2 = permit2;
+        INTENT_EXECUTOR = intentExecutor;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -237,12 +242,13 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             // layers. Refuse it outright.
             if (selector == this.consumeFor.selector) return VALIDATION_FAILED;
 
-            // A `consume` may only name the session's OWN id: otherwise a second session on the
-            // same account could name this one's id and brick it permanently (a cross-session
-            // DoS), while its own id stays clean.
+            // A `consume` must be well-formed and name the session's OWN id: otherwise a second
+            // session on the same account could name this one's id and brick it permanently (a
+            // cross-session DoS). Malformed calldata fails closed rather than passing here to
+            // revert later at execution.
             if (
-                selector == this.consume.selector && data.length >= 36
-                    && uint256(bytes32(data[4:36])) != pinned
+                selector == this.consume.selector
+                    && (data.length < 36 || uint256(bytes32(data[4:36])) != pinned)
             ) return VALIDATION_FAILED;
         }
 
@@ -272,15 +278,19 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 pinned = OneTimeUseIdStorageLib.pin(id, msg.sender, account).id;
         if (pinned == 0) return false;
 
-        // The pre-claim check runs before the burn, so it can only ask "is this unspent?". Its
-        // refusal is swallowed by the arbiter, so nothing here is load-bearing.
-        if (requestSender != address(PERMIT2)) {
+        // The executor pre-claim check runs before the burn, so it can only ask "is this unspent?".
+        // Its refusal is swallowed by the arbiter, so nothing here is load-bearing.
+        if (requestSender == INTENT_EXECUTOR) {
             return !OneTimeUseIdStorageLib.spend(pinned, account).burned;
         }
 
-        // The SETTLING check, inside `permitWitnessTransferFrom`. This one moves the money and is
-        // the only refusal that is not swallowed, so it demands POSITIVE PROOF that the settlement
-        // in front of it performed the burn - not merely that nobody has burned yet.
+        // Any caller other than Permit2 or the executor (e.g. the Compact claim route) is refused:
+        // this policy proves a burn only for Permit2, so it cannot bound those routes and must fail
+        // closed rather than approve them on the advisory read.
+        if (requestSender != address(PERMIT2)) return false;
+
+        // The Permit2 settling check, inside `permitWitnessTransferFrom`. The only refusal that is
+        // not swallowed, so it demands positive proof that the settlement performed the burn.
         if (signature.length < PERMIT2_NONCE_START + NONCE_LENGTH) return false;
         uint256 presented =
             uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));
@@ -308,6 +318,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     )
         external
         view
+        override
         returns (uint256 pinned, bool consumed)
     {
         pinned = OneTimeUseIdStorageLib.pin(id, multiplexer, account).id;

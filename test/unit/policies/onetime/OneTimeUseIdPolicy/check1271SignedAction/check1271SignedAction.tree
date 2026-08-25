@@ -1,11 +1,13 @@
 OneTimeUseIdPolicy::check1271SignedAction
 ├── given the configId was never initialized
 │   └── it should return false
-├── given the caller is not Permit2 (the pre-claim check)
+├── given the caller is the executor (the pre-claim check)
 │   ├── given the id is unburned
 │   │   └── it should return true
 │   └── given the id has been burned
 │       └── it should return false
+├── given the caller is neither Permit2 nor the executor (e.g. the Compact route)
+│   └── it should fail closed and return false even while unspent
 ├── given the caller is Permit2 (the settling check)
 │   ├── given the signature is shorter than the nonce field
 │   │   └── it should return false

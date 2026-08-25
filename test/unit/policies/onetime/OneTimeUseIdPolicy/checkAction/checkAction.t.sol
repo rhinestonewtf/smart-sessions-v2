@@ -128,6 +128,15 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
 
         assertEq(result, FAILED, "and certainly not another session's id");
     }
+
+    /// @notice Test a malformed consume self-call (selector-only calldata) fails closed
+    function test_checkAction_malformedConsume_failsClosed() external {
+        bytes memory malformed = abi.encodePacked(IOneTimeUseIdPolicy.consume.selector);
+
+        uint256 result = _checkAction(cfgB, address(policy), malformed);
+
+        assertEq(result, FAILED, "malformed consume calldata must fail closed");
+    }
 }
 
 /// @title The cross-transaction half of checkAction's strictness
@@ -148,7 +157,7 @@ contract OneTimeUseIdPolicy_checkAction_CrossTransaction_Unit_Test is Test {
 
     /// @dev The burn happens HERE, so the test body below runs in a different transaction
     function setUp() public {
-        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2));
+        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), makeAddr("intentExecutor"));
 
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));

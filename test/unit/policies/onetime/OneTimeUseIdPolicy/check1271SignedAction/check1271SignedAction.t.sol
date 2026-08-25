@@ -122,6 +122,17 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         assertFalse(_settlingCheck(cfgA, WITNESS_1), "a starved settlement has nothing to ride");
     }
 
+    /// @notice Test a caller that is neither Permit2 nor the executor is refused while unspent
+    function test_check1271SignedAction_unknownCaller_failsClosed() external {
+        address compact = makeAddr("theCompact");
+
+        vm.prank(multiplexer);
+        assertFalse(
+            policy.check1271SignedAction(cfgA, compact, account, bytes32(0), _blob(WITNESS_1)),
+            "an unknown route (e.g. Compact) must fail closed even while unspent"
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                                   SHAPE
     //////////////////////////////////////////////////////////////*/
@@ -159,7 +170,7 @@ contract OneTimeUseIdPolicy_check1271SignedAction_CrossTransaction_Unit_Test is 
 
     /// @dev The burn happens HERE, so the test body below runs in a different transaction
     function setUp() public {
-        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2));
+        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), makeAddr("intentExecutor"));
 
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));

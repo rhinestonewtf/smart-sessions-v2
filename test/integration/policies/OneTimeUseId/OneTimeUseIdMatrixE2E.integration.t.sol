@@ -59,7 +59,9 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     function setUp() public virtual override {
         super.setUp();
 
-        oncePolicy = new OneTimeUseIdPolicy(ISignatureTransfer(address(env.permit2)));
+        oncePolicy = new OneTimeUseIdPolicy(
+            ISignatureTransfer(address(env.permit2)), address(env.intentExecutor)
+        );
 
         // The base harness builds the emissary against a MOCK intent executor, so verifyExecution
         // rejects the real one with UnauthorizedSource. Redeploy against the real ADDRESSBOOK so

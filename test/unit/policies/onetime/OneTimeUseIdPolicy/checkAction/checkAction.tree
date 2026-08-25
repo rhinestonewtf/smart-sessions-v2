@@ -16,8 +16,10 @@ OneTimeUseIdPolicy::checkAction
 ├── given the call targets this policy and the selector is consume
 │   ├── when the id argument is this session's OWN id
 │   │   └── it should return VALIDATION_SUCCESS
-│   └── when the id argument names ANOTHER session's id
-│       └── it should return VALIDATION_FAILED
+│   ├── when the id argument names ANOTHER session's id
+│   │   └── it should return VALIDATION_FAILED
+│   └── when the calldata is malformed (shorter than an id argument)
+│       └── it should fail closed and return VALIDATION_FAILED
 ├── given the call targets this policy and the selector is consumeFor
 │   ├── when the id argument is this session's OWN id
 │   │   └── it should return VALIDATION_FAILED

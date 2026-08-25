@@ -62,7 +62,7 @@ abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
         account = makeAddr("account");
         executor = makeAddr("intentExecutor");
 
-        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2));
+        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), executor);
 
         _install(cfgA, ID_A);
         _install(cfgB, ID_B);

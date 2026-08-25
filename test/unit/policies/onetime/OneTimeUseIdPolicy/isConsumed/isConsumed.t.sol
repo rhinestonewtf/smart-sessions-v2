@@ -48,7 +48,7 @@ contract OneTimeUseIdPolicy_isConsumed_CrossTransaction_Unit_Test is Test {
 
     /// @dev The burn happens HERE, so the test body below runs in a different transaction
     function setUp() public {
-        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2));
+        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), makeAddr("intentExecutor"));
 
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));
