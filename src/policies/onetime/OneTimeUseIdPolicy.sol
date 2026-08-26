@@ -185,7 +185,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     ///      consume per settlement". `consumeFor` (the ERC-1271 route) instead clears its
     /// nomination and returns, because its second call legitimately runs before the settling check.
     function consume(uint256 id) external override {
-        if (OneTimeUseIdStorageLib.spend(id, msg.sender).burned) revert AlreadyConsumed(id);
+        if (OneTimeUseIdStorageLib.spendRecord(id, msg.sender).burned) revert AlreadyConsumed(id);
         _burn(id, OneTimeUseIdStorageLib.NOT_NOMINATED);
     }
 
@@ -197,7 +197,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev `nomination` is NOT_NOMINATED for the action route and a settlement-specific value for
     ///      the ERC-1271 route.
     function _burn(uint256 id, uint256 nomination) internal {
-        if (OneTimeUseIdStorageLib.spend(id, msg.sender).burned) {
+        if (OneTimeUseIdStorageLib.spendRecord(id, msg.sender).burned) {
             // Already burned: this call is not the burn, so clear any nomination it left.
             OneTimeUseIdStorageLib.setNomination(
                 id, msg.sender, OneTimeUseIdStorageLib.NOT_NOMINATED
@@ -206,7 +206,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         }
 
         OneTimeUseIdStorageLib.setNomination(id, msg.sender, nomination);
-        OneTimeUseIdStorageLib.spend(id, msg.sender).burned = true;
+        OneTimeUseIdStorageLib.spendRecord(id, msg.sender).burned = true;
         emit IdConsumed(msg.sender, id);
     }
 
@@ -216,11 +216,11 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @notice Refuses every settlement after the one that burned the id
     /// @dev Does not write. See the read-here-burn-there note on the contract.
-    /// @param id The configuration
+    /// @param configId The configuration
     /// @param account The account settling
     /// @return VALIDATION_SUCCESS while the id is unburned, VALIDATION_FAILED afterwards
     function checkAction(
-        ConfigId id,
+        ConfigId configId,
         address account,
         address target,
         uint256,
@@ -230,7 +230,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (uint256)
     {
-        uint256 pinned = OneTimeUseIdStorageLib.pin(id, msg.sender, account).id;
+        uint256 pinned = OneTimeUseIdStorageLib.pin(configId, msg.sender, account).id;
         if (pinned == 0) return VALIDATION_FAILED;
 
         if (target == address(this)) {
@@ -256,7 +256,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             ) return VALIDATION_FAILED;
         }
 
-        return OneTimeUseIdStorageLib.spend(pinned, account).burned
+        return OneTimeUseIdStorageLib.spendRecord(pinned, account).burned
             ? VALIDATION_FAILED
             : VALIDATION_SUCCESS;
     }
@@ -264,11 +264,11 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @notice Refuses any ERC-1271 settlement that cannot prove it performed the burn
     /// @dev The settling caller must PROVE it burned; every other caller gets the advisory read.
     ///      This surface is `view` and cannot burn - the record is written by `consumeFor`.
-    /// @param id The configuration
+    /// @param configId The configuration
     /// @param account The account settling
     /// @return True if the settlement may proceed
     function check1271SignedAction(
-        ConfigId id,
+        ConfigId configId,
         address requestSender,
         address account,
         bytes32,
@@ -279,13 +279,13 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (bool)
     {
-        uint256 pinned = OneTimeUseIdStorageLib.pin(id, msg.sender, account).id;
+        uint256 pinned = OneTimeUseIdStorageLib.pin(configId, msg.sender, account).id;
         if (pinned == 0) return false;
 
         // The executor pre-claim check runs before the burn, so it can only ask "is this unspent?".
         // Its refusal is swallowed by the arbiter, so nothing here is load-bearing.
         if (requestSender == INTENT_EXECUTOR) {
-            return !OneTimeUseIdStorageLib.spend(pinned, account).burned;
+            return !OneTimeUseIdStorageLib.spendRecord(pinned, account).burned;
         }
 
         // Any caller other than Permit2 or the executor (e.g. the Compact claim route) is refused:
@@ -308,15 +308,15 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IOneTimeUseIdPolicy
-    function isConsumed(address account, uint256 id) external view override returns (bool) {
-        return OneTimeUseIdStorageLib.spend(id, account).burned;
+    function isUsed(address account, uint256 id) external view override returns (bool) {
+        return OneTimeUseIdStorageLib.spendRecord(id, account).burned;
     }
 
     /// @notice The id pinned for a configuration, and whether it has been spent
     /// @return pinned The pinned id, or zero if this configuration was never initialized
     /// @return consumed Whether that id has been burned
     function usage(
-        ConfigId id,
+        ConfigId configId,
         address multiplexer,
         address account
     )
@@ -325,8 +325,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (uint256 pinned, bool consumed)
     {
-        pinned = OneTimeUseIdStorageLib.pin(id, multiplexer, account).id;
-        consumed = pinned != 0 && OneTimeUseIdStorageLib.spend(pinned, account).burned;
+        pinned = OneTimeUseIdStorageLib.pin(configId, multiplexer, account).id;
+        consumed = pinned != 0 && OneTimeUseIdStorageLib.spendRecord(pinned, account).burned;
     }
 
     /// @notice ERC-165 for both policy surfaces and the view surface

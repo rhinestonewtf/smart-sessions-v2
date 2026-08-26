@@ -18,13 +18,13 @@ import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.so
 contract OneTimeUseIdPolicy_consume_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
     /// @notice Test consume burns the id and emits IdConsumed
     function test_consume_burnsTheIdAndEmits() external {
-        assertFalse(policy.isConsumed(account, ID_A));
+        assertFalse(policy.isUsed(account, ID_A));
 
         vm.expectEmit(true, true, false, true);
         emit IOneTimeUseIdPolicy.IdConsumed(account, ID_A);
         _consume(ID_A);
 
-        assertTrue(policy.isConsumed(account, ID_A));
+        assertTrue(policy.isUsed(account, ID_A));
     }
 
     /// @notice Test a second consume of an already-burned id reverts (exactly one consume)
@@ -43,7 +43,7 @@ contract OneTimeUseIdPolicy_consume_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
         vm.prank(stranger);
         policy.consume(ID_A);
 
-        assertFalse(policy.isConsumed(account, ID_A), "the account's id is untouched");
+        assertFalse(policy.isUsed(account, ID_A), "the account's id is untouched");
         assertEq(_validate(cfgA), SUCCESS, "and its session still settles");
     }
 
@@ -51,7 +51,7 @@ contract OneTimeUseIdPolicy_consume_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
     function test_consume_isPerId() external {
         _consume(ID_A + 1);
 
-        assertFalse(policy.isConsumed(account, ID_A), "burning another id does not spend this one");
+        assertFalse(policy.isUsed(account, ID_A), "burning another id does not spend this one");
     }
 
     /// @notice Test consume nominates no settlement, so the settling check still requires proof

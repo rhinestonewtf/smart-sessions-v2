@@ -271,7 +271,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     }
 
     function _burned() internal view returns (bool) {
-        return oncePolicy.isConsumed($intent.sponsor, ID);
+        return oncePolicy.isUsed($intent.sponsor, ID);
     }
 }
 

@@ -10,7 +10,7 @@ import { Types } from "@compact-utils/types/OrderTypes.sol";
 ///         high half) enters the signed mandate hash — so the submitter picks the gas budget of a
 ///         call the user signed. Starve it and the pre-claim OOGs, which the arbiter swallows.
 ///
-///         Before the witness fix this settled with `isConsumed == false`, repeatedly.
+///         Before the witness fix this settled with `isUsed == false`, repeatedly.
 contract OneTimeUseIdGasStarve_Test is OneTimeUseIdE2E_Base {
     function _nonceBurned(uint256 nonce) internal view returns (bool) {
         return (env.permit2.nonceBitmap($intent.sponsor, nonce >> 8) >> (nonce & 0xff)) & 1 == 1;

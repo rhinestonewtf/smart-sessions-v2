@@ -51,7 +51,14 @@ library OneTimeUseIdStorageLib {
     /// @notice The spend record for an (id, account). Not keyed by configId so it is reachable from
     ///         `consume` (called by the account, which knows no configId) and shared across a
     ///         session's policy surfaces, which SmartSessions gives distinct configIds.
-    function spend(uint256 id, address account) internal pure returns (SpendStorage storage $) {
+    function spendRecord(
+        uint256 id,
+        address account
+    )
+        internal
+        pure
+        returns (SpendStorage storage $)
+    {
         bytes32 slot = keccak256(abi.encode(SPEND_POSITION, id, account));
         assembly {
             $.slot := slot

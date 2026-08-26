@@ -11,11 +11,11 @@ import { OneTimeUseIdPolicy_Unit_Test } from "../OneTimeUseIdPolicy.t.sol";
 contract OneTimeUseIdPolicy_consumeFor_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
     /// @notice Test consumeFor burns the id and its witness settles
     function test_consumeFor_burnsTheIdAndNominatesTheWitness() external {
-        assertFalse(policy.isConsumed(account, ID_A));
+        assertFalse(policy.isUsed(account, ID_A));
 
         _consumeFor(ID_A, WITNESS_1);
 
-        assertTrue(policy.isConsumed(account, ID_A));
+        assertTrue(policy.isUsed(account, ID_A));
         assertTrue(_settlingCheck(cfgA, WITNESS_1), "the recorded witness settles");
     }
 
@@ -24,7 +24,7 @@ contract OneTimeUseIdPolicy_consumeFor_Unit_Test is OneTimeUseIdPolicy_Unit_Test
         _consumeFor(ID_A, WITNESS_1);
         _consumeFor(ID_A, WITNESS_1);
 
-        assertTrue(policy.isConsumed(account, ID_A), "still burned, no revert");
+        assertTrue(policy.isUsed(account, ID_A), "still burned, no revert");
     }
 
     /// @notice Test consumeFor trusts only msg.sender, so a stranger burns their own record
@@ -34,7 +34,7 @@ contract OneTimeUseIdPolicy_consumeFor_Unit_Test is OneTimeUseIdPolicy_Unit_Test
         vm.prank(stranger);
         policy.consumeFor(ID_A, WITNESS_1);
 
-        assertFalse(policy.isConsumed(account, ID_A), "the account's id is untouched");
+        assertFalse(policy.isUsed(account, ID_A), "the account's id is untouched");
         assertEq(_validate(cfgA), SUCCESS, "and its session still settles");
     }
 
@@ -42,6 +42,6 @@ contract OneTimeUseIdPolicy_consumeFor_Unit_Test is OneTimeUseIdPolicy_Unit_Test
     function test_consumeFor_isPerId() external {
         _consumeFor(ID_A + 1, WITNESS_1);
 
-        assertFalse(policy.isConsumed(account, ID_A), "burning another id does not spend this one");
+        assertFalse(policy.isUsed(account, ID_A), "burning another id does not spend this one");
     }
 }

@@ -74,7 +74,7 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
     function test_checkAction_doesNotBurn() external {
         _validate(cfgA);
 
-        assertFalse(policy.isConsumed(account, ID_A), "validation must not consume the id");
+        assertFalse(policy.isUsed(account, ID_A), "validation must not consume the id");
     }
 
     /*//////////////////////////////////////////////////////////////

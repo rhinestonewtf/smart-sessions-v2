@@ -37,13 +37,13 @@ interface IOneTimeUseIdPolicy {
     function consumeFor(uint256 id, uint256 witness) external;
 
     /// @notice Whether an account's id has been consumed
-    function isConsumed(address account, uint256 id) external view returns (bool);
+    function isUsed(address account, uint256 id) external view returns (bool);
 
     /// @notice The id pinned for a configuration and whether it has been consumed
     /// @return pinned The pinned id, or zero if the configuration was never initialized
     /// @return consumed Whether that id has been burned
     function usage(
-        ConfigId id,
+        ConfigId configId,
         address multiplexer,
         address account
     )

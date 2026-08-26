@@ -14,28 +14,28 @@ import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.so
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
-/// @title OneTimeUseIdPolicy.isConsumed Unit Tests
-/// @notice Unit tests for the isConsumed function
-contract OneTimeUseIdPolicy_isConsumed_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
-    /// @notice Test isConsumed returns false before any burn
-    function test_isConsumed_returnsFalseInitially() external view {
-        assertFalse(policy.isConsumed(account, ID_A));
+/// @title OneTimeUseIdPolicy.isUsed Unit Tests
+/// @notice Unit tests for the isUsed function
+contract OneTimeUseIdPolicy_isUsed_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
+    /// @notice Test isUsed returns false before any burn
+    function test_isUsed_returnsFalseInitially() external view {
+        assertFalse(policy.isUsed(account, ID_A));
     }
 
-    /// @notice Test isConsumed returns true after the id is burned
-    function test_isConsumed_returnsTrueAfterConsume() external {
+    /// @notice Test isUsed returns true after the id is burned
+    function test_isUsed_returnsTrueAfterConsume() external {
         _consume(ID_A);
 
-        assertTrue(policy.isConsumed(account, ID_A));
+        assertTrue(policy.isUsed(account, ID_A));
     }
 }
 
-/// @title The cross-transaction half of isConsumed's durability
+/// @title The cross-transaction half of isUsed's durability
 /// @notice Split into its own contract deliberately. Transient storage survives every call
 ///         inside one test body - a forge test body IS one transaction - but it IS cleared
 ///         between `setUp` and the body. Burning in `setUp` is therefore the only way to prove
 ///         the DURABLE record, rather than the transient tolerance, crossed the boundary.
-contract OneTimeUseIdPolicy_isConsumed_CrossTransaction_Unit_Test is Test {
+contract OneTimeUseIdPolicy_isUsed_CrossTransaction_Unit_Test is Test {
     OneTimeUseIdPolicy internal policy;
 
     address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
@@ -58,7 +58,7 @@ contract OneTimeUseIdPolicy_isConsumed_CrossTransaction_Unit_Test is Test {
     }
 
     /// @notice Test the durable burn survives across the transaction boundary
-    function test_isConsumed_durableBurnSurvivesSetUp() external view {
-        assertTrue(policy.isConsumed(account, ID), "the durable record crossed the boundary");
+    function test_isUsed_durableBurnSurvivesSetUp() external view {
+        assertTrue(policy.isUsed(account, ID), "the durable record crossed the boundary");
     }
 }
