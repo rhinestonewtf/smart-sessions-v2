@@ -233,7 +233,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 pinned = OneTimeUseIdStorageLib.pin(id, msg.sender, account).id;
         if (pinned == 0) return VALIDATION_FAILED;
 
-        if (target == address(this) && data.length >= 4) {
+        if (target == address(this)) {
+            // A self-call with no selector can only revert at execution; fail closed.
+            if (data.length < 4) return VALIDATION_FAILED;
             bytes4 selector = bytes4(data[0:4]);
 
             // The executor route burns via `consume`, which nominates nothing. `consumeFor`

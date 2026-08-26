@@ -13,6 +13,8 @@ OneTimeUseIdPolicy::checkAction
 ├── given a batch of many executions in one settlement
 │   └── it should return VALIDATION_SUCCESS for every one of them while unburned
 ├── it should never itself burn the id
+├── given the call targets this policy with calldata shorter than a selector
+│   └── it should fail closed and return VALIDATION_FAILED
 ├── given the call targets this policy and the selector is consume
 │   ├── when the id argument is this session's OWN id
 │   │   └── it should return VALIDATION_SUCCESS

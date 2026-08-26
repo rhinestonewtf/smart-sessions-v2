@@ -137,6 +137,13 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
 
         assertEq(result, FAILED, "malformed consume calldata must fail closed");
     }
+
+    /// @notice Test a self-call with no selector (calldata shorter than 4 bytes) fails closed
+    function test_checkAction_selectorlessSelfCall_failsClosed() external {
+        uint256 result = _checkAction(cfgB, address(policy), hex"0011");
+
+        assertEq(result, FAILED, "a self-call with no selector must fail closed");
+    }
 }
 
 /// @title The cross-transaction half of checkAction's strictness
