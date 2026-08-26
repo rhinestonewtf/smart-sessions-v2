@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import { ConfigId } from "@smartsessions/DataTypes.sol";
+import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 
 /// @title One Time Use Id Storage Library
 /// @author Rhinestone
@@ -42,7 +43,12 @@ library OneTimeUseIdStorageLib {
         pure
         returns (PinStorage storage $)
     {
-        bytes32 slot = keccak256(abi.encode(PIN_POSITION, configId, multiplexer, account));
+        bytes32 slot = EfficientHashLib.hash(
+            PIN_POSITION,
+            ConfigId.unwrap(configId),
+            bytes32(uint256(uint160(multiplexer))),
+            bytes32(uint256(uint160(account)))
+        );
         assembly {
             $.slot := slot
         }
@@ -59,7 +65,8 @@ library OneTimeUseIdStorageLib {
         pure
         returns (SpendStorage storage $)
     {
-        bytes32 slot = keccak256(abi.encode(SPEND_POSITION, id, account));
+        bytes32 slot =
+            EfficientHashLib.hash(SPEND_POSITION, bytes32(id), bytes32(uint256(uint160(account))));
         assembly {
             $.slot := slot
         }
@@ -68,13 +75,15 @@ library OneTimeUseIdStorageLib {
     /// @notice Hashed so no witness value collides with NOT_NOMINATED; the (unreachable) zero hash
     ///         is remapped to 1 so the invariant holds without relying on "practically impossible".
     function nominationOf(uint256 witness) internal pure returns (uint256 value) {
-        value = uint256(keccak256(abi.encode(witness)));
+        value = uint256(EfficientHashLib.hash(bytes32(witness)));
         if (value == NOT_NOMINATED) value = 1;
     }
 
     /// @notice Records the nomination for an (id, account) in transient storage
     function setNomination(uint256 id, address account, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(NOMINATION_POSITION, account, id));
+        bytes32 slot = EfficientHashLib.hash(
+            NOMINATION_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+        );
         assembly ("memory-safe") {
             tstore(slot, value)
         }
@@ -82,7 +91,9 @@ library OneTimeUseIdStorageLib {
 
     /// @notice The nomination recorded for an (id, account) in this transaction
     function nomination(uint256 id, address account) internal view returns (uint256 value) {
-        bytes32 slot = keccak256(abi.encode(NOMINATION_POSITION, account, id));
+        bytes32 slot = EfficientHashLib.hash(
+            NOMINATION_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+        );
         assembly ("memory-safe") {
             value := tload(slot)
         }
