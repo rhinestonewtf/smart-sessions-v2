@@ -1,0 +1,9 @@
+OneTimeUseIdPolicy::consumeFor
+├── it should burn the id for the caller and record the witness's nomination
+├── given the id was already burned
+│   └── when consumeFor is called again
+│       └── it should not revert, and clear the nomination instead of reissuing it
+├── given a stranger calls with another account's id
+│   └── it should burn the stranger's own record and leave the account's untouched
+└── given a different id is burned
+    └── it should leave this id untouched

@@ -1,0 +1,7 @@
+OneTimeUseIdPolicy::isUsed
+├── given the id has never been burned for the account
+│   └── it should return false
+├── given the id has been burned for the account
+│   └── it should return true
+└── given the burn happened in an earlier transaction
+    └── it should still return true (the durable record survives)

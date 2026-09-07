@@ -1,0 +1,42 @@
+OneTimeUseIdPolicy::check1271SignedAction
+├── given the configId was never initialized
+│   └── it should return false
+├── given the caller is the executor (the pre-claim check)
+│   ├── given the id is unburned
+│   │   └── it should return true
+│   └── given the id has been burned
+│       └── it should return false
+├── given the caller is neither Permit2 nor the executor (e.g. the Compact route)
+│   └── it should fail closed and return false even while unspent
+├── given the caller is Permit2 (the settling check)
+│   ├── given the signature is shorter than the nonce field
+│   │   └── it should return false
+│   ├── given the account performed this settlement's own burn
+│   │   ├── it should return true
+│   │   └── it should return true even within the burning transaction
+│   ├── given a burn nominated a DIFFERENT settlement's witness
+│   │   └── it should return false
+│   ├── given the burn was never performed
+│   │   └── it should return false
+│   ├── given a second settlement presents its own witness after the first already settled
+│   │   └── it should return false
+│   ├── given the id was re-consumed after already being burned
+│   │   └── it should return false for every witness, including the original one
+│   ├── given the nomination came from an executor-route consumeFor that checkAction refused
+│   │   └── it should have nothing to ride, and return false
+│   ├── given the witness is Permit2 nonce zero
+│   │   └── it should still settle
+│   ├── given the witness is the max uint256 nonce
+│   │   └── it should still settle
+│   └── given the burn happened in an earlier transaction
+│       └── it should return false
+└── given a deadline is pinned
+    ├── when the deadline is in the future
+    │   └── it should settle on a proven burn
+    ├── when the current timestamp equals the deadline
+    │   └── it should settle (inclusive)
+    ├── when the deadline has passed
+    │   ├── it should refuse even a correctly proven burn
+    │   └── it should refuse the executor's advisory pre-claim read
+    └── when the deadline is zero
+        └── it should settle long after install

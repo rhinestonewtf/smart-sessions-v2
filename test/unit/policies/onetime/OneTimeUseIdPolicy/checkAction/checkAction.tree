@@ -1,0 +1,42 @@
+OneTimeUseIdPolicy::checkAction
+├── given the configId was never initialized
+│   └── it should return VALIDATION_FAILED
+├── given the pinned id is unburned
+│   └── it should return VALIDATION_SUCCESS
+├── given the pinned id has been burned
+│   └── it should return VALIDATION_FAILED
+├── given the burn happened in an earlier transaction
+│   └── it should still return VALIDATION_FAILED
+├── given the pinned id is shared with another action slot
+│   └── when that id is burned
+│       └── it should return VALIDATION_FAILED from every slot pinned to it
+├── given a batch of many executions in one settlement
+│   └── it should return VALIDATION_SUCCESS for every one of them while unburned
+├── it should never itself burn the id
+├── given the call targets this policy with calldata shorter than a selector
+│   └── it should fail closed and return VALIDATION_FAILED
+├── given the call targets this policy and the selector is consume
+│   ├── when the id argument is this session's OWN id
+│   │   └── it should return VALIDATION_SUCCESS
+│   ├── when the id argument names ANOTHER session's id
+│   │   └── it should return VALIDATION_FAILED
+│   └── when the calldata is malformed (shorter than an id argument)
+│       └── it should fail closed and return VALIDATION_FAILED
+├── given the call targets this policy and the selector is consumeFor
+│   ├── when the id argument is this session's OWN id
+│   │   └── it should return VALIDATION_FAILED
+│   └── when the id argument names ANOTHER session's id
+│       └── it should return VALIDATION_FAILED
+├── given the call is unrelated to this policy
+│   └── it should return VALIDATION_SUCCESS
+└── given a deadline is pinned
+    ├── when the deadline is in the future
+    │   └── it should return VALIDATION_SUCCESS
+    ├── when the current timestamp equals the deadline
+    │   └── it should return VALIDATION_SUCCESS (inclusive)
+    ├── when the deadline has passed
+    │   ├── it should return VALIDATION_FAILED
+    │   ├── it should refuse the session's own consume op
+    │   └── it should return VALIDATION_FAILED even while the id is unburned
+    └── when the deadline is zero
+        └── it should never expire
