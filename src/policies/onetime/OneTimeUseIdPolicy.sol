@@ -15,11 +15,24 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 // forgefmt: disable-start
 /// @title One Time Use Id Policy
 /// @author Rhinestone
-/// @notice Lets one session spend at most once across any number of settlement layers. The session
-///         pins an id it invents; a settlement burns that id by calling this contract; every later
-///         settlement is refused. The witness the ERC-1271 route reads is the settlement's own
-///         Permit2 nonce, used only so the settling check can recognise its own burn - which is why
-///         a `Permit2ClaimPolicy` binding that blob to the digest must be installed alongside.
+/// @notice Lets one session spend at most once across any number of settlement layers, and only
+///         before a pinned deadline. The session pins an id it invents; a settlement burns that id
+///         by calling this contract; every later settlement is refused. The witness the ERC-1271
+///         route reads is the settlement's own Permit2 nonce, used only so the settling check can
+///         recognise its own burn - which is why a `Permit2ClaimPolicy` binding that blob to the
+///         digest must be installed alongside.
+///
+/// @dev The deadline bounds a session that is never used, so an authorization cannot be settled
+///      long after it was issued. It is enforced on the two READ surfaces - `checkAction` and
+///      `check1271SignedAction` - and deliberately not at the burn sites: `consume`/`consumeFor`
+///      are keyed on (id, account) and never see a ConfigId, so they cannot read a deadline that is
+///      pinned per configuration. Nothing is lost by that. A burn only marks the id spent; what
+///      moves money is the settlement, and both routes are gated by a read. A burn after the
+///      deadline therefore buys nothing - the settlement behind it is already refused.
+///
+///      Zero means "never expires", which is the pre-deadline behaviour of this policy. It is a
+///      real configuration, not a default to fall into: a caller that wants an unbounded
+///      authorization must pin zero deliberately.
 ///
 /// @dev Trust model. The policy assumes the orchestrator composes the settlement's ops, and makes
 ///      the exactly-once guarantee against a hostile SUBMITTER, not a hostile ops author. The ops
@@ -100,8 +113,9 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      blobs, but the 1271 list and the claim list share a ConfigId (SmartSessionManager
 ///      `_enablePolicies`, both passing `toErc1271PolicyId().toConfigId`); the claim list is enabled
 ///      second, so its id overwrites the 1271 one for both surfaces. Every blob must carry the same
-///      id - nothing here can check it. Pin different values and the halves key different records,
-///      the cross-route exclusion never fires, and both surfaces still report "configured". This is
+///      id AND the same deadline - nothing here can check either. Pin different ids and the halves
+///      key different records, the cross-route exclusion never fires, and both surfaces still
+///      report "configured"; pin different deadlines and each surface expires on its own. This is
 ///      also why one session must cover every settlement layer: separate permissionIds get separate
 ///      ConfigIds and separate spends, so exactly-once holds per layer instead of across them.
 ///
@@ -153,10 +167,10 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
                                   INIT
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Pins the id this session may spend
+    /// @notice Pins the id this session may spend, and the deadline it may spend it by
     /// @param account The account this configuration belongs to
     /// @param configId The configuration being initialized
-    /// @param initData A single 32-byte id
+    /// @param initData A 32-byte id followed by a 32-byte deadline (zero = never expires)
     function initializeWithMultiplexer(
         address account,
         ConfigId configId,
@@ -165,12 +179,22 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         external
         override
     {
-        if (initData.length != 32) revert InvalidInitDataLength(initData.length);
+        if (initData.length != 64) revert InvalidInitDataLength(initData.length);
 
         uint256 id = uint256(bytes32(initData[0:32]));
         if (id == 0) revert InvalidId();
 
-        OneTimeUseIdStorageLib.pin(configId, msg.sender, account).id = id;
+        // Rejected here as well as on the reads: a deadline already past pins a session no
+        // settlement could ever use, and failing at install says so while a caller is watching.
+        uint256 deadline = uint256(bytes32(initData[32:64]));
+        if (OneTimeUseIdStorageLib.isExpired(deadline)) {
+            revert DeadlineInPast(deadline, block.timestamp);
+        }
+
+        OneTimeUseIdStorageLib.PinStorage storage $pin =
+            OneTimeUseIdStorageLib.pin(configId, msg.sender, account);
+        $pin.id = id;
+        $pin.deadline = deadline;
 
         // The spend is not cleared here: this runs during an ENABLE-mode settlement, and the record
         // carries no session identity, so clearing would free an unrelated session on the same id.
@@ -218,7 +242,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev Does not write. See the read-here-burn-there note on the contract.
     /// @param configId The configuration
     /// @param account The account settling
-    /// @return VALIDATION_SUCCESS while the id is unburned, VALIDATION_FAILED afterwards
+    /// @return VALIDATION_SUCCESS while the id is unburned and unexpired, VALIDATION_FAILED after
+    ///         either
     function checkAction(
         ConfigId configId,
         address account,
@@ -230,8 +255,11 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (uint256)
     {
-        uint256 pinned = OneTimeUseIdStorageLib.pin(configId, msg.sender, account).id;
+        OneTimeUseIdStorageLib.PinStorage storage $pin =
+            OneTimeUseIdStorageLib.pin(configId, msg.sender, account);
+        uint256 pinned = $pin.id;
         if (pinned == 0) return VALIDATION_FAILED;
+        if (OneTimeUseIdStorageLib.isExpired($pin.deadline)) return VALIDATION_FAILED;
 
         if (target == address(this)) {
             // A self-call with no selector can only revert at execution; fail closed.
@@ -279,8 +307,15 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         override
         returns (bool)
     {
-        uint256 pinned = OneTimeUseIdStorageLib.pin(configId, msg.sender, account).id;
+        OneTimeUseIdStorageLib.PinStorage storage $pin =
+            OneTimeUseIdStorageLib.pin(configId, msg.sender, account);
+        uint256 pinned = $pin.id;
         if (pinned == 0) return false;
+
+        // Refused for every caller, before the routes diverge: an expired authorization must not
+        // settle, and both checks of a Permit2 settlement run in one transaction, so neither route
+        // can straddle the deadline.
+        if (OneTimeUseIdStorageLib.isExpired($pin.deadline)) return false;
 
         // The executor pre-claim check runs before the burn, so it can only ask "is this unspent?".
         // Its refusal is swallowed by the arbiter, so nothing here is load-bearing.
@@ -312,9 +347,10 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         return OneTimeUseIdStorageLib.spendRecord(id, account).burned;
     }
 
-    /// @notice The id pinned for a configuration, and whether it has been spent
+    /// @notice The id pinned for a configuration, whether it has been spent, and when it expires
     /// @return pinned The pinned id, or zero if this configuration was never initialized
     /// @return consumed Whether that id has been burned
+    /// @return deadline The last timestamp a settlement may use it, or zero if it never expires
     function usage(
         ConfigId configId,
         address multiplexer,
@@ -323,9 +359,12 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         external
         view
         override
-        returns (uint256 pinned, bool consumed)
+        returns (uint256 pinned, bool consumed, uint256 deadline)
     {
-        pinned = OneTimeUseIdStorageLib.pin(configId, multiplexer, account).id;
+        OneTimeUseIdStorageLib.PinStorage storage $pin =
+            OneTimeUseIdStorageLib.pin(configId, multiplexer, account);
+        pinned = $pin.id;
+        deadline = $pin.deadline;
         consumed = pinned != 0 && OneTimeUseIdStorageLib.spendRecord(pinned, account).burned;
     }
 

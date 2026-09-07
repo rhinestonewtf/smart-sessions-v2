@@ -24,9 +24,13 @@ library OneTimeUseIdStorageLib {
     /// @dev Nomination value meaning no settlement was nominated in this transaction
     uint256 internal constant NOT_NOMINATED = 0;
 
-    /// @dev Zero id means "not configured"
+    /// @dev Deadline value meaning the pinned id never expires
+    uint256 internal constant NO_DEADLINE = 0;
+
+    /// @dev Zero id means "not configured"; zero deadline means "never expires"
     struct PinStorage {
         uint256 id;
+        uint256 deadline;
     }
 
     struct SpendStorage {
@@ -70,6 +74,14 @@ library OneTimeUseIdStorageLib {
         assembly {
             $.slot := slot
         }
+    }
+
+    /// @notice Whether `deadline` has passed. Inclusive, matching Permit2's own
+    ///         `block.timestamp > deadline` rule, so a settlement is still valid in the block the
+    ///         deadline names. One predicate for both the install-time rejection and the two read
+    ///         surfaces, so install refuses exactly the deadlines the reads would already refuse.
+    function isExpired(uint256 deadline) internal view returns (bool) {
+        return deadline != NO_DEADLINE && block.timestamp > deadline;
     }
 
     /// @notice Hashed so no witness value collides with NOT_NOMINATED; the (unreachable) zero hash

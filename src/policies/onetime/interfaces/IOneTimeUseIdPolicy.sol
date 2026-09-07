@@ -7,11 +7,15 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 /// @author Rhinestone
 /// @notice Errors, events and views for the settlement-agnostic one-shot marker
 interface IOneTimeUseIdPolicy {
-    /// @notice Thrown when init data is not exactly one 32-byte id
+    /// @notice Thrown when init data is not exactly a 32-byte id followed by a 32-byte deadline
     error InvalidInitDataLength(uint256 length);
 
     /// @notice Thrown when initializing a session with the zero id, which marks "not configured"
     error InvalidId();
+
+    /// @notice Thrown when initializing with a deadline that has already passed, which would pin a
+    ///         session no settlement could ever use
+    error DeadlineInPast(uint256 deadline, uint256 timestamp);
 
     /// @notice Thrown when `consume` is called for an id already burned for the caller
     error AlreadyConsumed(uint256 id);
@@ -39,9 +43,10 @@ interface IOneTimeUseIdPolicy {
     /// @notice Whether an account's id has been consumed
     function isUsed(address account, uint256 id) external view returns (bool);
 
-    /// @notice The id pinned for a configuration and whether it has been consumed
+    /// @notice The id pinned for a configuration, whether it has been consumed, and when it expires
     /// @return pinned The pinned id, or zero if the configuration was never initialized
     /// @return consumed Whether that id has been burned
+    /// @return deadline The last timestamp a settlement may use it, or zero if it never expires
     function usage(
         ConfigId configId,
         address multiplexer,
@@ -49,5 +54,5 @@ interface IOneTimeUseIdPolicy {
     )
         external
         view
-        returns (uint256 pinned, bool consumed);
+        returns (uint256 pinned, bool consumed, uint256 deadline);
 }

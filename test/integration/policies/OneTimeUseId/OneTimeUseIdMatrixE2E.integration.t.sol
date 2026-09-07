@@ -56,6 +56,9 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
 
     uint256 internal constant ID = 0x0A11CE;
 
+    /// @dev These cases exercise the spend, not the expiry, so the id never expires
+    uint256 internal constant NO_DEADLINE = 0;
+
     function setUp() public virtual override {
         super.setUp();
 
@@ -119,6 +122,11 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     /// @param bounded false swaps the once-policy for permissive ones, so the lists are non-empty
     ///        but nothing bounds repetition. An EMPTY list is not the control — minPolicies is 1.
     function _enableSession(bool bounded) internal {
+        _enableSession(bounded, NO_DEADLINE);
+    }
+
+    /// @dev `deadline` is pinned into BOTH halves of the session, as the contract requires.
+    function _enableSession(bool bounded, uint256 deadline) internal {
         activeFieldMode = FIELD_ARBITER;
 
         PolicyData[] memory erc1271Policies = new PolicyData[](bounded ? 2 : 1);
@@ -130,13 +138,17 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         });
         if (bounded) {
             erc1271Policies[1] = PolicyData({
-                policy: address(oncePolicy), initData: abi.encodePacked(bytes32(ID))
+                policy: address(oncePolicy),
+                initData: abi.encodePacked(bytes32(ID), bytes32(deadline))
             });
         }
 
         PolicyData[] memory actionPolicies = new PolicyData[](1);
         actionPolicies[0] = bounded
-            ? PolicyData({ policy: address(oncePolicy), initData: abi.encodePacked(bytes32(ID)) })
+            ? PolicyData({
+                policy: address(oncePolicy),
+                initData: abi.encodePacked(bytes32(ID), bytes32(deadline))
+            })
             : PolicyData({ policy: address(sudoPolicy), initData: "" });
 
         ActionData[] memory extra = _extraActions(actionPolicies);
@@ -400,6 +412,62 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
 
         vm.expectRevert();
         _settleViaExecutor(1, 43);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 DEADLINE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev The point of the deadline: an authorization nobody used goes stale on its own, with no
+    ///      burn and nothing to revoke. Both routes must refuse it.
+    /// @dev The session deadline expires ONE second out while the intent's own
+    ///      `expires` (now + 1 hour) stays live. Warping the full hour instead
+    ///      would expire the intent too, and Permit2 would refuse the claim on
+    ///      its own — a revert that looks identical and proves nothing.
+    function test_deadline_permit2RouteRefusedAfterExpiry() public {
+        _enableSession(true, block.timestamp + 1);
+
+        vm.warp(block.timestamp + 2);
+
+        // Built BEFORE `expectRevert`: preparing the settlement makes calls of
+        // its own, and `expectRevert` binds to the next one — which would be a
+        // hash staticcall that succeeds, not the claim.
+        bytes memory adapterCalldata = _preparePermit2Settlement();
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+
+        assertFalse(_burned(), "nothing settled, so nothing burned");
+    }
+
+    /// @dev Same minimal warp as the Permit2 case, for the same reason.
+    function test_deadline_executorRouteRefusedAfterExpiry() public {
+        _enableSession(true, block.timestamp + 1);
+
+        vm.warp(block.timestamp + 2);
+
+        vm.expectRevert();
+        _settleViaExecutor(0);
+
+        assertEq(env.target.param(), 0, "the executor settlement never executed");
+        assertFalse(_burned(), "and nothing burned");
+    }
+
+    /// @dev The same settlements must still work while the deadline is in the future, so the two
+    ///      cases above are refusals BY the deadline rather than by the harness.
+    function test_deadline_bothRoutesSettleBeforeExpiry() public {
+        _enableSession(true, block.timestamp + 1 hours);
+        _settleViaPermit2();
+
+        assertTrue(_burned(), "an unexpired authorization settles normally");
+    }
+
+    function test_deadline_executorRouteSettlesBeforeExpiry() public {
+        _enableSession(true, block.timestamp + 1 hours);
+        _settleViaExecutor(0);
+
+        assertEq(env.target.param(), 42, "an unexpired authorization settles normally");
+        assertTrue(_burned(), "and burns");
     }
 
     /// @dev CONTROL for Permit2 -> executor

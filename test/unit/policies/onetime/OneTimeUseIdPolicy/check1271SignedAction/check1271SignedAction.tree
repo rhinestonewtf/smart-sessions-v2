@@ -30,3 +30,13 @@ OneTimeUseIdPolicy::check1271SignedAction
 │   │   └── it should still settle
 │   └── given the burn happened in an earlier transaction
 │       └── it should return false
+└── given a deadline is pinned
+    ├── when the deadline is in the future
+    │   └── it should settle on a proven burn
+    ├── when the current timestamp equals the deadline
+    │   └── it should settle (inclusive)
+    ├── when the deadline has passed
+    │   ├── it should refuse even a correctly proven burn
+    │   └── it should refuse the executor's advisory pre-claim read
+    └── when the deadline is zero
+        └── it should settle long after install

@@ -144,6 +144,68 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
 
         assertEq(result, FAILED, "a self-call with no selector must fail closed");
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                 DEADLINE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test the executor route settles while the deadline is in the future
+    function test_checkAction_beforeDeadline_succeeds() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp + 1 hours);
+
+        assertEq(_validate(cfgA), SUCCESS, "unexpired and unburned settles");
+    }
+
+    /// @notice Test the executor route refuses once the deadline has passed
+    function test_checkAction_afterDeadline_fails() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp + 1 hours);
+
+        vm.warp(block.timestamp + 1 hours + 1);
+
+        assertEq(_validate(cfgA), FAILED, "an expired authorization cannot settle");
+    }
+
+    /// @notice Test the deadline is inclusive of the block it names
+    function test_checkAction_atDeadline_succeeds() external {
+        vm.warp(1000);
+        uint256 expiry = block.timestamp + 1 hours;
+        _install(cfgA, ID_A, expiry);
+
+        vm.warp(expiry);
+
+        assertEq(_validate(cfgA), SUCCESS, "valid in the block the deadline names");
+    }
+
+    /// @notice Test the deadline refuses the burn's own op, not just later executions
+    function test_checkAction_afterDeadline_refusesTheConsumeOp() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp + 1 hours);
+
+        vm.warp(block.timestamp + 1 hours + 1);
+
+        // A well-formed `consume` naming this session's own id, which would otherwise pass.
+        bytes memory data = abi.encodeWithSelector(OneTimeUseIdPolicy.consume.selector, ID_A);
+
+        assertEq(
+            _checkAction(cfgA, address(policy), data),
+            FAILED,
+            "an expired session cannot even dispatch its own burn"
+        );
+    }
+
+    /// @notice Test expiry does not depend on the id being unburned
+    function test_checkAction_afterDeadline_failsEvenWhenUnburned() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp + 1 hours);
+        vm.warp(block.timestamp + 2 hours);
+
+        (, bool consumed,) = policy.usage(cfgA, multiplexer, account);
+
+        assertFalse(consumed, "the id was never burned");
+        assertEq(_validate(cfgA), FAILED, "expiry alone is enough to refuse");
+    }
 }
 
 /// @title The cross-transaction half of checkAction's strictness
@@ -167,7 +229,7 @@ contract OneTimeUseIdPolicy_checkAction_CrossTransaction_Unit_Test is Test {
         policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), makeAddr("intentExecutor"));
 
         vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));
+        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID), bytes32(0)));
 
         vm.prank(account);
         policy.consumeFor(ID, WITNESS);
