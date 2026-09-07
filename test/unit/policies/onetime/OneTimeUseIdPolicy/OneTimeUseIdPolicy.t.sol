@@ -37,6 +37,9 @@ abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
     uint256 internal constant ID_A = 0xBEEF;
     uint256 internal constant ID_B = 0xCAFE;
 
+    /// @dev The deadline value meaning "never expires"
+    uint256 internal constant NO_DEADLINE = 0;
+
     /// @dev Stands in for a settlement's own Permit2 nonce, used purely as a witness
     uint256 internal constant WITNESS_1 = 1337;
     uint256 internal constant WITNESS_2 = 4242;
@@ -72,10 +75,17 @@ abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
                                HELPERS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Pins `id` under `cfg` for `account`, as the multiplexer
+    /// @notice Pins `id` under `cfg` for `account`, with no deadline, as the multiplexer
     function _install(ConfigId cfg, uint256 id) internal {
+        _install(cfg, id, NO_DEADLINE);
+    }
+
+    /// @notice Pins `id` and `deadline` under `cfg` for `account`, as the multiplexer
+    function _install(ConfigId cfg, uint256 id, uint256 deadline) internal {
         vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(id)));
+        policy.initializeWithMultiplexer(
+            account, cfg, abi.encodePacked(bytes32(id), bytes32(deadline))
+        );
     }
 
     /// @notice What the action surface does for one execution in a settlement batch

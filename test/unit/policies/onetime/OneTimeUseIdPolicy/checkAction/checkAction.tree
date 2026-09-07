@@ -27,5 +27,16 @@ OneTimeUseIdPolicy::checkAction
 │   │   └── it should return VALIDATION_FAILED
 │   └── when the id argument names ANOTHER session's id
 │       └── it should return VALIDATION_FAILED
-└── given the call is unrelated to this policy
-    └── it should return VALIDATION_SUCCESS
+├── given the call is unrelated to this policy
+│   └── it should return VALIDATION_SUCCESS
+└── given a deadline is pinned
+    ├── when the deadline is in the future
+    │   └── it should return VALIDATION_SUCCESS
+    ├── when the current timestamp equals the deadline
+    │   └── it should return VALIDATION_SUCCESS (inclusive)
+    ├── when the deadline has passed
+    │   ├── it should return VALIDATION_FAILED
+    │   ├── it should refuse the session's own consume op
+    │   └── it should return VALIDATION_FAILED even while the id is unburned
+    └── when the deadline is zero
+        └── it should never expire

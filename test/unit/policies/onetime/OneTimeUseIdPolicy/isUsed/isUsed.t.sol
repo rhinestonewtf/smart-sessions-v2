@@ -51,7 +51,7 @@ contract OneTimeUseIdPolicy_isUsed_CrossTransaction_Unit_Test is Test {
         policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), makeAddr("intentExecutor"));
 
         vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));
+        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID), bytes32(0)));
 
         vm.prank(account);
         policy.consumeFor(ID, WITNESS);

@@ -17,13 +17,24 @@ contract OneTimeUseIdPolicy_initializeWithMultiplexer_Unit_Test is OneTimeUseIdP
                               INIT DATA SHAPE
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Test reverts when initData is not exactly one word
-    function test_initializeWithMultiplexer_revertsWhen_initDataNot32Bytes() external {
+    /// @notice Test reverts when initData is not exactly two words
+    function test_initializeWithMultiplexer_revertsWhen_initDataNot64Bytes() external {
         vm.prank(multiplexer);
         vm.expectRevert(
-            abi.encodeWithSelector(IOneTimeUseIdPolicy.InvalidInitDataLength.selector, uint256(31))
+            abi.encodeWithSelector(IOneTimeUseIdPolicy.InvalidInitDataLength.selector, uint256(63))
         );
-        policy.initializeWithMultiplexer(account, ConfigId.wrap(keccak256("short")), new bytes(31));
+        policy.initializeWithMultiplexer(account, ConfigId.wrap(keccak256("short")), new bytes(63));
+    }
+
+    /// @notice Test reverts when initData carries an id but no deadline
+    function test_initializeWithMultiplexer_revertsWhen_deadlineOmitted() external {
+        vm.prank(multiplexer);
+        vm.expectRevert(
+            abi.encodeWithSelector(IOneTimeUseIdPolicy.InvalidInitDataLength.selector, uint256(32))
+        );
+        policy.initializeWithMultiplexer(
+            account, ConfigId.wrap(keccak256("no.deadline")), abi.encodePacked(bytes32(ID_A))
+        );
     }
 
     /// @notice Test reverts when the id is zero
@@ -31,8 +42,49 @@ contract OneTimeUseIdPolicy_initializeWithMultiplexer_Unit_Test is OneTimeUseIdP
         vm.prank(multiplexer);
         vm.expectRevert(IOneTimeUseIdPolicy.InvalidId.selector);
         policy.initializeWithMultiplexer(
-            account, ConfigId.wrap(keccak256("zero")), abi.encodePacked(bytes32(0))
+            account,
+            ConfigId.wrap(keccak256("zero")),
+            abi.encodePacked(bytes32(0), bytes32(NO_DEADLINE))
         );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 DEADLINE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test reverts when the deadline has already passed
+    function test_initializeWithMultiplexer_revertsWhen_deadlineAlreadyPassed() external {
+        vm.warp(1000);
+        uint256 past = block.timestamp - 1;
+
+        vm.prank(multiplexer);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOneTimeUseIdPolicy.DeadlineInPast.selector, past, block.timestamp
+            )
+        );
+        policy.initializeWithMultiplexer(
+            account,
+            ConfigId.wrap(keccak256("past")),
+            abi.encodePacked(bytes32(ID_A), bytes32(past))
+        );
+    }
+
+    /// @notice Test the current timestamp is accepted, matching the inclusive read rule
+    function test_initializeWithMultiplexer_acceptsDeadlineAtCurrentTimestamp() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp);
+
+        assertEq(_validate(cfgA), SUCCESS, "a deadline of now is still valid in this block");
+    }
+
+    /// @notice Test a zero deadline pins a session that never expires
+    function test_initializeWithMultiplexer_zeroDeadlineNeverExpires() external {
+        _install(cfgA, ID_A, NO_DEADLINE);
+
+        vm.warp(block.timestamp + 3650 days);
+
+        assertEq(_validate(cfgA), SUCCESS, "zero means no expiry");
     }
 
     /*//////////////////////////////////////////////////////////////

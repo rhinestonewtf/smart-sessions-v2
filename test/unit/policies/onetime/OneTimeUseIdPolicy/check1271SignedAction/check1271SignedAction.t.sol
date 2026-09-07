@@ -150,6 +150,67 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
 
         assertTrue(_settlingCheck(cfgA, type(uint256).max), "the max nonce is a valid settlement");
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                 DEADLINE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test the settling check passes on a proven burn before the deadline
+    function test_check1271SignedAction_beforeDeadline_settles() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp + 1 hours);
+
+        _consumeFor(ID_A, WITNESS_1);
+
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "a proven burn settles before the deadline");
+    }
+
+    /// @notice Test the settling check refuses a proven burn once the deadline has passed
+    function test_check1271SignedAction_afterDeadline_refusesEvenAProvenBurn() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp + 1 hours);
+
+        // The burn and its nomination are transient, so they must be established in the same
+        // transaction as the settling read; warp first, then burn, then settle.
+        vm.warp(block.timestamp + 1 hours + 1);
+        _consumeFor(ID_A, WITNESS_1);
+
+        assertFalse(
+            _settlingCheck(cfgA, WITNESS_1), "the deadline outranks a correctly proven burn"
+        );
+    }
+
+    /// @notice Test the executor's advisory pre-claim read also refuses after the deadline
+    function test_check1271SignedAction_afterDeadline_refusesThePreClaimRead() external {
+        vm.warp(1000);
+        _install(cfgA, ID_A, block.timestamp + 1 hours);
+
+        vm.warp(block.timestamp + 1 hours + 1);
+
+        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "the advisory read is expired too");
+    }
+
+    /// @notice Test the deadline is inclusive on the settling surface
+    function test_check1271SignedAction_atDeadline_settles() external {
+        vm.warp(1000);
+        uint256 expiry = block.timestamp + 1 hours;
+        _install(cfgA, ID_A, expiry);
+
+        vm.warp(expiry);
+        _consumeFor(ID_A, WITNESS_1);
+
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "valid in the block the deadline names");
+    }
+
+    /// @notice Test a zero deadline leaves the settling check unbounded in time
+    function test_check1271SignedAction_zeroDeadline_settlesLongAfterInstall() external {
+        _install(cfgA, ID_A, NO_DEADLINE);
+
+        vm.warp(block.timestamp + 3650 days);
+        _consumeFor(ID_A, WITNESS_1);
+
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "zero means no expiry");
+    }
 }
 
 /// @title The cross-transaction half of the settling check's tolerance
@@ -173,7 +234,7 @@ contract OneTimeUseIdPolicy_check1271SignedAction_CrossTransaction_Unit_Test is 
         policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), makeAddr("intentExecutor"));
 
         vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID)));
+        policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID), bytes32(0)));
 
         vm.prank(account);
         policy.consumeFor(ID, WITNESS);

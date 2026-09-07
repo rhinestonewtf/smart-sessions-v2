@@ -3,5 +3,7 @@ OneTimeUseIdPolicy::usage
 │   └── it should return pinned = 0, consumed = false
 ├── given the configId is initialized and unburned
 │   └── it should return the pinned id, consumed = false
-└── given the pinned id has been burned
-    └── it should return the pinned id, consumed = true
+├── given the pinned id has been burned
+│   └── it should return the pinned id, consumed = true
+└── given a deadline is pinned
+    └── it should return the deadline alongside the id and spend
