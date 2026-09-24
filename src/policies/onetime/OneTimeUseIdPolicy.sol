@@ -44,19 +44,14 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///
 ///      Build requirements the contract cannot check (properties of the signed blob):
 ///        - the pre-claim carries the `consume`/`consumeFor` call
-///        - it carries no other unpoliced executions; the pre-claim's action surface is not
-///          dispatched on the ERC-1271 route, so ops there are bounded by the signer
+///        - it carries no other unpoliced executions; a pre-claim validated through
+///          `verifyExecution` also passes `checkAction`, otherwise its ops are bounded by the signer
 ///        - its sigMode is the one the 1271 route expects
 ///
-///      Where the action surface IS dispatched (the executor route), `checkAction` enforces two
-///      things on-chain, wherever the once-policy sits in the dispatched action list (including the
-///      fallback action):
-///        - a `consume` may only name the session's own id, so a session cannot burn another
-///          session's id (a permanent cross-session denial of service)
-///        - a `consumeFor` is refused. Only the ERC-1271 route nominates, and its action surface is
-///          never dispatched here; a `consumeFor` on the executor route would set a nomination a
-///          Permit2 settlement that skipped its own burn could ride, breaking exactly-once across
-///          layers.
+///      Where the action surface IS dispatched (the executor route), `checkAction` enforces,
+///      wherever the once-policy sits in the dispatched action list (including the fallback
+///      action), that a `consume` or `consumeFor` may only name the session's own id, so a session
+///      cannot burn another session's id (a permanent cross-session denial of service).
 ///
 /// @dev Read here, burn there. `checkAction` does not write; the burn is `consume`, an execution
 ///      the settlement carries with the account as msg.sender. A policy that burned during
@@ -266,21 +261,14 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             if (data.length < 4) return VALIDATION_FAILED;
             bytes4 selector = bytes4(data[0:4]);
 
-            // The executor route burns via `consume`, which nominates nothing. `consumeFor`
-            // nominates a settlement and is legitimate ONLY on the ERC-1271 route, whose action
-            // surface is never dispatched here. A `consumeFor` reaching checkAction is therefore
-            // an executor-route op setting a nomination it does not own - which a Permit2
-            // settlement that skipped its own burn could then ride, breaking exactly-once across
-            // layers. Refuse it outright.
-            if (selector == this.consumeFor.selector) return VALIDATION_FAILED;
-
-            // A `consume` must be well-formed and name the session's OWN id: otherwise a second
-            // session on the same account could name this one's id and brick it permanently (a
-            // cross-session DoS). Malformed calldata fails closed rather than passing here to
-            // revert later at execution.
+            // A burn must be well-formed and name the session's OWN id, or a second session on
+            // the same account could brick this one's id. Both burns take the id first.
+            uint256 burnLength = selector == this.consume.selector
+                ? 36
+                : selector == this.consumeFor.selector ? 68 : 0;
             if (
-                selector == this.consume.selector
-                    && (data.length < 36 || uint256(bytes32(data[4:36])) != pinned)
+                burnLength != 0
+                    && (data.length < burnLength || uint256(bytes32(data[4:36])) != pinned)
             ) return VALIDATION_FAILED;
         }
 

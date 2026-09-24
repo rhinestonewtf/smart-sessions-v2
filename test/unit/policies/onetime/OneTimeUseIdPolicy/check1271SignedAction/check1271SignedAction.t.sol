@@ -112,16 +112,6 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         assertFalse(_settlingCheck(cfgA, WITNESS_1), "the nomination must name THIS settlement");
     }
 
-    /// @notice Test an executor-route consumeFor that checkAction refused leaves nothing to ride
-    function test_check1271SignedAction_refusedNominationLeavesNothingToSettle() external {
-        bytes memory nominate = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_A, WITNESS_1));
-
-        uint256 result = _checkAction(cfgA, address(policy), nominate);
-
-        assertEq(result, FAILED, "the executor route cannot nominate");
-        assertFalse(_settlingCheck(cfgA, WITNESS_1), "a starved settlement has nothing to ride");
-    }
-
     /// @notice Test a caller that is neither Permit2 nor the executor is refused while unspent
     function test_check1271SignedAction_unknownCaller_failsClosed() external {
         address compact = makeAddr("theCompact");

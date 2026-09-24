@@ -107,16 +107,17 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
     }
 
     /*//////////////////////////////////////////////////////////////
-                    THE consumeFor SELF-CALL IS REFUSED
+                  THE consumeFor SELF-CALL NAMES ITS OWN ID
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Test the executor route may not nominate a settlement for its own id
-    function test_checkAction_consumeForOwnId_returnsFailed() external {
+    /// @notice Test a consumeFor naming the session's own id passes, so a Permit2 pre-claim that
+    ///         enables the session in the same settlement can still burn
+    function test_checkAction_consumeForOwnId_returnsSuccess() external {
         bytes memory nominateOwn = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, WITNESS_1));
 
         uint256 result = _checkAction(cfgB, address(policy), nominateOwn);
 
-        assertEq(result, FAILED, "the executor route may not nominate");
+        assertEq(result, SUCCESS, "a burn of the session's own id is allowed");
     }
 
     /// @notice Test the executor route may not nominate a settlement for another session's id
@@ -136,6 +137,15 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
         uint256 result = _checkAction(cfgB, address(policy), malformed);
 
         assertEq(result, FAILED, "malformed consume calldata must fail closed");
+    }
+
+    /// @notice Test a consumeFor carrying its own id but no witness word fails closed
+    function test_checkAction_truncatedConsumeFor_failsClosed() external {
+        bytes memory truncated = abi.encodePacked(IOneTimeUseIdPolicy.consumeFor.selector, ID_B);
+
+        uint256 result = _checkAction(cfgB, address(policy), truncated);
+
+        assertEq(result, FAILED, "a consumeFor without its witness must fail closed");
     }
 
     /// @notice Test a self-call with no selector (calldata shorter than 4 bytes) fails closed

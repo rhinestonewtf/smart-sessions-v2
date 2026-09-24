@@ -69,7 +69,11 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         // The base harness builds the emissary against a MOCK intent executor, so verifyExecution
         // rejects the real one with UnauthorizedSource. Redeploy against the real ADDRESSBOOK so
         // ONE emissary serves both routes.
-        smartSessionEmissary = new SmartSessionEmissaryMock(address(ADDRESSBOOK));
+        // The IntentExecutor fixes its emissary at construction, so the mock's code must live at
+        // that address for the executor route to reach the session policies.
+        SmartSessionEmissaryMock mock = new SmartSessionEmissaryMock(address(ADDRESSBOOK));
+        vm.etch(address(env.emissary), address(mock).code);
+        smartSessionEmissary = SmartSessionEmissaryMock(address(env.emissary));
         env.smartAccount1
             .installModule({
                 moduleTypeId: MODULE_TYPE_VALIDATOR, module: address(smartSessionEmissary), data: ""

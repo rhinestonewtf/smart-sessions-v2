@@ -22,8 +22,6 @@ OneTimeUseIdPolicy::check1271SignedAction
 │   │   └── it should return false
 │   ├── given the id was re-consumed after already being burned
 │   │   └── it should return false for every witness, including the original one
-│   ├── given the nomination came from an executor-route consumeFor that checkAction refused
-│   │   └── it should have nothing to ride, and return false
 │   ├── given the witness is Permit2 nonce zero
 │   │   └── it should still settle
 │   ├── given the witness is the max uint256 nonce
