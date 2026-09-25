@@ -67,7 +67,8 @@ contract BaseValidationLib_validateFillExpiry_Unit_Test is BaseValidationLib_Uni
         view
         returns (bool)
     {
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return BaseValidationLib.validateFillExpiry(
             $, _fillExpiry, _targetChainId, _config, configId, account, testHash
         );

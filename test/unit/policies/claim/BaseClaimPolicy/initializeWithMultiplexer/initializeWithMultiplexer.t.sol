@@ -889,7 +889,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test initializes dest ops required=true
     function test_initializeWithMultiplexer_destOpsStorage_requiredTrue() external {
         // Arrange
-        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no
+        // extra data)
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
             | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -909,7 +910,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test initializes dest ops required=false
     function test_initializeWithMultiplexer_destOpsStorage_requiredFalse() external {
         // Arrange
-        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no
+        // extra data)
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
             | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -929,7 +931,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test initializes dest ops for multiple chainIds
     function test_initializeWithMultiplexer_destOpsStorage_multipleChains() external {
         // Arrange
-        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no
+        // extra data)
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
             | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](2);
@@ -970,7 +973,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     /// @notice Test re-initialization overwrites destOps config
     function test_initializeWithMultiplexer_destOpsStorage_revertsWhen_overwrites() external {
         // Arrange - first init
-        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no extra data)
+        // Per-chain destOps requires a target check (recipientIsSponsor is the minimal one, no
+        // extra data)
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
             | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -992,9 +996,11 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
     }
 
     /// @notice Test reverts when per-chain destOps is enabled without any target check
-    /// @dev Storage-mode destOps keys its lookup on the mandate target chain id, which is only bound
-    ///      to the signed mandate when a target check is enabled.
-    function test_initializeWithMultiplexer_revertsWhen_destOpsStorageWithoutTargetCheck() external {
+    /// @dev Storage-mode destOps keys its lookup on the mandate target chain id, which is only
+    /// bound to the signed mandate when a target check is enabled.
+    function test_initializeWithMultiplexer_revertsWhen_destOpsStorageWithoutTargetCheck()
+        external
+    {
         // Arrange
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
@@ -1026,7 +1032,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
         policy.initializeWithMultiplexer(account, configId, initData);
     }
 
-    /// @notice Test allows subpolicy destOps when a target check is enabled (target chain id is bound)
+    /// @notice Test allows subpolicy destOps when a target check is enabled (target chain id is
+    /// bound)
     function test_initializeWithMultiplexer_destOpsSubPolicy_withTargetCheck() external {
         // Arrange - recipientIsSponsor is a target check and requires no extra config data
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_SUBPOLICY)
@@ -1042,7 +1049,8 @@ contract BaseClaimPolicy_initializeWithMultiplexer_Unit_Test is BaseClaimPolicy_
         assertEq(policy.getSubPolicy(configId, account, FIELD_DEST_OPS), address(mockSubPolicy));
     }
 
-    /// @notice Test allows per-chain destOps when a target check is enabled (target chain id is bound)
+    /// @notice Test allows per-chain destOps when a target check is enabled (target chain id is
+    /// bound)
     function test_initializeWithMultiplexer_destOpsStorage_withTargetCheck() external {
         // Arrange - recipientIsSponsor is a target check and requires no extra config data
         uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)

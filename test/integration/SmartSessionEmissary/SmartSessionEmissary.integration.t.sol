@@ -129,8 +129,11 @@ contract SmartSessionEmissary_Integration_Test is
         // Call Base_Test setup
         Base_Test.setUp();
 
-        // Redeploy SmartSessionEmissary with intentExecutor in constructor
-        smartSessionEmissary = new SmartSessionEmissary(address(ADDRESSBOOK));
+        // The IntentExecutor fixes its emissary at construction, so the emissary's code must live
+        // at that address for verifyExecution to reach the session policies.
+        SmartSessionEmissary emissary = new SmartSessionEmissary(address(ADDRESSBOOK));
+        vm.etch(address(env.emissary), address(emissary).code);
+        smartSessionEmissary = SmartSessionEmissary(address(env.emissary));
 
         // Setup lockTag
         testLockTag = env.lockTag;

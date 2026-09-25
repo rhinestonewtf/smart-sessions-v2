@@ -67,7 +67,8 @@ contract BaseValidationLib_validateOriginOps_Unit_Test is BaseValidationLib_Unit
         view
         returns (bool, bytes32, uint256)
     {
-        BasePolicyStorage storage $ = configId.getStorage({account: account, multiplexer: msg.sender});
+        BasePolicyStorage storage $ =
+            configId.getStorage({ account: account, multiplexer: msg.sender });
         return BaseValidationLib.validateOriginOps(
             $, _data, _offset, _chainId, _config, configId, account, testHash
         );
