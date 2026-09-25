@@ -38,14 +38,14 @@ import { FIELD_ARBITER, MODE_CHECK_STORAGE } from "@policies/claim/base/types/Ba
 ///         knows anything about a settlement layer:
 ///
 ///   Permit2   router -> arbiter -> _permit2PreClaimOps
-///                       |- isValidSignature          -> check1271SignedAction  (read)
-///                       `- executeOps(preClaimOps)   -> consume                (BURN)
+///                       |- isValidSignature          -> check1271SignedAction  (unspent + nonce)
+///                       `- executeOps(preClaimOps)   -> consumeFor             (BURN)
 ///                     -> _unlockPermit2 -> Permit2.permitWitnessTransferFrom
-///                       `- account.isValidSignature  -> check1271SignedAction  (read, tolerated)
+///                       `- account.isValidSignature  -> check1271SignedAction  (settling: proof)
 ///
 ///   executor  solver -> StandaloneIntentExecutor.executeSinglechainOps
 ///                     -> sigMode EMISSARY_EXECUTION -> emissary.verifyExecution
-///                       |- _enforceActionPolicies    -> checkAction            (read)
+///                       |- _enforceActionPolicies    -> checkAction            (burn must lead)
 ///                       `- executeOps                -> consume                (BURN)
 abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     using SmartExecutionLib for *;
@@ -357,8 +357,8 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
 
     /// @dev CONTROL for executor -> executor. Even with the once-policy swapped for a permissive
     ///      one, a same-id second settlement that injects `consume` is refused, because `consume`
-    ///      reverts on an already-burned id. The genuine unbounded residual is a settlement that
-    ///      OMITS the burn (see test_aSettlementOmittingConsumeIsUnbounded).
+    ///      reverts on an already-burned id. The refusal only the policy provides is a settlement
+    ///      that OMITS the burn (see test_aSettlementOmittingTheBurnIsRefused).
     function test_control_executorDoubleConsumeIsRefusedEvenWithoutThePolicy() public {
         _enableSession(false);
 

@@ -35,30 +35,23 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      real configuration, not a default to fall into: a caller that wants an unbounded
 ///      authorization must pin zero deliberately.
 ///
-/// @dev Trust model. The policy assumes the orchestrator composes the settlement's ops, and makes
-///      the exactly-once guarantee against a hostile SUBMITTER, not a hostile ops author. The ops
-///      sit inside the signed digest, so a solver can only submit or withhold the settlement. Every
-///      unsigned input must fail closed: `preClaimGasStipend` is the low half of `packedGasValues`
-///      and never enters `hashMandateRaw`, so a submitter can starve the burn's gas - but a skipped
-///      burn leaves no nomination, so the settling check refuses. No burn, no settle. Covered by
-///      `GasStarve` and `BurnSkippable`.
+/// @dev Trust model. Neither the submitter nor the session's ops author is trusted to burn:
+///      - Executor route: `checkAction` refuses every execution the session's own burn did not lead
+///        in the same transaction (a transient flag the burn's validation sets), so a batch that
+///        never burns cannot settle.
+///      - Permit2 route: the settling check refuses an unlock whose own pre-claim did not burn (see
+///        below), so a skipped or starved burn cannot settle (`GasStarve`, `BurnSkippable`).
+///      What stays signer-bounded is the CONTENT of a pre-claim validated through ERC-1271, which
+///      `checkAction` never sees.
 ///
-///      Build requirements the contract cannot check (properties of the signed blob):
-///        - the pre-claim carries the `consume`/`consumeFor` call
-///        - it carries no other unpoliced executions; a pre-claim validated through
-///          `verifyExecution` also passes `checkAction`, otherwise its ops are bounded by the signer
-///        - its sigMode is the one the 1271 route expects
+///      Where the action surface is dispatched, `checkAction` also enforces that a `consume` or
+///      `consumeFor` names the session's own id, so a session cannot burn another session's id (a
+///      permanent cross-session denial of service).
 ///
-///      Where the action surface IS dispatched (the executor route), `checkAction` enforces,
-///      wherever the once-policy sits in the dispatched action list (including the fallback
-///      action), that a `consume` or `consumeFor` may only name the session's own id, so a session
-///      cannot burn another session's id (a permanent cross-session denial of service).
-///
-/// @dev Read here, burn there. `checkAction` does not write; the burn is `consume`, an execution
-///      the settlement carries with the account as msg.sender. A policy that burned during
-///      validation would refuse the second covered execution of the settlement it just authorized,
-///      and pre-claim ops are routinely more than one execution. Reading during validation and
-///      burning during execution means nothing in a batch can observe its own burn.
+/// @dev Read here, burn there. The burn is `consume`/`consumeFor`, an execution the settlement
+///      carries with the account as msg.sender. `checkAction` writes only the transient
+///      burn-approved flag; burning during validation would refuse the rest of the batch it just
+///      authorized, because a batch is validated before any of it executes.
 ///
 /// @dev The settling ERC-1271 read requires proof of the burn. The Permit2 arbiter route validates
 ///      ERC-1271 twice in one settlement, with the burn in between, from different callers:
@@ -69,34 +62,35 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///        _unlockPermit2      -> Permit2.permitWitnessTransferFrom
 ///                                 `- account.isValidSignature <- check #2, from PERMIT2
 ///
-///      Check #1 runs before the burn and its refusal is swallowed by the failure-tolerant arbiter,
-///      so it only asks "is this unspent?" - which is what lets the burn happen. Check #2 requires
-///      the nomination `consumeFor` recorded to match the settlement in front of it, so a settlement
-///      that skipped its burn cannot settle, and a second settlement cannot borrow the first's
-///      nomination (its own `consumeFor` clears the nomination once the id is spent). The burn must
-///      be durable rather than transient-only because the arbiter swallows pre-claim failures; the
-///      refusal that reverts is check #2, inside `permitWitnessTransferFrom`.
-///
-/// @dev `checkAction` is strict: action policies run during validation, before any execution in the
-///      batch, so a settlement never observes its own burn there.
+///      Check #1 runs before the burn, so it cannot demand it: it refuses a spent or expired id, or
+///      a nonce the executor has not consumed (the real pre-claim consumes it before validating).
+///      Check #2 requires the nomination `consumeFor` recorded to match the settlement in front of
+///      it, and the executor to have consumed that nonce - which happens in the order's own
+///      pre-claim (or a router-signed fill of the same nonce, whose signer is trusted not to
+///      collude). So a settlement that skipped its burn cannot settle, and a nomination left by a
+///      burn in another settlement cannot carry it. The burn must be durable rather than
+///      transient-only because the arbiter swallows pre-claim failures; the refusal that reverts is
+///      check #2, inside `permitWitnessTransferFrom`.
 ///
 /// @dev The record is keyed on (id, account) - not ConfigId or the multiplexer - because `consume`
 ///      is called by the account, which knows neither, and SmartSessions hands each policy slot its
 ///      own ConfigId (a flag written under one is invisible to the other).
 ///
-/// @dev Limit: this policy proves a burn only for the Permit2 caller, and gives the executor the
-///      advisory "is this unspent?" read for its pre-claim. Every OTHER ERC-1271 caller - the
-///      Compact claim route included - fails closed, because the policy has no way to prove a burn
-///      on those layers. So it bounds the Permit2 arbiter route and the executor route only;
-///      supporting another layer requires teaching this file which caller settles it and how to
-///      prove a burn there.
+/// @dev Limit: this policy proves a burn only for the Permit2 caller. For the executor it can only
+///      read "unspent, unexpired, nonce consumed", and it cannot tell a Permit2 pre-claim from any
+///      other executor-originated ERC-1271 validation - the digest-binding claim policy on the same
+///      list is what refuses the rest. Every other ERC-1271 caller - the Compact claim route
+///      included - fails closed. So it bounds the Permit2 arbiter route and the executor route only.
 ///
 /// @dev Install-time requirement: the 1271 list must also carry a policy that binds the claim blob
 ///      to the digest (`Permit2ClaimPolicy` is the intended partner). `signature[20:52]` is the
 ///      settlement's nonce only because that policy recomputes the digest from the same blob and
 ///      compares it to `hash`. Installed alone, `presented` is caller-chosen and the proof
 ///      degenerates to "some nomination is live". `minPoliciesToEnforce` is 1, so installing this
-///      alone is a legal configuration nothing rejects.
+///      alone is a legal configuration nothing rejects. That policy MUST also pin the arbiter
+///      (FIELD_ARBITER): the pre-claim entrypoint is permissionless and puts `msg.sender` in the
+///      digest as the arbiter, so without the pin a session key could run a pre-claim as its own
+///      arbiter - no burn, no unlock - and consume nonces at will, defeating both checks.
 ///
 /// @dev Install-time requirement: the id must match across surfaces. ConfigId is generated by
 ///      SmartSessions, and not one per policy list:
@@ -115,21 +109,10 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      also why one session must cover every settlement layer: separate permissionIds get separate
 ///      ConfigIds and separate spends, so exactly-once holds per layer instead of across them.
 ///
-/// @dev Install-time requirement: a settlement must carry exactly one burn op - `consume(id)` on the
-///      executor route or `consumeFor(id, witness)` on the Permit2 route. A second burn poisons the
-///      settlement (`consume` reverts; `consumeFor` clears its nomination so the settling check
-///      fails). Enforceable via `Permit2ClaimPolicy`'s FIELD_ORIGIN_OPS in sub-policy mode, which
-///      receives the pre-claim ops hash, so pinning that hash fixes the ops to exactly the one burn.
-///
-/// @dev Install-time requirement: install this on EVERY action the session permits, so any
-///      execution the settlement performs reads the record and a settler cannot dodge the check by
-///      composing a batch out of some other permitted action.
-///
-/// @dev Install-time requirement: the injected `consume` must sit inside the signed intent (the
-///      pre-claim ops covered by the digest) so that removing it invalidates the signature. Nothing
-///      here can check it is present: if a settlement runs with no `consume`, nothing burns and the
-///      session is not spent. The guarantee is that a settlement which does burn cannot be followed
-///      by another, not that every settlement burns.
+/// @dev Install-time requirement: install this on EVERY action the session permits, including an
+///      action for the session's own `consume`/`consumeFor`, so every execution reads the record and
+///      the burn itself is authorised. Each batch carries exactly one burn, first; a second burn
+///      poisons the settlement (`consume` reverts; `consumeFor` clears its nomination).
 ///
 /// @dev Install-time requirement: the id must be fresh per enable and unique per account across
 ///      every session using this policy. The record is never cleared, so reusing a burned id yields
@@ -234,12 +217,13 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
                                THE READ
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Refuses every settlement after the one that burned the id
-    /// @dev Does not write. See the read-here-burn-there note on the contract.
+    /// @notice Refuses every settlement after the one that burned the id, and every execution the
+    ///         session's own burn did not lead in this transaction
+    /// @dev Writes only the transient burn-approved flag. See the read-here-burn-there note.
     /// @param configId The configuration
     /// @param account The account settling
-    /// @return VALIDATION_SUCCESS while the id is unburned and unexpired, VALIDATION_FAILED after
-    ///         either
+    /// @return VALIDATION_SUCCESS while the id is unburned and unexpired and this is the session's
+    ///         burn or follows it in the transaction, VALIDATION_FAILED otherwise
     function checkAction(
         ConfigId configId,
         address account,
@@ -281,16 +265,16 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         // The burn must be the session's first execution in the transaction, so a batch that
         // never burns cannot settle: every other execution needs the burn approved before it.
         if (isBurn) {
-            OneTimeUseIdStorageLib.approveBurn(pinned, account);
-        } else if (!OneTimeUseIdStorageLib.burnApproved(pinned, account)) {
+            OneTimeUseIdStorageLib.approveBurn(msg.sender, pinned, account);
+        } else if (!OneTimeUseIdStorageLib.burnApproved(msg.sender, pinned, account)) {
             return VALIDATION_FAILED;
         }
         return VALIDATION_SUCCESS;
     }
 
     /// @notice Refuses any ERC-1271 settlement that cannot prove it performed the burn
-    /// @dev The settling caller must PROVE it burned; every other caller gets the advisory read.
-    ///      This surface is `view` and cannot burn - the record is written by `consumeFor`.
+    /// @dev The settling caller must PROVE it burned; the executor's pre-claim check can only read
+    ///      that the id is unspent and its nonce consumed. This surface is `view` and cannot burn.
     /// @param configId The configuration
     /// @param account The account settling
     /// @return True if the settlement may proceed
@@ -316,29 +300,30 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         // can straddle the deadline.
         if (OneTimeUseIdStorageLib.isExpired($pin.deadline)) return false;
 
-        // The executor pre-claim check runs before the burn, so it can only ask "is this unspent?".
-        // Its refusal is swallowed by the arbiter, so nothing here is load-bearing.
-        if (requestSender == INTENT_EXECUTOR) {
-            return !OneTimeUseIdStorageLib.spendRecord(pinned, account).burned;
-        }
-
         // Any caller other than Permit2 or the executor (e.g. the Compact claim route) is refused:
-        // this policy proves a burn only for Permit2, so it cannot bound those routes and must fail
-        // closed rather than approve them on the advisory read.
-        if (requestSender != address(PERMIT2)) return false;
+        // this policy proves a burn only for Permit2, so it cannot bound those routes.
+        if (requestSender != INTENT_EXECUTOR && requestSender != address(PERMIT2)) return false;
 
-        // The Permit2 settling check, inside `permitWitnessTransferFrom`. The only refusal that is
-        // not swallowed, so it demands positive proof that the settlement performed the burn.
         if (signature.length < PERMIT2_NONCE_START + NONCE_LENGTH) return false;
         uint256 presented =
             uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));
 
-        // The executor consumes this nonce only in the order's own pre-claim, so a nomination left
-        // by a burn in some other settlement cannot carry this one.
+        // The executor consumes the nonce only in the order's own pre-claim (before validating it)
+        // or a router-signed fill, so neither check passes for a nonce no such step has used.
+        if (!IPermit2IntentExecutor(INTENT_EXECUTOR)
+                .isPermit2IntentNonceConsumed(presented, account)) {
+            return false;
+        }
+
+        // The executor's pre-claim check runs before the burn, so it can only refuse a spent id.
+        if (requestSender == INTENT_EXECUTOR) {
+            return !OneTimeUseIdStorageLib.spendRecord(pinned, account).burned;
+        }
+
+        // The Permit2 settling check, inside `permitWitnessTransferFrom`: the refusal that reverts,
+        // so it demands the nomination this settlement's own burn recorded.
         return OneTimeUseIdStorageLib.nomination(pinned, account)
-                == OneTimeUseIdStorageLib.nominationOf(presented)
-            && IPermit2IntentExecutor(INTENT_EXECUTOR)
-                .isPermit2IntentNonceConsumed(presented, account);
+            == OneTimeUseIdStorageLib.nominationOf(presented);
     }
 
     /*//////////////////////////////////////////////////////////////

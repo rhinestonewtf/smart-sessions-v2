@@ -15,7 +15,8 @@ import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC7579Module.sol";
 
 /// @notice Stands in for the IntentExecutor's Permit2 nonce ledger: a nonce counts as consumed
-///         (its pre-claim ran) unless a test marks it otherwise.
+///         (its pre-claim ran) unless a test marks it otherwise, so only the tests that call
+///         `setUnconsumed` exercise the nonce-consumed check.
 contract MockPermit2NonceExecutor {
     mapping(uint256 nonce => bool) public unconsumed;
 

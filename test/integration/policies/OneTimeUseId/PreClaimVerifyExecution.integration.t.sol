@@ -10,8 +10,8 @@ import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
 
 /// @title A Permit2 pre-claim validated through `verifyExecution` can burn with `consumeFor`
-/// @notice The orchestrator's real Permit2 flow validates the pre-claim with an execution-emissary
-///         sigMode, so its `consumeFor` reaches `checkAction`. Refusing `consumeFor` there makes
+/// @notice A Permit2 pre-claim may be validated with an execution-emissary sigMode, in which case
+///         its `consumeFor` reaches `checkAction`. Refusing `consumeFor` there makes
 ///         the Permit2 route unsettleable.
 contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
     using SmartExecutionLib for *;

@@ -129,6 +129,22 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
         assertEq(_validatePlain(cfgA), FAILED, "session A still needs its own burn");
     }
 
+    /// @notice Test a burn validated under one multiplexer does not approve executions under
+    /// another
+    function test_checkAction_burnUnderAnotherMultiplexer_doesNotApproveThisOne() external {
+        address otherMultiplexer = makeAddr("otherMultiplexer");
+        vm.prank(otherMultiplexer);
+        policy.initializeWithMultiplexer(account, cfgA, abi.encodePacked(bytes32(ID_A), bytes32(0)));
+        vm.prank(otherMultiplexer);
+        policy.checkAction(
+            cfgA, account, address(policy), 0, abi.encodeCall(policy.consume, (ID_A))
+        );
+
+        assertEq(
+            _validatePlain(cfgA), FAILED, "this multiplexer's session still needs its own burn"
+        );
+    }
+
     /// @notice Test a consumeFor burn approves the rest of the batch just as consume does
     function test_checkAction_consumeForBurn_approvesTheBatch() external {
         _checkAction(cfgA, address(policy), abi.encodeCall(policy.consumeFor, (ID_A, WITNESS_1)));

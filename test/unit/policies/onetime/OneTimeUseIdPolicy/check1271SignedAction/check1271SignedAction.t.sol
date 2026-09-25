@@ -81,6 +81,23 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         );
     }
 
+    /// @notice Test the executor's read refuses a nonce no pre-claim consumed, so an
+    ///         executor-originated validation that is not the order's pre-claim is refused
+    function test_check1271SignedAction_preClaim_unconsumedNonce_returnsFalse() external {
+        MockPermit2NonceExecutor(executor).setUnconsumed(WITNESS_1);
+
+        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "no pre-claim consumed this nonce");
+    }
+
+    /// @notice Test the executor's read refuses a blob too short to carry a nonce
+    function test_check1271SignedAction_preClaim_shortBlob_returnsFalse() external {
+        vm.prank(multiplexer);
+        assertFalse(
+            policy.check1271SignedAction(cfgA, executor, account, bytes32(0), hex"00"),
+            "no nonce, no read"
+        );
+    }
+
     /// @notice Test the pre-claim read refuses once the id is burned
     function test_check1271SignedAction_preClaim_burned_returnsFalse() external {
         _consume(ID_A);
@@ -136,6 +153,9 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
     /// @notice Test a caller that is neither Permit2 nor the executor is refused while unspent
     function test_check1271SignedAction_unknownCaller_failsClosed() external {
         address compact = makeAddr("theCompact");
+        // A matching nomination is live, so only the caller check can refuse.
+        _consumeFor(ID_A, WITNESS_1);
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "the same blob settles for Permit2");
 
         vm.prank(multiplexer);
         assertFalse(
@@ -242,7 +262,9 @@ contract OneTimeUseIdPolicy_check1271SignedAction_CrossTransaction_Unit_Test is 
 
     /// @dev The burn happens HERE, so the test body below runs in a different transaction
     function setUp() public {
-        policy = new OneTimeUseIdPolicy(ISignatureTransfer(PERMIT2), makeAddr("intentExecutor"));
+        policy = new OneTimeUseIdPolicy(
+            ISignatureTransfer(PERMIT2), address(new MockPermit2NonceExecutor())
+        );
 
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID), bytes32(0)));

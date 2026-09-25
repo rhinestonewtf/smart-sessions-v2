@@ -115,20 +115,36 @@ library OneTimeUseIdStorageLib {
         }
     }
 
-    /// @notice Marks, for this transaction, that the session's burn of `id` passed validation
-    function approveBurn(uint256 id, address account) internal {
+    /// @notice Marks, for this transaction, that the session's burn of `id` passed validation under
+    ///         `multiplexer`
+    function approveBurn(address multiplexer, uint256 id, address account) internal {
         bytes32 slot = EfficientHashLib.hash(
-            BURN_APPROVED_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+            BURN_APPROVED_POSITION,
+            bytes32(uint256(uint160(multiplexer))),
+            bytes32(uint256(uint160(account))),
+            bytes32(id)
         );
         assembly ("memory-safe") {
             tstore(slot, 1)
         }
     }
 
-    /// @notice Whether the session's burn of `id` passed validation earlier in this transaction
-    function burnApproved(uint256 id, address account) internal view returns (bool approved) {
+    /// @notice Whether the session's burn of `id` passed validation under `multiplexer` earlier in
+    ///         this transaction
+    function burnApproved(
+        address multiplexer,
+        uint256 id,
+        address account
+    )
+        internal
+        view
+        returns (bool approved)
+    {
         bytes32 slot = EfficientHashLib.hash(
-            BURN_APPROVED_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+            BURN_APPROVED_POSITION,
+            bytes32(uint256(uint160(multiplexer))),
+            bytes32(uint256(uint160(account))),
+            bytes32(id)
         );
         assembly ("memory-safe") {
             approved := tload(slot)

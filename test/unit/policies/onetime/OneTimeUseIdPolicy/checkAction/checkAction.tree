@@ -2,7 +2,16 @@ OneTimeUseIdPolicy::checkAction
 ├── given the configId was never initialized
 │   └── it should return VALIDATION_FAILED
 ├── given the pinned id is unburned
-│   └── it should return VALIDATION_SUCCESS
+│   ├── when the session's own burn led the batch in this transaction
+│   │   └── it should return VALIDATION_SUCCESS
+│   ├── when no burn was validated before this execution
+│   │   └── it should return VALIDATION_FAILED
+│   ├── when only another session's burn was validated
+│   │   └── it should return VALIDATION_FAILED
+│   ├── when the burn was validated under another multiplexer
+│   │   └── it should return VALIDATION_FAILED
+│   └── when the burn was a consumeFor
+│       └── it should approve the rest of the batch
 ├── given the pinned id has been burned
 │   └── it should return VALIDATION_FAILED
 ├── given the burn happened in an earlier transaction
@@ -11,8 +20,8 @@ OneTimeUseIdPolicy::checkAction
 │   └── when that id is burned
 │       └── it should return VALIDATION_FAILED from every slot pinned to it
 ├── given a batch of many executions in one settlement
-│   └── it should return VALIDATION_SUCCESS for every one of them while unburned
-├── it should never itself burn the id
+│   └── it should return VALIDATION_SUCCESS for every one the burn led while unburned
+├── it should never itself burn the id (it writes only the transient burn-approved flag)
 ├── given the call targets this policy with calldata shorter than a selector
 │   └── it should fail closed and return VALIDATION_FAILED
 ├── given the call targets this policy and the selector is consume
@@ -30,7 +39,8 @@ OneTimeUseIdPolicy::checkAction
 │   └── when the calldata is truncated (no witness word)
 │       └── it should fail closed and return VALIDATION_FAILED
 ├── given the call is unrelated to this policy
-│   └── it should return VALIDATION_SUCCESS
+│   └── when the session's burn led the batch
+│       └── it should return VALIDATION_SUCCESS
 └── given a deadline is pinned
     ├── when the deadline is in the future
     │   └── it should return VALIDATION_SUCCESS
