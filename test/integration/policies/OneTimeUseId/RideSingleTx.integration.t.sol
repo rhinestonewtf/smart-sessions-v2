@@ -10,6 +10,7 @@ import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
 import { IPermit2IntentExecutor } from "@compact-utils/executor/interfaces/IPermit2Intent.sol";
 import { ValidateSignature } from "@compact-utils/executor/VerifySignature/VerifySignature.sol";
+import { IWETH } from "@compact-utils/interfaces/IWETH.sol";
 
 /// Hostile session key's own contract: settlement 1 (own-arbiter pre-claim) and settlement 2
 /// (permissionless Router.routeClaim of order N) in ONE external call, so one transaction.
@@ -59,10 +60,15 @@ contract OneTimeUseIdRideSingleTx_Test is OneTimeUseIdE2E_Base {
         override
         returns (ActionData[] memory extra)
     {
-        extra = new ActionData[](1);
+        extra = new ActionData[](2);
         extra[0] = ActionData({
             actionTarget: address(oncePolicy),
             actionTargetSelector: IOneTimeUseIdPolicy.consumeFor.selector,
+            actionPolicies: actionPolicies
+        });
+        extra[1] = ActionData({
+            actionTarget: address(env.weth),
+            actionTargetSelector: IWETH.deposit.selector,
             actionPolicies: actionPolicies
         });
     }
@@ -73,14 +79,28 @@ contract OneTimeUseIdRideSingleTx_Test is OneTimeUseIdE2E_Base {
 
     /// @dev The rogue pre-claim's ops: the burn nominating order N, then X
     function _rogueOps(bool withX) internal view returns (Types.Operation memory) {
-        Execution[] memory calls = new Execution[](withX ? 2 : 1);
+        return _rogueOps(withX, false);
+    }
+
+    /// @dev The rogue pre-claim's ops: the burn nominating order N, optionally a wrap of the
+    ///      account's whole native balance, optionally X
+    function _rogueOps(bool withX, bool withWrap) internal view returns (Types.Operation memory) {
+        Execution[] memory calls = new Execution[](1 + (withWrap ? 1 : 0) + (withX ? 1 : 0));
         calls[0] = Execution({
             target: address(oncePolicy),
             value: 0,
             callData: abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID, NONCE))
         });
+        uint256 i = 1;
+        if (withWrap) {
+            calls[i++] = Execution({
+                target: address(env.weth),
+                value: env.smartAccount1.account.balance,
+                callData: abi.encodeCall(IWETH.deposit, ())
+            });
+        }
         if (withX) {
-            calls[1] = Execution({
+            calls[i] = Execution({
                 target: address(env.target),
                 value: 0,
                 callData: abi.encodeCall(MockTarget.targetFn, (777))
@@ -147,6 +167,40 @@ contract OneTimeUseIdRideSingleTx_Test is OneTimeUseIdE2E_Base {
 
         assertTrue(_burned(), "the honest pre-claim burned");
         assertTrue(_nonceBurned(NONCE), "and the honest settlement completed");
+    }
+
+    /// @dev A wrap behind the rogue burn is accepted and buys nothing: the account's native
+    ///      becomes the account's WETH, order N pulls exactly what it signed, and everything else
+    ///      is still refused. One settlement, one harmless asset-form change.
+    function test_rideCarryingOnlyAWrap_yieldsExactlyOneSettlement() public {
+        vm.deal(env.smartAccount1.account, 10 ether);
+        bytes memory cd = _preparePermit2Settlement();
+
+        _ride(_rogueOps(false, true), cd);
+
+        assertTrue(_burned(), "the rogue pre-claim burned");
+        assertTrue(_nonceBurned(NONCE), "order N settled once");
+        assertEq(env.weth.balanceOf(env.smartAccount1.account), 10 ether, "the wrap ran");
+        assertEq(env.smartAccount1.account.balance, 0, "out of the account's own native");
+        assertTrue(MockTarget(address(env.target)).param() != 777, "nothing else executed");
+
+        vm.expectRevert();
+        _settleViaExecutor(0, 777);
+        assertTrue(MockTarget(address(env.target)).param() != 777, "still nothing else");
+    }
+
+    /// @dev The wrap does not smuggle X in beside it.
+    function test_rideCarryingAWrapAndX_isRefused() public {
+        vm.deal(env.smartAccount1.account, 10 ether);
+        bytes memory cd = _preparePermit2Settlement();
+
+        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
+        _ride(_rogueOps(true, true), cd);
+
+        assertFalse(_burned(), "nothing burned");
+        assertEq(env.weth.balanceOf(env.smartAccount1.account), 0, "no wrap");
+        assertTrue(MockTarget(address(env.target)).param() != 777, "X never executed");
+        assertFalse(_nonceBurned(NONCE), "order N never settled");
     }
 
     /// @dev The accepted residual: a rogue pre-claim that ONLY burns still nominates order N, and

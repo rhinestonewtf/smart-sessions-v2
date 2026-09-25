@@ -12,6 +12,7 @@ import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IWETH } from "@compact-utils/interfaces/IWETH.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -214,6 +215,97 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
             _checkAction(cfgA, makeAddr("someToken"), abi.encodePacked(_approve(PERMIT2), hex"00")),
             FAILED,
             "only the exact approve shape"
+        );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    THE NATIVE WRAP BEHIND consumeFor
+    //////////////////////////////////////////////////////////////*/
+
+    address internal weth = makeAddr("weth");
+    ConfigId internal cfgW = ConfigId.wrap(keccak256("session.W"));
+    uint256 internal constant ID_W = 0xF00D;
+
+    function _installWithWrap() internal {
+        vm.prank(multiplexer);
+        policy.initializeWithMultiplexer(
+            account, cfgW, abi.encodePacked(bytes32(ID_W), bytes32(NO_DEADLINE), weth)
+        );
+        pinnedId[cfgW] = ID_W;
+    }
+
+    function _deposit() internal pure returns (bytes memory) {
+        return abi.encodeCall(IWETH.deposit, ());
+    }
+
+    /// @notice Test a wrap of the account's own native into the pinned WETH runs behind consumeFor
+    function test_checkAction_consumeForBurn_approvesANativeWrap() external {
+        _installWithWrap();
+        _consumeForBurn(cfgW);
+
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(cfgW, account, weth, 5 ether, _deposit());
+        assertEq(result, SUCCESS, "the account's native becomes its own WETH; nothing leaves");
+    }
+
+    /// @notice Test a wrap is refused when no wrapped native was pinned
+    function test_checkAction_consumeForBurn_refusesAWrapWhenNonePinned() external {
+        _consumeForBurn(cfgA);
+
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(cfgA, account, weth, 5 ether, _deposit());
+        assertEq(result, FAILED, "a 64-byte install pins no wrapped native");
+    }
+
+    /// @notice Test deposit() on any other target is a value transfer and is refused
+    function test_checkAction_consumeForBurn_refusesDepositOnAnotherTarget() external {
+        _installWithWrap();
+        _consumeForBurn(cfgW);
+
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(cfgW, account, makeAddr("notWeth"), 5 ether, _deposit());
+        assertEq(result, FAILED, "only the pinned wrapped native");
+    }
+
+    /// @notice Test any other selector on the pinned WETH is refused
+    function test_checkAction_consumeForBurn_refusesOtherWethSelectors() external {
+        _installWithWrap();
+        _consumeForBurn(cfgW);
+
+        assertEq(
+            _checkAction(cfgW, weth, abi.encodeCall(IWETH.withdraw, (1 ether))),
+            FAILED,
+            "unwrap is not a wrap"
+        );
+        assertEq(
+            _checkAction(cfgW, weth, abi.encodeCall(IWETH.transfer, (makeAddr("attacker"), 1))),
+            FAILED,
+            "a transfer leaves the account"
+        );
+        assertEq(_checkAction(cfgW, weth, _approve(makeAddr("attacker"))), FAILED, "so does this");
+    }
+
+    /// @notice Test a deposit with bytes appended is refused
+    function test_checkAction_consumeForBurn_refusesWrapWithTrailingBytes() external {
+        _installWithWrap();
+        _consumeForBurn(cfgW);
+
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(
+            cfgW, account, weth, 5 ether, abi.encodePacked(_deposit(), hex"00")
+        );
+        assertEq(result, FAILED, "only the exact deposit shape");
+    }
+
+    /// @notice Test a wrap pin does not widen the batch beyond the wrap
+    function test_checkAction_consumeForBurn_wrapPinKeepsRefusingPlainExecutions() external {
+        _installWithWrap();
+        _consumeForBurn(cfgW);
+
+        assertEq(_validatePlain(cfgW), FAILED, "still nothing else");
+        assertEq(_checkAction(cfgW, makeAddr("someToken"), hex"a9059cbb"), FAILED, "not a transfer");
+        assertEq(
+            _checkAction(cfgW, makeAddr("someToken"), _approve(PERMIT2)), SUCCESS, "approve ok"
         );
     }
 

@@ -16,6 +16,12 @@ OneTimeUseIdPolicy::checkAction
 │       ├── it should refuse an approve of any other spender
 │       ├── it should refuse an approve of PERMIT2 that carries value
 │       ├── it should refuse an approve of PERMIT2 with bytes appended
+│       ├── it should approve deposit() on the pinned wrapped native, with value
+│       ├── it should refuse deposit() when no wrapped native was pinned
+│       ├── it should refuse deposit() on any other target
+│       ├── it should refuse any other selector on the pinned wrapped native
+│       ├── it should refuse deposit() with bytes appended
+│       ├── it should keep refusing plain executions when a wrapped native is pinned
 │       └── it should keep refusing after a later consume in the same transaction
 ├── given the pinned id has been burned
 │   └── it should return VALIDATION_FAILED

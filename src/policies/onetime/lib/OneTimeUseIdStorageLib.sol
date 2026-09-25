@@ -36,10 +36,12 @@ library OneTimeUseIdStorageLib {
     uint256 internal constant BURN_CONSUME = 1;
     uint256 internal constant BURN_CONSUME_FOR = 2;
 
-    /// @dev Zero id means "not configured"; zero deadline means "never expires"
+    /// @dev Zero id means "not configured"; zero deadline means "never expires"; zero
+    ///      wrappedNative means "no wrap may run behind a consumeFor"
     struct PinStorage {
         uint256 id;
         uint256 deadline;
+        address wrappedNative;
     }
 
     struct SpendStorage {

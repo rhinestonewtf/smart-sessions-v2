@@ -129,9 +129,12 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         _enableSession(bounded, NO_DEADLINE);
     }
 
-    /// @dev `deadline` is pinned into BOTH halves of the session, as the contract requires.
+    /// @dev `deadline` is pinned into BOTH halves of the session, as the contract requires. So
+    ///      is the chain's wrapped native, the one non-approval a Permit2 pre-claim may carry.
     function _enableSession(bool bounded, uint256 deadline) internal {
         activeFieldMode = FIELD_ARBITER;
+
+        bytes memory onceInit = abi.encodePacked(bytes32(ID), bytes32(deadline), address(env.weth));
 
         PolicyData[] memory erc1271Policies = new PolicyData[](bounded ? 2 : 1);
         erc1271Policies[0] = PolicyData({
@@ -141,18 +144,12 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
             )
         });
         if (bounded) {
-            erc1271Policies[1] = PolicyData({
-                policy: address(oncePolicy),
-                initData: abi.encodePacked(bytes32(ID), bytes32(deadline))
-            });
+            erc1271Policies[1] = PolicyData({ policy: address(oncePolicy), initData: onceInit });
         }
 
         PolicyData[] memory actionPolicies = new PolicyData[](1);
         actionPolicies[0] = bounded
-            ? PolicyData({
-                policy: address(oncePolicy),
-                initData: abi.encodePacked(bytes32(ID), bytes32(deadline))
-            })
+            ? PolicyData({ policy: address(oncePolicy), initData: onceInit })
             : PolicyData({ policy: address(sudoPolicy), initData: "" });
 
         ActionData[] memory extra = _extraActions(actionPolicies);

@@ -7,6 +7,7 @@ import { OneTimeUseIdStorageLib } from "@policies/onetime/lib/OneTimeUseIdStorag
 import { IActionPolicy, I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IWETH } from "@compact-utils/interfaces/IWETH.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 import { IPermit2IntentExecutor } from "@compact-utils/executor/interfaces/IPermit2Intent.sol";
 
@@ -48,10 +49,12 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      - The pre-claim entrypoint is permissionless and names its caller as the arbiter, and a
 ///        pre-claim validated through `checkAction` never reaches the arbiter pin on the 1271
 ///        list. So a batch led by `consumeFor` - the Permit2-route burn - may carry nothing but
-///        zero-value approvals of PERMIT2: a session key running a pre-claim as its own arbiter
-///        can then only burn and approve, and the one Permit2 settlement it nominated is still
-///        the only thing that moves. Native wraps and other pre-claim ops must not share a
-///        batch with `consumeFor`; behind `consume` (the executor route) the batch is unbounded.
+///        ops that move nothing out of the account: zero-value approvals of PERMIT2, and
+///        `deposit()` on the wrapped native pinned at install (the account's own native becomes
+///        the account's own WETH). A session key running a pre-claim as its own arbiter can
+///        then only burn, approve and wrap, and the one Permit2 settlement it nominated is still
+///        the only thing that moves. Swaps and other pre-claim ops must not share a batch with
+///        `consumeFor`; behind `consume` (the executor route) the batch is unbounded.
 ///
 ///      Where the action surface is dispatched, `checkAction` also enforces that a `consume` or
 ///      `consumeFor` names the session's own id, so a session cannot burn another session's id (a
@@ -157,10 +160,12 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
                                   INIT
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Pins the id this session may spend, and the deadline it may spend it by
+    /// @notice Pins the id this session may spend, the deadline it may spend it by, and
+    ///         optionally the wrapped-native token a Permit2 pre-claim may wrap into
     /// @param account The account this configuration belongs to
     /// @param configId The configuration being initialized
-    /// @param initData A 32-byte id followed by a 32-byte deadline (zero = never expires)
+    /// @param initData A 32-byte id, a 32-byte deadline (zero = never expires), then optionally
+    ///        the 20-byte wrapped-native address (absent or zero = no wrap behind `consumeFor`)
     function initializeWithMultiplexer(
         address account,
         ConfigId configId,
@@ -169,7 +174,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         external
         override
     {
-        if (initData.length != 64) revert InvalidInitDataLength(initData.length);
+        if (initData.length != 64 && initData.length != 84) {
+            revert InvalidInitDataLength(initData.length);
+        }
 
         uint256 id = uint256(bytes32(initData[0:32]));
         if (id == 0) revert InvalidId();
@@ -185,6 +192,7 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             OneTimeUseIdStorageLib.pin(configId, msg.sender, account);
         $pin.id = id;
         $pin.deadline = deadline;
+        $pin.wrappedNative = initData.length == 84 ? address(bytes20(initData[64:84])) : address(0);
 
         // The spend is not cleared here: this runs during an ENABLE-mode settlement, and the record
         // carries no session identity, so clearing would free an unrelated session on the same id.
@@ -287,13 +295,17 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 approved = OneTimeUseIdStorageLib.burnApproved(msg.sender, pinned, account);
         if (approved == OneTimeUseIdStorageLib.BURN_NONE) return VALIDATION_FAILED;
 
-        // Behind a `consumeFor` only a Permit2 approval may run. The pre-claim entrypoint is
-        // permissionless, so the session key can run a pre-claim as its own arbiter through this
-        // surface, nominate the settlement it also signed for the real arbiter, and have both
-        // land on one burn (`RideSingleTx`). Nothing here can see the arbiter; bounding the batch
-        // to the approval the real pre-claim needs leaves that ride nothing to carry.
-        if (approved == OneTimeUseIdStorageLib.BURN_CONSUME_FOR && !_isPermit2Approval(value, data))
-        {
+        // Behind a `consumeFor` only ops that move nothing out of the account may run. The
+        // pre-claim entrypoint is permissionless, so the session key can run a pre-claim as its
+        // own arbiter through this surface, nominate the settlement it also signed for the real
+        // arbiter, and have both land on one burn (`RideSingleTx`). Nothing here can see the
+        // arbiter; bounding the batch to what the real pre-claim needs - a Permit2 approval and
+        // a wrap of the account's own native into its own WETH - leaves that ride nothing to
+        // carry.
+        if (
+            approved == OneTimeUseIdStorageLib.BURN_CONSUME_FOR && !_isPermit2Approval(value, data)
+                && !_isNativeWrap(target, data, $pin.wrappedNative)
+        ) {
             return VALIDATION_FAILED;
         }
         return VALIDATION_SUCCESS;
@@ -305,6 +317,22 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     function _isPermit2Approval(uint256 value, bytes calldata data) internal view returns (bool) {
         return value == 0 && data.length == 68 && bytes4(data[0:4]) == IERC20.approve.selector
             && uint256(bytes32(data[4:36])) == uint160(address(PERMIT2));
+    }
+
+    /// @dev `deposit()` on the pinned wrapped native, any value, nothing appended. The account's
+    ///      own native becomes WETH held by the same account: nothing leaves, nothing is
+    ///      approved, and the one settlement the burn nominated still pulls only what it signed.
+    function _isNativeWrap(
+        address target,
+        bytes calldata data,
+        address wrappedNative
+    )
+        internal
+        pure
+        returns (bool)
+    {
+        return wrappedNative != address(0) && target == wrappedNative && data.length == 4
+            && bytes4(data[0:4]) == IWETH.deposit.selector;
     }
 
     /// @notice Refuses any ERC-1271 settlement that cannot prove it performed the burn

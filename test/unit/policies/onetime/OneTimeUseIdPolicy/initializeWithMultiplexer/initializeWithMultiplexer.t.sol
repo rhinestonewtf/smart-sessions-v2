@@ -37,6 +37,35 @@ contract OneTimeUseIdPolicy_initializeWithMultiplexer_Unit_Test is OneTimeUseIdP
         );
     }
 
+    /// @notice Test a third word that is not a whole address is refused
+    function test_initializeWithMultiplexer_revertsWhen_wrappedNativeTruncated() external {
+        bytes memory initData =
+            abi.encodePacked(bytes32(ID_A), bytes32(NO_DEADLINE), bytes19(bytes20(address(1))));
+        vm.prank(multiplexer);
+        vm.expectRevert(
+            abi.encodeWithSelector(IOneTimeUseIdPolicy.InvalidInitDataLength.selector, uint256(83))
+        );
+        policy.initializeWithMultiplexer(account, ConfigId.wrap(keccak256("short.weth")), initData);
+    }
+
+    /// @notice Test a wrapped native pinned at install is what checkAction lets deposit() through
+    /// on
+    function test_initializeWithMultiplexer_pinsTheWrappedNative() external {
+        address weth = makeAddr("weth");
+        ConfigId cfg = ConfigId.wrap(keccak256("with.weth"));
+        vm.prank(multiplexer);
+        policy.initializeWithMultiplexer(
+            account, cfg, abi.encodePacked(bytes32(ID_A), bytes32(NO_DEADLINE), weth)
+        );
+        pinnedId[cfg] = ID_A;
+        _checkAction(cfg, address(policy), abi.encodeCall(policy.consumeFor, (ID_A, WITNESS_1)));
+
+        vm.prank(multiplexer);
+        uint256 result =
+            policy.checkAction(cfg, account, weth, 1 ether, abi.encodeWithSignature("deposit()"));
+        assertEq(result, SUCCESS, "the pinned wrapped native may be deposited into");
+    }
+
     /// @notice Test reverts when the id is zero
     function test_initializeWithMultiplexer_revertsWhen_idIsZero() external {
         vm.prank(multiplexer);

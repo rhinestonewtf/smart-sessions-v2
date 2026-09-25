@@ -10,6 +10,7 @@ import { MockTarget } from "@rhinestone/compact-utils/src/tests/MockTarget.sol";
 import { SmartExecutionLib } from "@compact-utils/common/SmartExecutionLib.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IWETH } from "@compact-utils/interfaces/IWETH.sol";
 
 /// @title A Permit2 pre-claim validated through `verifyExecution` can burn with `consumeFor`
 /// @notice A Permit2 pre-claim may be validated with an execution-emissary sigMode (the SDK
@@ -29,7 +30,7 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         override
         returns (ActionData[] memory extra)
     {
-        extra = new ActionData[](2);
+        extra = new ActionData[](3);
         extra[0] = ActionData({
             actionTarget: address(oncePolicy),
             actionTargetSelector: IOneTimeUseIdPolicy.consumeFor.selector,
@@ -39,6 +40,17 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
             actionTarget: address(env.token1),
             actionTargetSelector: IERC20.approve.selector,
             actionPolicies: actionPolicies
+        });
+        extra[2] = ActionData({
+            actionTarget: address(env.weth),
+            actionTargetSelector: IWETH.deposit.selector,
+            actionPolicies: actionPolicies
+        });
+    }
+
+    function _wrap(uint256 amount) internal view returns (Execution memory) {
+        return Execution({
+            target: address(env.weth), value: amount, callData: abi.encodeCall(IWETH.deposit, ())
         });
     }
 
@@ -112,6 +124,43 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
             type(uint256).max,
             "and the approval ran"
         );
+    }
+
+    /// @dev The native-input ACROSS shape: the burn, a wrap of the account's own native, then
+    ///      `approve(PERMIT2)`. The wrap moves nothing out of the account, so it may share a batch
+    ///      with `consumeFor`.
+    function test_permit2PreClaimWithNativeWrapAndApproval_settlesAndBurns() public {
+        _enableSession(true);
+        vm.deal($intent.sponsor, 10 ether);
+        Execution[] memory extra = new Execution[](2);
+        extra[0] = _wrap(3 ether);
+        extra[1] = _approve(address(env.permit2));
+        _injectViaVerifyExecution(extra);
+
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), _settlementCalldata());
+
+        assertTrue(_burned(), "the pre-claim burned");
+        assertTrue(_nonceBurned($intent.nonce), "the Permit2 settlement completed");
+        assertEq(env.weth.balanceOf($intent.sponsor), 3 ether, "and the wrap ran, into the account");
+        assertEq($intent.sponsor.balance, 7 ether, "out of the account's own native");
+    }
+
+    /// @dev A `withdraw` on the same WETH is not a wrap and is refused like any other op.
+    function test_permit2PreClaimWithUnwrap_cannotSettle() public {
+        _enableSession(true);
+        vm.deal($intent.sponsor, 10 ether);
+        Execution[] memory extra = new Execution[](1);
+        extra[0] = Execution({
+            target: address(env.weth), value: 0, callData: abi.encodeCall(IWETH.withdraw, (1))
+        });
+        _injectViaVerifyExecution(extra);
+        bytes memory cd = _settlementCalldata();
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
+
+        assertFalse(_burned(), "nothing burned");
+        assertFalse(_nonceBurned($intent.nonce), "nothing settled");
     }
 
     /// @dev Any other op behind the `consumeFor` is refused, so the pre-claim fails (swallowed)
