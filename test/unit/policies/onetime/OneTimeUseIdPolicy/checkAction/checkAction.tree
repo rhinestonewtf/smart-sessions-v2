@@ -11,7 +11,12 @@ OneTimeUseIdPolicy::checkAction
 │   ├── when the burn was validated under another multiplexer
 │   │   └── it should return VALIDATION_FAILED
 │   └── when the burn was a consumeFor
-│       └── it should approve the rest of the batch
+│       ├── it should refuse a plain execution behind it
+│       ├── it should approve a zero-value approve of PERMIT2 behind it
+│       ├── it should refuse an approve of any other spender
+│       ├── it should refuse an approve of PERMIT2 that carries value
+│       ├── it should refuse an approve of PERMIT2 with bytes appended
+│       └── it should keep refusing after a later consume in the same transaction
 ├── given the pinned id has been burned
 │   └── it should return VALIDATION_FAILED
 ├── given the burn happened in an earlier transaction

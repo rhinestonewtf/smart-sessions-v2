@@ -11,6 +11,7 @@ import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
 // Interfaces
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -145,11 +146,83 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
         );
     }
 
-    /// @notice Test a consumeFor burn approves the rest of the batch just as consume does
-    function test_checkAction_consumeForBurn_approvesTheBatch() external {
-        _checkAction(cfgA, address(policy), abi.encodeCall(policy.consumeFor, (ID_A, WITNESS_1)));
+    /*//////////////////////////////////////////////////////////////
+                  BEHIND consumeFor ONLY A PERMIT2 APPROVAL RUNS
+    //////////////////////////////////////////////////////////////*/
 
-        assertEq(_validatePlain(cfgA), SUCCESS, "the batch runs behind its consumeFor");
+    function _consumeForBurn(ConfigId cfg) internal returns (uint256) {
+        return _checkAction(
+            cfg, address(policy), abi.encodeCall(policy.consumeFor, (pinnedId[cfg], WITNESS_1))
+        );
+    }
+
+    function _approve(address spender) internal pure returns (bytes memory) {
+        return abi.encodeCall(IERC20.approve, (spender, type(uint256).max));
+    }
+
+    /// @notice Test a consumeFor burn does not open the batch: the Permit2-route burn is reachable
+    ///         from a permissionless pre-claim the session key can run as its own arbiter
+    function test_checkAction_consumeForBurn_refusesAPlainExecution() external {
+        assertEq(_consumeForBurn(cfgA), SUCCESS, "the burn itself validates");
+
+        assertEq(_validatePlain(cfgA), FAILED, "nothing else runs behind a consumeFor");
+        assertEq(
+            _checkAction(cfgA, makeAddr("someToken"), hex"a9059cbb"),
+            FAILED,
+            "not a transfer either"
+        );
+    }
+
+    /// @notice Test the one op a real Permit2 pre-claim needs still runs behind consumeFor
+    function test_checkAction_consumeForBurn_approvesAPermit2Approval() external {
+        _consumeForBurn(cfgA);
+
+        assertEq(
+            _checkAction(cfgA, makeAddr("someToken"), _approve(PERMIT2)),
+            SUCCESS,
+            "approving PERMIT2 moves nothing on its own"
+        );
+    }
+
+    /// @notice Test an approval of anyone but PERMIT2 is refused behind consumeFor
+    function test_checkAction_consumeForBurn_refusesOtherSpender() external {
+        _consumeForBurn(cfgA);
+
+        assertEq(
+            _checkAction(cfgA, makeAddr("someToken"), _approve(makeAddr("attacker"))),
+            FAILED,
+            "an approval to any other spender is a spend"
+        );
+    }
+
+    /// @notice Test a PERMIT2 approval carrying value is refused
+    function test_checkAction_consumeForBurn_refusesApprovalWithValue() external {
+        _consumeForBurn(cfgA);
+
+        vm.prank(multiplexer);
+        uint256 result =
+            policy.checkAction(cfgA, account, makeAddr("someToken"), 1, _approve(PERMIT2));
+
+        assertEq(result, FAILED, "value would leave the account");
+    }
+
+    /// @notice Test a PERMIT2 approval with bytes appended is refused
+    function test_checkAction_consumeForBurn_refusesApprovalWithTrailingBytes() external {
+        _consumeForBurn(cfgA);
+
+        assertEq(
+            _checkAction(cfgA, makeAddr("someToken"), abi.encodePacked(_approve(PERMIT2), hex"00")),
+            FAILED,
+            "only the exact approve shape"
+        );
+    }
+
+    /// @notice Test a consume validated after a consumeFor does not lift the restriction
+    function test_checkAction_consumeForBurn_notLiftedByALaterConsume() external {
+        _consumeForBurn(cfgA);
+        assertEq(_validateBurn(cfgA), SUCCESS, "a second burn still validates");
+
+        assertEq(_validatePlain(cfgA), FAILED, "the consumeFor still bounds the batch");
     }
 
     /*//////////////////////////////////////////////////////////////

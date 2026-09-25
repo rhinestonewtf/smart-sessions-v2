@@ -31,6 +31,11 @@ library OneTimeUseIdStorageLib {
     /// @dev Deadline value meaning the pinned id never expires
     uint256 internal constant NO_DEADLINE = 0;
 
+    /// @dev Burn-approved values: none this transaction, a `consume`, or a `consumeFor`
+    uint256 internal constant BURN_NONE = 0;
+    uint256 internal constant BURN_CONSUME = 1;
+    uint256 internal constant BURN_CONSUME_FOR = 2;
+
     /// @dev Zero id means "not configured"; zero deadline means "never expires"
     struct PinStorage {
         uint256 id;
@@ -116,8 +121,9 @@ library OneTimeUseIdStorageLib {
     }
 
     /// @notice Marks, for this transaction, that the session's burn of `id` passed validation under
-    ///         `multiplexer`
-    function approveBurn(address multiplexer, uint256 id, address account) internal {
+    ///         `multiplexer`, and which burn it was. A `consumeFor` is never downgraded by a later
+    ///         `consume` in the same transaction.
+    function approveBurn(address multiplexer, uint256 id, address account, uint256 kind) internal {
         bytes32 slot = EfficientHashLib.hash(
             BURN_APPROVED_POSITION,
             bytes32(uint256(uint160(multiplexer))),
@@ -125,12 +131,12 @@ library OneTimeUseIdStorageLib {
             bytes32(id)
         );
         assembly ("memory-safe") {
-            tstore(slot, 1)
+            if lt(tload(slot), kind) { tstore(slot, kind) }
         }
     }
 
-    /// @notice Whether the session's burn of `id` passed validation under `multiplexer` earlier in
-    ///         this transaction
+    /// @notice Which of the session's burns of `id` passed validation under `multiplexer` earlier
+    ///         in this transaction: BURN_NONE, BURN_CONSUME or BURN_CONSUME_FOR
     function burnApproved(
         address multiplexer,
         uint256 id,
@@ -138,7 +144,7 @@ library OneTimeUseIdStorageLib {
     )
         internal
         view
-        returns (bool approved)
+        returns (uint256 approved)
     {
         bytes32 slot = EfficientHashLib.hash(
             BURN_APPROVED_POSITION,

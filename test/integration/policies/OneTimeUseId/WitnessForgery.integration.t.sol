@@ -12,12 +12,14 @@ import { Types } from "@compact-utils/types/OrderTypes.sol";
 import {
     IStandaloneIntentExecutor
 } from "@compact-utils/executor/interfaces/IStandaloneIntent.sol";
+import { ValidateSignature } from "@compact-utils/executor/VerifySignature/VerifySignature.sol";
 
 /// @title A nomination cannot carry a settlement whose own pre-claim never ran
 /// @notice An executor settlement may call `consumeFor` and nominate a Permit2 nonce it does not
 ///         own. A Permit2 settlement on that nonce that skips its own burn is still refused: the
 ///         settling check also requires the executor to have consumed the nonce, which happens only
-///         in the order's own pre-claim.
+///         in the order's own pre-claim. And a `consumeFor` batch on the executor route can carry
+///         nothing else (`RideSingleTx`), so the forged nomination is all that settlement does.
 contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
     using SmartExecutionLib for *;
 
@@ -42,19 +44,28 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
         return (env.permit2.nonceBitmap($intent.sponsor, nonce >> 8) >> (nonce & 0xff)) & 1 == 1;
     }
 
-    /// @dev An executor settlement whose consume nominates SOMEONE ELSE'S settlement
-    function _settleViaExecutorNominating(uint256 executorNonce, uint256 forgedWitness) internal {
-        Execution[] memory calls = new Execution[](2);
+    /// @dev An executor settlement whose consume nominates SOMEONE ELSE'S settlement, alone or
+    ///      with an execution X behind it
+    function _settleViaExecutorNominating(
+        uint256 executorNonce,
+        uint256 forgedWitness,
+        bool withX
+    )
+        internal
+    {
+        Execution[] memory calls = new Execution[](withX ? 2 : 1);
         calls[0] = Execution({
             target: address(oncePolicy),
             value: 0,
             callData: abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID, forgedWitness))
         });
-        calls[1] = Execution({
-            target: address(env.target),
-            value: 0,
-            callData: abi.encodeCall(MockTarget.targetFn, (42))
-        });
+        if (withX) {
+            calls[1] = Execution({
+                target: address(env.target),
+                value: 0,
+                callData: abi.encodeCall(MockTarget.targetFn, (42))
+            });
+        }
 
         IStandaloneIntentExecutor.SingleChainOps memory signedOps;
         signedOps.account = env.smartAccount1.account;
@@ -82,14 +93,13 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
 
     /// @dev The ride, end to end. An executor settlement burns the id while nominating Permit2
     ///      nonce 4242, which it does not own. A Permit2 settlement on 4242 with a starved
-    /// pre-claim then tries to settle on that nomination. It is refused: its own pre-claim never
-    /// ran, so
-    ///      the executor never consumed nonce 4242. One burn, one settlement.
+    ///      pre-claim then tries to settle on that nomination. It is refused: its own pre-claim
+    ///      never ran, so the executor never consumed nonce 4242. One burn, one settlement.
     function test_theExecutorRouteCannotNominateASettlementItDoesNotOwn() public {
         _enableSession(true);
         _useNonce(4242);
 
-        _settleViaExecutorNominating({ executorNonce: 0, forgedWitness: 4242 });
+        _settleViaExecutorNominating({ executorNonce: 0, forgedWitness: 4242, withX: false });
         assertTrue(_burned(), "the executor settlement burned the id, once");
 
         bytes memory cd = _prepareStarved();
@@ -100,13 +110,26 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
         assertFalse(_nonceBurned(4242), "the ride is refused: no second spend");
     }
 
+    /// @dev The executor route cannot even execute anything behind the forged nomination: a
+    ///      `consumeFor` batch is bounded to the burn (and Permit2 approvals) on every route.
+    function test_theExecutorRouteCannotExecuteBehindAConsumeFor() public {
+        _enableSession(true);
+        _useNonce(4242);
+
+        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
+        _settleViaExecutorNominating({ executorNonce: 0, forgedWitness: 4242, withX: true });
+
+        assertFalse(_burned(), "refused at validation, nothing burned");
+        assertTrue(env.target.param() != 42, "and nothing executed");
+    }
+
     /// @dev The same attack with the witness NOT matching is refused, so the settlement above
     ///      really did ride the nomination rather than settle for some unrelated reason.
     function test_control_aNominationNamingAnotherSettlementIsNoHelp() public {
         _enableSession(true);
         _useNonce(4242);
 
-        _settleViaExecutorNominating({ executorNonce: 0, forgedWitness: 9999 });
+        _settleViaExecutorNominating({ executorNonce: 0, forgedWitness: 9999, withX: false });
         assertTrue(_burned(), "burned, but nominating a settlement that never comes");
 
         bytes memory cd = _prepareStarved();
@@ -139,6 +162,7 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
 
         _settleViaExecutor(0);
 
-        assertTrue(_burned(), "a plain burn is what the action route is for");
+        assertEq(env.target.param(), 42, "the plain executor settlement executed");
+        assertTrue(_burned(), "and burned");
     }
 }

@@ -40,7 +40,7 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
     }
 
     /*//////////////////////////////////////////////////////////////
-                    THE PRE-CLAIM CHECK - ADVISORY READ
+                    THE PRE-CLAIM CHECK - FROM THE EXECUTOR
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Test the pre-claim check passes while the id is unburned
@@ -211,14 +211,14 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         );
     }
 
-    /// @notice Test the executor's advisory pre-claim read also refuses after the deadline
+    /// @notice Test the executor's pre-claim check also refuses after the deadline
     function test_check1271SignedAction_afterDeadline_refusesThePreClaimRead() external {
         vm.warp(1000);
         _install(cfgA, ID_A, block.timestamp + 1 hours);
 
         vm.warp(block.timestamp + 1 hours + 1);
 
-        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "the advisory read is expired too");
+        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "the pre-claim check is expired too");
     }
 
     /// @notice Test the deadline is inclusive on the settling surface
