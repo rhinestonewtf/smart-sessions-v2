@@ -7,6 +7,7 @@ import { OneTimeUseIdStorageLib } from "@policies/onetime/lib/OneTimeUseIdStorag
 import { IActionPolicy, I1271Policy } from "@smartsessions/interfaces/IPolicy.sol";
 import { IERC165 } from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
+import { IPermit2IntentExecutor } from "@compact-utils/executor/interfaces/IPermit2Intent.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -256,6 +257,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         if (pinned == 0) return VALIDATION_FAILED;
         if (OneTimeUseIdStorageLib.isExpired($pin.deadline)) return VALIDATION_FAILED;
 
+        if (OneTimeUseIdStorageLib.spendRecord(pinned, account).burned) return VALIDATION_FAILED;
+
+        bool isBurn;
         if (target == address(this)) {
             // A self-call with no selector can only revert at execution; fail closed.
             if (data.length < 4) return VALIDATION_FAILED;
@@ -266,15 +270,22 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             uint256 burnLength = selector == this.consume.selector
                 ? 36
                 : selector == this.consumeFor.selector ? 68 : 0;
-            if (
-                burnLength != 0
-                    && (data.length < burnLength || uint256(bytes32(data[4:36])) != pinned)
-            ) return VALIDATION_FAILED;
+            if (burnLength != 0) {
+                if (data.length < burnLength || uint256(bytes32(data[4:36])) != pinned) {
+                    return VALIDATION_FAILED;
+                }
+                isBurn = true;
+            }
         }
 
-        return OneTimeUseIdStorageLib.spendRecord(pinned, account).burned
-            ? VALIDATION_FAILED
-            : VALIDATION_SUCCESS;
+        // The burn must be the session's first execution in the transaction, so a batch that
+        // never burns cannot settle: every other execution needs the burn approved before it.
+        if (isBurn) {
+            OneTimeUseIdStorageLib.approveBurn(pinned, account);
+        } else if (!OneTimeUseIdStorageLib.burnApproved(pinned, account)) {
+            return VALIDATION_FAILED;
+        }
+        return VALIDATION_SUCCESS;
     }
 
     /// @notice Refuses any ERC-1271 settlement that cannot prove it performed the burn
@@ -322,8 +333,12 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         uint256 presented =
             uint256(bytes32(signature[PERMIT2_NONCE_START:PERMIT2_NONCE_START + NONCE_LENGTH]));
 
+        // The executor consumes this nonce only in the order's own pre-claim, so a nomination left
+        // by a burn in some other settlement cannot carry this one.
         return OneTimeUseIdStorageLib.nomination(pinned, account)
-            == OneTimeUseIdStorageLib.nominationOf(presented);
+                == OneTimeUseIdStorageLib.nominationOf(presented)
+            && IPermit2IntentExecutor(INTENT_EXECUTOR)
+                .isPermit2IntentNonceConsumed(presented, account);
     }
 
     /*//////////////////////////////////////////////////////////////

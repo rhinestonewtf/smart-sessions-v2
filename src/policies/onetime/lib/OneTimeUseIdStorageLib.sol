@@ -21,6 +21,10 @@ library OneTimeUseIdStorageLib {
     bytes32 internal constant NOMINATION_POSITION =
         bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.nomination")) - 1);
 
+    /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.burnApproved") - 1
+    bytes32 internal constant BURN_APPROVED_POSITION =
+        bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.burnApproved")) - 1);
+
     /// @dev Nomination value meaning no settlement was nominated in this transaction
     uint256 internal constant NOT_NOMINATED = 0;
 
@@ -108,6 +112,26 @@ library OneTimeUseIdStorageLib {
         );
         assembly ("memory-safe") {
             value := tload(slot)
+        }
+    }
+
+    /// @notice Marks, for this transaction, that the session's burn of `id` passed validation
+    function approveBurn(uint256 id, address account) internal {
+        bytes32 slot = EfficientHashLib.hash(
+            BURN_APPROVED_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+        );
+        assembly ("memory-safe") {
+            tstore(slot, 1)
+        }
+    }
+
+    /// @notice Whether the session's burn of `id` passed validation earlier in this transaction
+    function burnApproved(uint256 id, address account) internal view returns (bool approved) {
+        bytes32 slot = EfficientHashLib.hash(
+            BURN_APPROVED_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+        );
+        assembly ("memory-safe") {
+            approved := tload(slot)
         }
     }
 }

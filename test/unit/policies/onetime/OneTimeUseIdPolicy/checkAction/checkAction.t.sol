@@ -99,11 +99,41 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
         assertEq(result, FAILED, "session B may not burn session A's id");
     }
 
-    /// @notice Test an action unrelated to this policy is unaffected by the binding
-    function test_checkAction_unrelatedAction_returnsSuccess() external {
+    /// @notice Test an action unrelated to this policy passes once the session's burn led the batch
+    function test_checkAction_unrelatedAction_afterTheBurn_returnsSuccess() external {
+        _validateBurn(cfgB);
         uint256 result = _checkAction(cfgB, makeAddr("someToken"), hex"a9059cbb");
 
-        assertEq(result, SUCCESS, "the binding only applies to self-calls");
+        assertEq(result, SUCCESS, "the id binding only applies to self-calls");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                         THE BURN MUST LEAD THE BATCH
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test an execution validated before any burn is refused, so a batch that never burns
+    ///         cannot settle
+    function test_checkAction_executionBeforeTheBurn_returnsFailed() external {
+        assertEq(_validatePlain(cfgA), FAILED, "no burn validated yet");
+        assertEq(
+            _checkAction(cfgA, makeAddr("someToken"), hex"a9059cbb"),
+            FAILED,
+            "not even an unrelated call"
+        );
+    }
+
+    /// @notice Test another session's burn does not approve this session's executions
+    function test_checkAction_anotherSessionsBurn_doesNotApproveThisOne() external {
+        assertEq(_validateBurn(cfgB), SUCCESS, "session B's own burn validates");
+
+        assertEq(_validatePlain(cfgA), FAILED, "session A still needs its own burn");
+    }
+
+    /// @notice Test a consumeFor burn approves the rest of the batch just as consume does
+    function test_checkAction_consumeForBurn_approvesTheBatch() external {
+        _checkAction(cfgA, address(policy), abi.encodeCall(policy.consumeFor, (ID_A, WITNESS_1)));
+
+        assertEq(_validatePlain(cfgA), SUCCESS, "the batch runs behind its consumeFor");
     }
 
     /*//////////////////////////////////////////////////////////////

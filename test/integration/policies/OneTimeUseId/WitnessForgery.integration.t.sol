@@ -13,18 +13,11 @@ import {
     IStandaloneIntentExecutor
 } from "@compact-utils/executor/interfaces/IStandaloneIntent.sol";
 
-/// @title The executor route CAN nominate, and that is a build requirement
-/// @notice Nothing on-chain stops an executor settlement from calling `consumeFor` and nominating
-///         a Permit2 nonce it does not own. A Permit2 settlement that then skips its own burn
-///         rides that nomination — one burn, two settlements.
-///
-///         A `checkAction` ban on `consumeFor` was removed because it also refuses the Permit2
-///         pre-claim's own burn whenever that pre-claim is validated through `verifyExecution`,
-///         so the Permit2 route could never settle.
-///
-///         What actually excludes this: the orchestrator composes the settlement's ops, and the
-///         ops are inside the signed digest. See WHO IS TRUSTED on the policy. These tests pin
-///         the gap so nobody mistakes it for closed.
+/// @title A nomination cannot carry a settlement whose own pre-claim never ran
+/// @notice An executor settlement may call `consumeFor` and nominate a Permit2 nonce it does not
+///         own. A Permit2 settlement on that nonce that skips its own burn is still refused: the
+///         settling check also requires the executor to have consumed the nonce, which happens only
+///         in the order's own pre-claim.
 contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
     using SmartExecutionLib for *;
 
@@ -87,16 +80,12 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
         );
     }
 
-    /// @dev THE gap, end to end. An executor settlement burns the id while nominating Permit2
+    /// @dev The ride, end to end. An executor settlement burns the id while nominating Permit2
     ///      nonce 4242, which it does not own. A Permit2 settlement on 4242 with a starved
-    ///      pre-claim then performs NO burn of its own — and settles anyway, on the nomination
-    ///      the executor left behind. One burn, two settlements.
-    ///
-    ///      This is not a refusal test. It asserts the hole is open, because it is, and because
-    ///      the thing that closes it is off-chain. An earlier version of this test asserted a
-    ///      refusal and passed on `NoPoliciesSet` — `checkAction` appeared zero times in the
-    ///      trace — which is how the gap survived a round of review.
-    function test_theExecutorRouteCanNominateASettlementItDoesNotOwn() public {
+    /// pre-claim then tries to settle on that nomination. It is refused: its own pre-claim never
+    /// ran, so
+    ///      the executor never consumed nonce 4242. One burn, one settlement.
+    function test_theExecutorRouteCannotNominateASettlementItDoesNotOwn() public {
         _enableSession(true);
         _useNonce(4242);
 
@@ -104,12 +93,11 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
         assertTrue(_burned(), "the executor settlement burned the id, once");
 
         bytes memory cd = _prepareStarved();
+
+        vm.expectRevert();
         _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
 
-        assertTrue(
-            _nonceBurned(4242),
-            "and a Permit2 settlement that burned NOTHING rode the nomination: two spends"
-        );
+        assertFalse(_nonceBurned(4242), "the ride is refused: no second spend");
     }
 
     /// @dev The same attack with the witness NOT matching is refused, so the settlement above

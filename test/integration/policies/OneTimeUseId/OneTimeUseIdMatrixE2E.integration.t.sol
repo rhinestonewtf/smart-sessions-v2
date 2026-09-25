@@ -386,24 +386,17 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
                     THE INSTALL-TIME REQUIREMENT, DEMONSTRATED
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev THE residual, and the one thing this policy cannot enforce for itself. `checkAction`
-    ///      only READS; the burn is the injected `consume`. A settlement that omits it therefore
-    ///      burns nothing, and the session stays open however many times it is repeated.
-    ///
-    ///      The guarantee is "a settlement which DOES burn cannot be followed by another", NOT
-    ///      "every settlement burns". Closing the gap is an install-time obligation — the
-    /// injected
-    ///      call must sit inside the SIGNED intent so removing it invalidates the signature — and
-    ///      nothing in the contract can check that. Asserted here rather than described, so the
-    ///      cost of getting the install wrong is visible.
-    function test_aSettlementOmittingConsumeIsUnbounded() public {
+    /// @dev The burn is required, not optional: `checkAction` refuses every execution the session's
+    ///      own burn did not lead, so a settlement that omits it cannot land at all. This is the
+    ///      one refusal here that `consume` reverting `AlreadyConsumed` cannot explain.
+    function test_aSettlementOmittingTheBurnIsRefused() public {
         _enableSession(true);
 
+        vm.expectRevert();
         _settleViaExecutorWithoutConsume(0, 42);
-        assertFalse(_burned(), "nothing burned, because nothing called consume");
 
-        _settleViaExecutorWithoutConsume(1, 43);
-        assertEq(env.target.param(), 43, "and so a second settlement lands");
+        assertFalse(_burned(), "nothing burned");
+        assertTrue(env.target.param() != 42, "and nothing landed");
     }
 
     /// @dev The contrast: the identical pair WITH the injected call is refused on the second.

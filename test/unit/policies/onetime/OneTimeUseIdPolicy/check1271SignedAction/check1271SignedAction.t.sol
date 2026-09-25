@@ -3,7 +3,10 @@ pragma solidity ^0.8.28;
 
 // Dependencies
 import { Test } from "@forge-std/Test.sol";
-import { OneTimeUseIdPolicy_Unit_Test } from "../OneTimeUseIdPolicy.t.sol";
+import {
+    OneTimeUseIdPolicy_Unit_Test,
+    MockPermit2NonceExecutor
+} from "../OneTimeUseIdPolicy.t.sol";
 
 // Contracts
 import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
@@ -65,6 +68,24 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         assertTrue(
             _settlingCheck(cfgA, WITNESS_1), "a settlement must not be refused by its own burn"
         );
+    }
+
+    /// @notice Test a nomination cannot carry a Permit2 settlement whose own pre-claim never ran: a
+    ///         burn nominating the nonce elsewhere (the executor route) leaves it unconsumed
+    function test_check1271SignedAction_nominationWithoutItsPreClaim_returnsFalse() external {
+        _consumeFor(ID_A, WITNESS_1);
+        MockPermit2NonceExecutor(executor).setUnconsumed(WITNESS_1);
+
+        assertFalse(
+            _settlingCheck(cfgA, WITNESS_1), "the order's own pre-claim never consumed its nonce"
+        );
+    }
+
+    /// @notice Test the pre-claim read refuses once the id is burned
+    function test_check1271SignedAction_preClaim_burned_returnsFalse() external {
+        _consume(ID_A);
+
+        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "a spent id reads as spent");
     }
 
     /// @notice Test a signature too short to carry a nonce is refused
