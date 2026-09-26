@@ -1,10 +1,10 @@
 OneTimeUseIdPolicy::consume
-├── it should burn the id for the caller, and emit IdConsumed
-├── given the id was already burned
-│   └── when consume is called again
-│       └── it should revert with AlreadyConsumed (exactly one consume per settlement)
-├── given a stranger calls with another account's id
-│   └── it should burn the stranger's own record and leave the account's untouched
-├── given a different id is burned
-│   └── it should leave this id untouched
-└── it should not nominate any settlement (the settling check requires consumeFor's proof)
+├── given checkAction validated the caller's consume in this transaction
+│   └── it should execute (the validation already burned)
+├── given no validation preceded it
+│   └── it should revert with BurnNotValidated and spend nothing
+├── it should write nothing (no spend, no nomination, no admission), however often it runs
+├── given a stranger calls with the account's id
+│   └── it should revert with BurnNotValidated
+└── given the caller's validation named a different id
+    └── it should revert with BurnNotValidated

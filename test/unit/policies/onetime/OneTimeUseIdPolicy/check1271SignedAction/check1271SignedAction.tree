@@ -1,15 +1,8 @@
 OneTimeUseIdPolicy::check1271SignedAction
 ├── given the configId was never initialized
 │   └── it should return false
-├── given the caller is the executor (the pre-claim check)
-│   ├── given the signature is shorter than the nonce field
-│   │   └── it should return false
-│   ├── given the executor has not consumed the presented nonce
-│   │   └── it should return false
-│   ├── given the id is unburned
-│   │   └── it should return true
-│   └── given the id has been burned
-│       └── it should return false
+├── given the caller is the executor
+│   └── it should return false, burned or not, nominated or not
 ├── given the caller is neither Permit2 nor the executor (e.g. the Compact route)
 │   └── it should fail closed and return false even with a matching nomination
 ├── given the caller is Permit2 (the settling check)
@@ -17,17 +10,18 @@ OneTimeUseIdPolicy::check1271SignedAction
 │   │   └── it should return false
 │   ├── given the executor has not consumed the presented nonce
 │   │   └── it should return false even with a matching nomination
-│   ├── given the account performed this settlement's own burn
-│   │   ├── it should return true
-│   │   └── it should return true even within the burning transaction
-│   ├── given a burn nominated a DIFFERENT settlement's witness
+│   ├── given this transaction validated a consumeFor naming the presented nonce
+│   │   └── it should return true
+│   ├── given this transaction validated a consumeFor naming a DIFFERENT nonce
 │   │   └── it should return false
-│   ├── given the burn was never performed
+│   ├── given this transaction validated only a consume
 │   │   └── it should return false
-│   ├── given a second settlement presents its own witness after the first already settled
+│   ├── given no burn was validated
 │   │   └── it should return false
-│   ├── given the id was re-consumed after already being burned
-│   │   └── it should return false for every witness, including the original one
+│   ├── given a second settlement presents its own nonce after the first already settled
+│   │   └── it should return false (and its own burn is refused at validation)
+│   ├── given the nomination was recorded under another multiplexer
+│   │   └── it should return false
 │   ├── given the witness is Permit2 nonce zero
 │   │   └── it should still settle
 │   ├── given the witness is the max uint256 nonce
@@ -40,7 +34,6 @@ OneTimeUseIdPolicy::check1271SignedAction
     ├── when the current timestamp equals the deadline
     │   └── it should settle (inclusive)
     ├── when the deadline has passed
-    │   ├── it should refuse even a correctly proven burn
-    │   └── it should refuse the executor's pre-claim check
+    │   └── it should refuse even a correctly proven burn
     └── when the deadline is zero
         └── it should settle long after install

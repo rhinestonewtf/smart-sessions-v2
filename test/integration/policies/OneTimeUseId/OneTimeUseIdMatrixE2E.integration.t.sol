@@ -99,6 +99,9 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         _injectConsumeIntoPreClaimOps();
     }
 
+    /// @dev Burn-at-validation requires the pre-claim to be validated through `verifyExecution`,
+    ///      so the pre-claim ops carry an EXECUTION-EMISSARY sigMode (the SDK forces this for
+    ///      one-time-use sessions). Its `consumeFor` then reaches `checkAction`, which burns.
     function _injectConsumeIntoPreClaimOps() internal {
         Execution[] memory ops = new Execution[](1);
         ops[0] = Execution({
@@ -107,7 +110,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
             callData: abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID, $intent.nonce))
         });
 
-        $intent.element.mandate.originOps = ops.toOperation();
+        $intent.element.mandate.originOps = SmartExecutionLib.SigMode.EMISSARY_EXECUTION.encode(ops);
 
         $intent.permit2Hash = hashPermit2(
             $intent.sponsor, $intent.nonce, $intent.expires, arbiter, $intent.element
@@ -134,7 +137,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     function _enableSession(bool bounded, uint256 deadline) internal {
         activeFieldMode = FIELD_ARBITER;
 
-        bytes memory onceInit = abi.encodePacked(bytes32(ID), bytes32(deadline), address(env.weth));
+        bytes memory onceInit = abi.encodePacked(bytes32(ID), bytes32(deadline));
 
         PolicyData[] memory erc1271Policies = new PolicyData[](bounded ? 2 : 1);
         erc1271Policies[0] = PolicyData({
@@ -152,20 +155,27 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
             ? PolicyData({ policy: address(oncePolicy), initData: onceInit })
             : PolicyData({ policy: address(sudoPolicy), initData: "" });
 
+        // The session must permit its own burn ops. Both `consume` (executor route) and
+        // `consumeFor` (Permit2 route, validated through `verifyExecution`) reach `checkAction`.
         ActionData[] memory extra = _extraActions(actionPolicies);
-        ActionData[] memory actions = new ActionData[](2 + extra.length);
+        ActionData[] memory actions = new ActionData[](3 + extra.length);
         actions[0] = ActionData({
             actionTarget: address(oncePolicy),
             actionTargetSelector: IOneTimeUseIdPolicy.consume.selector,
             actionPolicies: actionPolicies
         });
         actions[1] = ActionData({
+            actionTarget: address(oncePolicy),
+            actionTargetSelector: IOneTimeUseIdPolicy.consumeFor.selector,
+            actionPolicies: actionPolicies
+        });
+        actions[2] = ActionData({
             actionTarget: address(env.target),
             actionTargetSelector: MockTarget.targetFn.selector,
             actionPolicies: actionPolicies
         });
         for (uint256 i; i < extra.length; ++i) {
-            actions[2 + i] = extra[i];
+            actions[3 + i] = extra[i];
         }
 
         ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
@@ -202,10 +212,16 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         Types.Order memory order = _getPermit2Order();
         $intent.userEmissarySig = _createSmartSessionSignature(_createPolicyData());
 
+        // The pre-claim is validated through `verifyExecution` (an emissary-execution sigMode) so
+        // `checkAction` burns; the Permit2 settling unlock reads the 1271 envelope. Two sigs, as
+        // the orchestrator injects for one-time-use sessions.
         return abi.encodeCall(
             MockAdapter.mock_permit2_handleClaim,
             (MockAdapter.ClaimDataPermit2({
-                    order: order, userSigs: Types.Signatures($intent.userEmissarySig, "")
+                    order: order,
+                    userSigs: Types.Signatures({
+                        notarizedClaimSig: $intent.userEmissarySig, preClaimSig: _emissarySig()
+                    })
                 }))
         );
     }
@@ -284,7 +300,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     }
 
     function _burned() internal view returns (bool) {
-        return oncePolicy.isUsed($intent.sponsor, ID);
+        return oncePolicy.isUsed(address(env.emissary), $intent.sponsor, ID);
     }
 }
 
@@ -352,18 +368,17 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
                                  CONTROLS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev CONTROL for executor -> executor. Even with the once-policy swapped for a permissive
-    ///      one, a same-id second settlement that injects `consume` is refused, because `consume`
-    ///      reverts on an already-burned id. The refusal only the policy provides is a settlement
-    ///      that OMITS the burn (see test_aSettlementOmittingTheBurnIsRefused).
-    function test_control_executorDoubleConsumeIsRefusedEvenWithoutThePolicy() public {
+    /// @dev CONTROL. With the once-policy swapped for a permissive one, a burn-less settlement
+    ///      LANDS - and repeats - so the "burn must lead" and "only once" refusals above are the
+    ///      once-policy, not the harness or the executor.
+    function test_control_burnlessSettlementLandsAndRepeatsWithoutThePolicy() public {
         _enableSession(false);
 
-        _settleViaExecutor(0, 42);
-        assertEq(env.target.param(), 42, "the first executor settlement executed");
+        _settleViaExecutorWithoutConsume(0, 42);
+        assertEq(env.target.param(), 42, "a burn-less settlement lands without the policy");
 
-        vm.expectRevert();
-        _settleViaExecutor(1, 43);
+        _settleViaExecutorWithoutConsume(1, 43);
+        assertEq(env.target.param(), 43, "and nothing bounds a second one");
     }
 
     /// @dev ORDERING: Permit2 -> Permit2, which this policy does NOT own. Permit2 refuses the
@@ -464,29 +479,24 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
         assertTrue(_burned(), "and burns");
     }
 
-    /// @dev CONTROL for Permit2 -> executor
-    function test_control_permit2ThenExecutorDoubleConsumeIsRefused() public {
+    /// @dev CONTROL. Unbounded, a Permit2 settlement lands even though its injected `consumeFor`
+    ///      reverts inside the (swallowed) pre-claim: without the once-policy on the 1271 list,
+    ///      only `Permit2ClaimPolicy` gates the unlock. So the bounded refusals are the
+    /// once-policy.
+    function test_control_permit2LandsWithoutThePolicy() public {
         _enableSession(false);
 
-        // The Permit2 settlement's consumeFor burns the id; the executor settlement's injected
-        // consume then reverts on the already-burned id - the burn record is shared across routes
-        // independently of the once-policy being installed as an action guard.
         _settleViaPermit2();
 
-        vm.expectRevert();
-        _settleViaExecutor(0, 43);
+        assertFalse(_burned(), "unbounded: nothing was burned under our key");
     }
 }
 
 /// @title The orderings that END in a Permit2 settlement
-/// @notice These CANNOT be proven inside one test body, and the reason is the design itself.
-///         The 1271 read tolerates a burn from the transaction currently running — it has to,
-///         because the arbiter route reads 1271 again after its own pre-claim ops have burned.
-///         A forge test body IS one transaction, so a same-body "settle twice" test would be
-///         tolerated and would pass while proving nothing.
-///
-///         Transient storage IS cleared between `setUp` and the test body. Running the first
-///         settlement in `setUp` is therefore the only way to make the second one a genuinely
+/// @notice A later transaction is refused because its pre-claim's burn hits the durable spend
+///         `checkAction` set in the first, so it validates FALSE and the unlock never gets its
+///         nomination. A forge test body IS one transaction, and the nomination is transient, so
+///         running the first settlement in `setUp` is the only way to make the second a genuinely
 ///         later transaction.
 abstract contract OneTimeUseIdCrossTx_Base is OneTimeUseIdE2E_Base {
     /// @dev Overridden by the controls
@@ -528,15 +538,16 @@ contract OneTimeUseId_ExecutorThenPermit2_Control_Test is OneTimeUseIdCrossTx_Ba
         return false;
     }
 
+    /// @dev Burn-less, because without the once-policy as the action guard a burn OP would revert
+    ///      BurnNotValidated. This isolates the bounded refusal to the once-policy.
     function _firstSettlement() internal override {
-        _settleViaExecutor(0);
+        _settleViaExecutorWithoutConsume(0, 42);
     }
 
-    /// @dev The burn still happens — the injected `consume` is in the order either way — so the
-    ///      control is that the settlement LANDS despite it, which isolates the refusal above to
-    ///      the policy reading that burn rather than to anything about the settlement itself.
+    /// @dev Without the once-policy bounding it, a later Permit2 settlement LANDS, so the bounded
+    ///      case's refusal is the once-policy reading its durable spend, not the settlement itself.
     function test_permit2LandsWhenNothingBoundsIt() public {
-        assertTrue(_burned(), "setUp's settlement burned, exactly as in the bounded case");
+        assertFalse(_burned(), "setUp's burn-less settlement recorded no spend");
 
         _settleViaPermit2();
     }

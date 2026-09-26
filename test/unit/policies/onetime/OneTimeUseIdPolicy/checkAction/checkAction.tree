@@ -1,54 +1,40 @@
 OneTimeUseIdPolicy::checkAction
 ├── given the configId was never initialized
-│   └── it should return VALIDATION_FAILED
-├── given the pinned id is unburned
-│   ├── when the session's own burn led the batch in this transaction
-│   │   └── it should return VALIDATION_SUCCESS
-│   ├── when no burn was validated before this execution
-│   │   └── it should return VALIDATION_FAILED
-│   ├── when only another session's burn was validated
-│   │   └── it should return VALIDATION_FAILED
-│   ├── when the burn was validated under another multiplexer
-│   │   └── it should return VALIDATION_FAILED
-│   └── when the burn was a consumeFor
-│       ├── it should refuse a plain execution behind it
-│       ├── it should approve a zero-value approve of PERMIT2 behind it
-│       ├── it should refuse an approve of any other spender
-│       ├── it should refuse an approve of PERMIT2 that carries value
-│       ├── it should refuse an approve of PERMIT2 with bytes appended
-│       ├── it should approve deposit() on the pinned wrapped native, with value
-│       ├── it should refuse deposit() when no wrapped native was pinned
-│       ├── it should refuse deposit() on any other target
-│       ├── it should refuse any other selector on the pinned wrapped native
-│       ├── it should refuse deposit() with bytes appended
-│       ├── it should keep refusing plain executions when a wrapped native is pinned
-│       └── it should keep refusing after a later consume in the same transaction
-├── given the pinned id has been burned
-│   └── it should return VALIDATION_FAILED
+│   └── it should return VALIDATION_FAILED for a burn and for any other op
+├── given the call is the session's own well-formed burn op and the id is unspent and unexpired
+│   ├── it should return VALIDATION_SUCCESS
+│   ├── it should burn the id durably at once and emit IdConsumed
+│   ├── when the burn is a consume
+│   │   └── it should nominate no settlement
+│   └── when the burn is a consumeFor
+│       └── it should nominate the witness for the settling check
+├── given the session's burn was validated earlier in this transaction
+│   ├── it should return VALIDATION_SUCCESS for every other op, across batches
+│   ├── it should return VALIDATION_FAILED for a second consume
+│   ├── it should return VALIDATION_FAILED for a consumeFor after a consume (no nomination)
+│   ├── it should return VALIDATION_FAILED for a second consumeFor and keep the first nomination
+│   └── given another action slot pins the same id
+│       ├── it should refuse that slot's burn
+│       └── it should admit that slot's other ops
+├── given no burn was validated in this transaction
+│   ├── it should return VALIDATION_FAILED for every op
+│   ├── it should return VALIDATION_FAILED when only another session's burn was validated
+│   └── it should return VALIDATION_FAILED when the burn was validated under another multiplexer
+│       └── and that burn should not spend this multiplexer's record
 ├── given the burn happened in an earlier transaction
-│   └── it should still return VALIDATION_FAILED
-├── given the pinned id is shared with another action slot
-│   └── when that id is burned
-│       └── it should return VALIDATION_FAILED from every slot pinned to it
-├── given a batch of many executions in one settlement
-│   └── it should return VALIDATION_SUCCESS for every one the burn led while unburned
-├── it should never itself burn the id (it writes only the transient burn-approved flag)
+│   ├── it should return VALIDATION_FAILED for every op
+│   └── it should return VALIDATION_FAILED for another burn
 ├── given the call targets this policy with calldata shorter than a selector
 │   └── it should fail closed and return VALIDATION_FAILED
-├── given the call targets this policy and the selector is consume
-│   ├── when the id argument is this session's OWN id
-│   │   └── it should return VALIDATION_SUCCESS
+├── given the call targets this policy and the selector is consume or consumeFor
 │   ├── when the id argument names ANOTHER session's id
+│   │   └── it should return VALIDATION_FAILED and spend nothing
+│   ├── when the op carries value
 │   │   └── it should return VALIDATION_FAILED
-│   └── when the calldata is malformed (shorter than an id argument)
+│   └── when the calldata is malformed or truncated
 │       └── it should fail closed and return VALIDATION_FAILED
-├── given the call targets this policy and the selector is consumeFor
-│   ├── when the id argument is this session's OWN id
-│   │   └── it should return VALIDATION_SUCCESS
-│   ├── when the id argument names ANOTHER session's id
-│   │   └── it should return VALIDATION_FAILED
-│   └── when the calldata is truncated (no witness word)
-│       └── it should fail closed and return VALIDATION_FAILED
+├── given the call targets this policy with any other selector
+│   └── it should be a plain execution: refused before the burn, admitted after it
 ├── given the call is unrelated to this policy
 │   └── when the session's burn led the batch
 │       └── it should return VALIDATION_SUCCESS
@@ -58,8 +44,8 @@ OneTimeUseIdPolicy::checkAction
     ├── when the current timestamp equals the deadline
     │   └── it should return VALIDATION_SUCCESS (inclusive)
     ├── when the deadline has passed
-    │   ├── it should return VALIDATION_FAILED
-    │   ├── it should refuse the session's own consume op
+    │   ├── it should refuse the session's own burn op and spend nothing
+    │   ├── it should return VALIDATION_FAILED for every other op
     │   └── it should return VALIDATION_FAILED even while the id is unburned
     └── when the deadline is zero
         └── it should never expire

@@ -1,12 +1,10 @@
 OneTimeUseIdPolicy::initializeWithMultiplexer
-├── given initData is neither 64 nor 84 bytes
+├── given initData is not exactly 64 bytes
 │   └── it should revert with InvalidInitDataLength
 ├── given initData carries an id but no deadline
 │   └── it should revert with InvalidInitDataLength
-├── given initData carries a truncated wrapped-native address
+├── given initData carries a trailing word (the retired wrapped-native pin)
 │   └── it should revert with InvalidInitDataLength
-├── given initData carries a wrapped-native address
-│   └── it should let checkAction pass a deposit() on it behind a consumeFor
 ├── given the id is zero
 │   └── it should revert with InvalidId
 ├── given a different multiplexer never installed this configId

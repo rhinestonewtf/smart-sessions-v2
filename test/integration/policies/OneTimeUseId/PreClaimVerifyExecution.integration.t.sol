@@ -163,13 +163,35 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         assertFalse(_nonceBurned($intent.nonce), "nothing settled");
     }
 
-    /// @dev Any other op behind the `consumeFor` is refused, so the pre-claim fails (swallowed)
-    ///      and the settling check then refuses the unlock: nothing lands.
-    function test_permit2PreClaimWithAnotherOp_cannotSettle() public {
+    /// @dev A REGISTERED op behind the `consumeFor` now runs: burn-at-validation bounds repetition
+    ///      (one tx, one order), not batch content, so `targetFn` rides the burn and the settlement
+    ///      completes. This is no more than the session key could do in any single use; the
+    ///      session's OWN action policy on `targetFn` is what bounds its content. `RideSingleTx`
+    ///      proves it yields no second order and no later transaction.
+    function test_permit2PreClaimWithARegisteredOp_settles() public {
         _enableSession(true);
         Execution[] memory extra = new Execution[](1);
         extra[0] = Execution({
             target: address(env.target),
+            value: 0,
+            callData: abi.encodeCall(MockTarget.targetFn, (777))
+        });
+        _injectViaVerifyExecution(extra);
+
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), _settlementCalldata());
+
+        assertTrue(_burned(), "the pre-claim burned");
+        assertTrue(_nonceBurned($intent.nonce), "the Permit2 settlement completed once");
+        assertEq(MockTarget(address(env.target)).param(), 777, "and the registered op ran");
+    }
+
+    /// @dev An UNREGISTERED op behind the `consumeFor` reverts validation, which rolls back the
+    ///      burn, so nothing settles: the session's action policies still bound WHAT may run.
+    function test_permit2PreClaimWithAnUnregisteredOp_cannotSettle() public {
+        _enableSession(true);
+        Execution[] memory extra = new Execution[](1);
+        extra[0] = Execution({
+            target: makeAddr("unregisteredTarget"),
             value: 0,
             callData: abi.encodeCall(MockTarget.targetFn, (777))
         });
@@ -179,23 +201,31 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         vm.expectRevert();
         _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
 
-        assertFalse(_burned(), "nothing burned");
+        assertFalse(_burned(), "the reverting validation rolled back the burn");
         assertFalse(_nonceBurned($intent.nonce), "nothing settled");
-        assertTrue(MockTarget(address(env.target)).param() != 777, "nothing executed");
     }
 
-    /// @dev An approval of anyone but PERMIT2 is a spend, and is refused the same way.
-    function test_permit2PreClaimApprovingAnotherSpender_cannotSettle() public {
+    /// @dev A registered `approve` runs behind the `consumeFor` for the same reason. The
+    /// once-policy does NOT restrict the spender - the session's own policy on `approve` does. Here
+    /// the
+    ///      session registers `token1.approve` with only the once-policy, so it admits any spender:
+    ///      exactly the power the key already has in a plain single-use batch.
+    function test_permit2PreClaimApprovingAnotherSpender_settlesBecauseApproveIsRegistered()
+        public
+    {
         _enableSession(true);
         Execution[] memory extra = new Execution[](1);
         extra[0] = _approve(makeAddr("attacker"));
         _injectViaVerifyExecution(extra);
-        bytes memory cd = _settlementCalldata();
 
-        vm.expectRevert();
-        _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), _settlementCalldata());
 
-        assertFalse(_burned(), "nothing burned");
-        assertEq(env.token1.allowance($intent.sponsor, makeAddr("attacker")), 0, "no approval");
+        assertTrue(_burned(), "the pre-claim burned");
+        assertTrue(_nonceBurned($intent.nonce), "the Permit2 settlement completed once");
+        assertEq(
+            env.token1.allowance($intent.sponsor, makeAddr("attacker")),
+            type(uint256).max,
+            "the registered approve ran - bounded by the approve action policy, not the once-policy"
+        );
     }
 }

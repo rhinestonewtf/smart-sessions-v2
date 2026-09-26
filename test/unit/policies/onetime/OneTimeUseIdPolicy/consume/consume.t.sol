@@ -12,56 +12,57 @@ import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdP
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 
 /// @title OneTimeUseIdPolicy.consume Unit Tests
-/// @notice Unit tests for the consume function. `consume` burns the caller's own id and
-///         nominates no settlement - the burn for routes gated by `checkAction`, which reads the
-///         durable record directly and needs no nomination.
+/// @notice `consume` is the burn OP; the burn itself is its validation. Executing it only checks
+///         that validation happened in this transaction, and writes nothing.
 contract OneTimeUseIdPolicy_consume_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
-    /// @notice Test consume burns the id and emits IdConsumed
-    function test_consume_burnsTheIdAndEmits() external {
-        assertFalse(policy.isUsed(account, ID_A));
+    /// @notice Test consume executes after its validation
+    function test_consume_executesAfterItsValidation() external {
+        _validateBurn(cfgA);
 
-        vm.expectEmit(true, true, false, true);
-        emit IOneTimeUseIdPolicy.IdConsumed(account, ID_A);
-        _consume(ID_A);
+        _execConsume(ID_A);
 
-        assertTrue(policy.isUsed(account, ID_A));
+        assertTrue(_burned(ID_A), "burned by the validation");
     }
 
-    /// @notice Test a second consume of an already-burned id reverts (exactly one consume)
-    function test_consume_revertsOnSecondBurn() external {
-        _consume(ID_A);
+    /// @notice Test consume reverts when no validation preceded it, so a burn op that reached
+    ///         execution without `checkAction` (a direct call, a 1271-validated batch) fails
+    function test_consume_revertsWhen_notValidated() external {
+        vm.prank(account);
+        vm.expectRevert(abi.encodeWithSelector(IOneTimeUseIdPolicy.BurnNotValidated.selector, ID_A));
+        policy.consume(ID_A);
+
+        assertFalse(_burned(ID_A), "and nothing was spent");
+        assertEq(_validatePlain(cfgA), FAILED, "and nothing rides");
+    }
+
+    /// @notice Test consume writes nothing: it does not spend, nominate or admit anything
+    function test_consume_writesNothing() external {
+        _validateBurn(cfgA);
+        _execConsume(ID_A);
+        _execConsume(ID_A);
+
+        assertTrue(_burned(ID_A), "still exactly the validation's burn");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "no nomination appeared");
+        assertFalse(_burned(ID_B), "no other id was touched");
+    }
+
+    /// @notice Test consume trusts only msg.sender, so a stranger cannot consume the account's
+    ///         validation
+    function test_consume_isPerAccount() external {
+        _validateBurn(cfgA);
+
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(abi.encodeWithSelector(IOneTimeUseIdPolicy.BurnNotValidated.selector, ID_A));
+        policy.consume(ID_A);
+    }
+
+    /// @notice Test a validation of one id does not let another id's op execute
+    function test_consume_isPerId() external {
+        _validateBurn(cfgA);
 
         vm.prank(account);
-        vm.expectRevert(abi.encodeWithSelector(IOneTimeUseIdPolicy.AlreadyConsumed.selector, ID_A));
-        policy.consume(ID_A);
-    }
-
-    /// @notice Test consume trusts only msg.sender, so a stranger burns their own record
-    function test_consume_isPerAccount() external {
-        address stranger = makeAddr("stranger");
-
-        vm.prank(stranger);
-        policy.consume(ID_A);
-
-        assertFalse(policy.isUsed(account, ID_A), "the account's id is untouched");
-        assertEq(_validate(cfgA), SUCCESS, "and its session still settles");
-    }
-
-    /// @notice Test consuming a different id leaves this one untouched
-    function test_consume_isPerId() external {
-        _consume(ID_A + 1);
-
-        assertFalse(policy.isUsed(account, ID_A), "burning another id does not spend this one");
-    }
-
-    /// @notice Test consume nominates no settlement, so the settling check still requires proof
-    function test_consume_doesNotNominateAnySettlement() external {
-        _consume(ID_A);
-
-        assertFalse(
-            _settlingCheck(cfgA, WITNESS_1),
-            "a plain consume leaves nothing for the settling check to recognise"
-        );
+        vm.expectRevert(abi.encodeWithSelector(IOneTimeUseIdPolicy.BurnNotValidated.selector, ID_B));
+        policy.consume(ID_B);
     }
 
     /// @notice Test the constructor rejects an executor that collides with Permit2 or is zero

@@ -15,18 +15,26 @@ import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.so
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
 /// @title OneTimeUseIdPolicy.isUsed Unit Tests
-/// @notice Unit tests for the isUsed function
+/// @notice `isUsed` reads the spend under one multiplexer: the SmartSession contract that
+///         validated the burn.
 contract OneTimeUseIdPolicy_isUsed_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
     /// @notice Test isUsed returns false before any burn
     function test_isUsed_returnsFalseInitially() external view {
-        assertFalse(policy.isUsed(account, ID_A));
+        assertFalse(_burned(ID_A));
     }
 
-    /// @notice Test isUsed returns true after the id is burned
-    function test_isUsed_returnsTrueAfterConsume() external {
-        _consume(ID_A);
+    /// @notice Test isUsed returns true once the burn is validated
+    function test_isUsed_returnsTrueAfterTheValidatedBurn() external {
+        _validateBurn(cfgA);
 
-        assertTrue(policy.isUsed(account, ID_A));
+        assertTrue(_burned(ID_A));
+    }
+
+    /// @notice Test isUsed is per multiplexer
+    function test_isUsed_isPerMultiplexer() external {
+        _validateBurn(cfgA);
+
+        assertFalse(policy.isUsed(makeAddr("otherMultiplexer"), account, ID_A));
     }
 }
 
@@ -34,7 +42,7 @@ contract OneTimeUseIdPolicy_isUsed_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
 /// @notice Split into its own contract deliberately. Transient storage survives every call
 ///         inside one test body - a forge test body IS one transaction - but it IS cleared
 ///         between `setUp` and the body. Burning in `setUp` is therefore the only way to prove
-///         the DURABLE record, rather than the transient tolerance, crossed the boundary.
+///         the DURABLE record crossed the boundary.
 contract OneTimeUseIdPolicy_isUsed_CrossTransaction_Unit_Test is Test {
     OneTimeUseIdPolicy internal policy;
 
@@ -44,7 +52,6 @@ contract OneTimeUseIdPolicy_isUsed_CrossTransaction_Unit_Test is Test {
 
     ConfigId internal cfg = ConfigId.wrap(keccak256("session.A"));
     uint256 internal constant ID = 0xBEEF;
-    uint256 internal constant WITNESS = 1337;
 
     /// @dev The burn happens HERE, so the test body below runs in a different transaction
     function setUp() public {
@@ -53,12 +60,12 @@ contract OneTimeUseIdPolicy_isUsed_CrossTransaction_Unit_Test is Test {
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID), bytes32(0)));
 
-        vm.prank(account);
-        policy.consumeFor(ID, WITNESS);
+        vm.prank(multiplexer);
+        policy.checkAction(cfg, account, address(policy), 0, abi.encodeCall(policy.consume, (ID)));
     }
 
     /// @notice Test the durable burn survives across the transaction boundary
     function test_isUsed_durableBurnSurvivesSetUp() external view {
-        assertTrue(policy.isUsed(account, ID), "the durable record crossed the boundary");
+        assertTrue(policy.isUsed(multiplexer, account, ID), "the durable record crossed");
     }
 }

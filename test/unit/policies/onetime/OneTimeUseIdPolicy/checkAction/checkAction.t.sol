@@ -11,15 +11,14 @@ import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
 // Interfaces
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IWETH } from "@compact-utils/interfaces/IWETH.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { VALIDATION_FAILED } from "erc7579/interfaces/IERC7579Module.sol";
 
 /// @title OneTimeUseIdPolicy.checkAction Unit Tests
-/// @notice Unit tests for the checkAction function
+/// @notice Unit tests for the checkAction function: the burn happens HERE, when the session's own
+///         burn op is validated, and every other op of the transaction rides it.
 contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                                  SCOPING
@@ -29,89 +28,29 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
     function test_checkAction_unconfigured_returnsFailed() external {
         ConfigId never = ConfigId.wrap(keccak256("never.installed"));
 
-        assertEq(_validate(never), FAILED, "an unconfigured slot fails closed");
+        assertEq(_validateBurn(never), FAILED, "an unconfigured slot cannot burn");
+        assertEq(_validatePlain(never), FAILED, "and fails closed on every op");
     }
 
     /*//////////////////////////////////////////////////////////////
-                            SPEND STATE
+                          THE BURN IS THE VALIDATION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Test an unburned id lets the batch through
-    function test_checkAction_unburnedId_returnsSuccess() external {
-        assertEq(_validate(cfgA), SUCCESS, "an unburned id must let the batch through");
+    /// @notice Test validating the session's own consume burns the id, durably, at once
+    function test_checkAction_validatingTheBurn_burnsTheId() external {
+        assertFalse(_burned(ID_A));
+
+        vm.expectEmit(true, true, false, true);
+        emit IOneTimeUseIdPolicy.IdConsumed(account, ID_A);
+        assertEq(_validateBurn(cfgA), SUCCESS, "the burn validates");
+
+        assertTrue(_burned(ID_A), "and the id is spent before anything executes");
     }
 
-    /// @notice Test a burned id refuses every further settlement
-    function test_checkAction_burnedId_returnsFailed() external {
-        assertEq(_validate(cfgA), SUCCESS, "settlement one validates");
-
-        _consumeFor(ID_A, WITNESS_1);
-
-        assertEq(_validate(cfgA), FAILED, "settlement two must be refused");
+    /// @notice Test an unburned id lets the batch through once its burn led
+    function test_checkAction_burnThenPlain_returnsSuccess() external {
+        assertEq(_validate(cfgA), SUCCESS, "a burn-led batch validates");
     }
-
-    /// @notice Test the burn is visible from every action slot pinned to the same id
-    function test_checkAction_burnVisibleAcrossActionSlots() external {
-        ConfigId cfgC = ConfigId.wrap(keccak256("session.A.slot.2"));
-        _install(cfgC, ID_A);
-
-        _consumeFor(ID_A, WITNESS_1);
-
-        assertEq(_validate(cfgA), FAILED, "slot A sees the burn");
-        assertEq(_validate(cfgC), FAILED, "the other slot on the same session sees the same burn");
-    }
-
-    /// @notice Test every execution in a batch validates while the id stays unburned
-    function test_checkAction_validatesEveryExecutionInABatch() external {
-        for (uint256 i; i < 8; ++i) {
-            assertEq(
-                _validate(i % 2 == 0 ? cfgA : cfgB),
-                SUCCESS,
-                "every execution in one settlement must validate"
-            );
-        }
-    }
-
-    /// @notice Test checkAction does not itself burn the id
-    function test_checkAction_doesNotBurn() external {
-        _validate(cfgA);
-
-        assertFalse(policy.isUsed(account, ID_A), "validation must not consume the id");
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                         THE consume SELF-CALL
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Test a session may burn its own id via the executor route
-    function test_checkAction_consumeOwnId_returnsSuccess() external {
-        bytes memory burnOwn = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_B));
-
-        uint256 result = _checkAction(cfgB, address(policy), burnOwn);
-
-        assertEq(result, SUCCESS, "its own id is permitted");
-    }
-
-    /// @notice Test a session may not name another session's id in a consume call
-    function test_checkAction_consumeForeignId_returnsFailed() external {
-        bytes memory burnSomeoneElse = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_A));
-
-        uint256 result = _checkAction(cfgB, address(policy), burnSomeoneElse);
-
-        assertEq(result, FAILED, "session B may not burn session A's id");
-    }
-
-    /// @notice Test an action unrelated to this policy passes once the session's burn led the batch
-    function test_checkAction_unrelatedAction_afterTheBurn_returnsSuccess() external {
-        _validateBurn(cfgB);
-        uint256 result = _checkAction(cfgB, makeAddr("someToken"), hex"a9059cbb");
-
-        assertEq(result, SUCCESS, "the id binding only applies to self-calls");
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                         THE BURN MUST LEAD THE BATCH
-    //////////////////////////////////////////////////////////////*/
 
     /// @notice Test an execution validated before any burn is refused, so a batch that never burns
     ///         cannot settle
@@ -122,213 +61,113 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
             FAILED,
             "not even an unrelated call"
         );
+        assertFalse(_burned(ID_A), "and nothing was spent");
     }
+
+    /// @notice Test every execution of the burning transaction validates, across batches
+    function test_checkAction_validatesEveryExecutionInTheBurningTransaction() external {
+        _validateBurn(cfgA);
+        for (uint256 i; i < 8; ++i) {
+            assertEq(_validatePlain(cfgA), SUCCESS, "every later op in the transaction passes");
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        ONE BURN PER TRANSACTION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Test a second consume in the same transaction is refused
+    function test_checkAction_secondConsumeInTheTransaction_returnsFailed() external {
+        assertEq(_validateBurn(cfgA), SUCCESS, "the first burn validates");
+
+        assertEq(_validateBurn(cfgA), FAILED, "the second is refused");
+        assertEq(_validatePlain(cfgA), SUCCESS, "the batch behind the first still runs");
+    }
+
+    /// @notice Test a consumeFor after a consume is refused, so the burning transaction can hold
+    ///         at most one nomination
+    function test_checkAction_consumeForAfterConsume_returnsFailed() external {
+        _validateBurn(cfgA);
+
+        assertEq(_validateBurnFor(cfgA, WITNESS_1), FAILED, "no second burn, no nomination");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "so nothing settles on it");
+    }
+
+    /// @notice Test a second consumeFor is refused and does not replace the first nomination
+    function test_checkAction_secondConsumeFor_returnsFailedAndKeepsTheNomination() external {
+        assertEq(_validateBurnFor(cfgA, WITNESS_1), SUCCESS, "the first burn nominates");
+
+        assertEq(_validateBurnFor(cfgA, WITNESS_2), FAILED, "the second is refused");
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "the first nomination stands");
+        assertFalse(_settlingCheck(cfgA, WITNESS_2), "the second never existed");
+    }
+
+    /// @notice Test the burn is shared by every action slot pinned to the same id
+    function test_checkAction_burnSharedAcrossActionSlots() external {
+        ConfigId cfgC = ConfigId.wrap(keccak256("session.A.slot.2"));
+        _install(cfgC, ID_A);
+
+        assertEq(_validateBurn(cfgA), SUCCESS, "slot A burns");
+
+        assertEq(_validateBurn(cfgC), FAILED, "the other slot cannot burn the same id again");
+        assertEq(_validatePlain(cfgC), SUCCESS, "but its ops ride the same burn");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                      A LATER TRANSACTION IS REFUSED
+    //////////////////////////////////////////////////////////////*/
+
+    // See OneTimeUseIdPolicy_checkAction_CrossTransaction_Unit_Test below.
+
+    /*//////////////////////////////////////////////////////////////
+                         WHOSE BURN COUNTS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Test another session's burn does not approve this session's executions
     function test_checkAction_anotherSessionsBurn_doesNotApproveThisOne() external {
         assertEq(_validateBurn(cfgB), SUCCESS, "session B's own burn validates");
 
         assertEq(_validatePlain(cfgA), FAILED, "session A still needs its own burn");
+        assertFalse(_burned(ID_A), "and A's id is unspent");
     }
 
-    /// @notice Test a burn validated under one multiplexer does not approve executions under
-    /// another
-    function test_checkAction_burnUnderAnotherMultiplexer_doesNotApproveThisOne() external {
+    /// @notice Test a burn validated under another multiplexer neither spends this one's record
+    ///         nor approves its executions
+    function test_checkAction_burnUnderAnotherMultiplexer_changesNothingHere() external {
         address otherMultiplexer = makeAddr("otherMultiplexer");
         vm.prank(otherMultiplexer);
         policy.initializeWithMultiplexer(account, cfgA, abi.encodePacked(bytes32(ID_A), bytes32(0)));
+
         vm.prank(otherMultiplexer);
-        policy.checkAction(
+        uint256 result = policy.checkAction(
             cfgA, account, address(policy), 0, abi.encodeCall(policy.consume, (ID_A))
         );
+        assertEq(result, SUCCESS, "the other multiplexer burns its own record");
 
-        assertEq(
-            _validatePlain(cfgA), FAILED, "this multiplexer's session still needs its own burn"
-        );
+        assertTrue(policy.isUsed(otherMultiplexer, account, ID_A), "under its own key");
+        assertFalse(_burned(ID_A), "not under this multiplexer's");
+        assertEq(_validatePlain(cfgA), FAILED, "this multiplexer's session still needs its burn");
+        assertEq(_validate(cfgA), SUCCESS, "and can still perform it");
     }
 
     /*//////////////////////////////////////////////////////////////
-                  BEHIND consumeFor ONLY A PERMIT2 APPROVAL RUNS
+                    THE BURN OP NAMES THE SESSION'S OWN ID
     //////////////////////////////////////////////////////////////*/
 
-    function _consumeForBurn(ConfigId cfg) internal returns (uint256) {
-        return _checkAction(
-            cfg, address(policy), abi.encodeCall(policy.consumeFor, (pinnedId[cfg], WITNESS_1))
-        );
+    /// @notice Test a session may not name another session's id in a consume call
+    function test_checkAction_consumeForeignId_returnsFailed() external {
+        bytes memory burnSomeoneElse = abi.encodeCall(IOneTimeUseIdPolicy.consume, (ID_A));
+
+        assertEq(_checkAction(cfgB, address(policy), burnSomeoneElse), FAILED);
+        assertFalse(_burned(ID_A), "session A's id is untouched");
     }
 
-    function _approve(address spender) internal pure returns (bytes memory) {
-        return abi.encodeCall(IERC20.approve, (spender, type(uint256).max));
-    }
+    /// @notice Test a consumeFor naming the session's own id passes and nominates
+    function test_checkAction_consumeForOwnId_returnsSuccessAndNominates() external {
+        assertEq(_validateBurnFor(cfgB, WITNESS_1), SUCCESS);
 
-    /// @notice Test a consumeFor burn does not open the batch: the Permit2-route burn is reachable
-    ///         from a permissionless pre-claim the session key can run as its own arbiter
-    function test_checkAction_consumeForBurn_refusesAPlainExecution() external {
-        assertEq(_consumeForBurn(cfgA), SUCCESS, "the burn itself validates");
-
-        assertEq(_validatePlain(cfgA), FAILED, "nothing else runs behind a consumeFor");
-        assertEq(
-            _checkAction(cfgA, makeAddr("someToken"), hex"a9059cbb"),
-            FAILED,
-            "not a transfer either"
-        );
-    }
-
-    /// @notice Test the one op a real Permit2 pre-claim needs still runs behind consumeFor
-    function test_checkAction_consumeForBurn_approvesAPermit2Approval() external {
-        _consumeForBurn(cfgA);
-
-        assertEq(
-            _checkAction(cfgA, makeAddr("someToken"), _approve(PERMIT2)),
-            SUCCESS,
-            "approving PERMIT2 moves nothing on its own"
-        );
-    }
-
-    /// @notice Test an approval of anyone but PERMIT2 is refused behind consumeFor
-    function test_checkAction_consumeForBurn_refusesOtherSpender() external {
-        _consumeForBurn(cfgA);
-
-        assertEq(
-            _checkAction(cfgA, makeAddr("someToken"), _approve(makeAddr("attacker"))),
-            FAILED,
-            "an approval to any other spender is a spend"
-        );
-    }
-
-    /// @notice Test a PERMIT2 approval carrying value is refused
-    function test_checkAction_consumeForBurn_refusesApprovalWithValue() external {
-        _consumeForBurn(cfgA);
-
-        vm.prank(multiplexer);
-        uint256 result =
-            policy.checkAction(cfgA, account, makeAddr("someToken"), 1, _approve(PERMIT2));
-
-        assertEq(result, FAILED, "value would leave the account");
-    }
-
-    /// @notice Test a PERMIT2 approval with bytes appended is refused
-    function test_checkAction_consumeForBurn_refusesApprovalWithTrailingBytes() external {
-        _consumeForBurn(cfgA);
-
-        assertEq(
-            _checkAction(cfgA, makeAddr("someToken"), abi.encodePacked(_approve(PERMIT2), hex"00")),
-            FAILED,
-            "only the exact approve shape"
-        );
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    THE NATIVE WRAP BEHIND consumeFor
-    //////////////////////////////////////////////////////////////*/
-
-    address internal weth = makeAddr("weth");
-    ConfigId internal cfgW = ConfigId.wrap(keccak256("session.W"));
-    uint256 internal constant ID_W = 0xF00D;
-
-    function _installWithWrap() internal {
-        vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(
-            account, cfgW, abi.encodePacked(bytes32(ID_W), bytes32(NO_DEADLINE), weth)
-        );
-        pinnedId[cfgW] = ID_W;
-    }
-
-    function _deposit() internal pure returns (bytes memory) {
-        return abi.encodeCall(IWETH.deposit, ());
-    }
-
-    /// @notice Test a wrap of the account's own native into the pinned WETH runs behind consumeFor
-    function test_checkAction_consumeForBurn_approvesANativeWrap() external {
-        _installWithWrap();
-        _consumeForBurn(cfgW);
-
-        vm.prank(multiplexer);
-        uint256 result = policy.checkAction(cfgW, account, weth, 5 ether, _deposit());
-        assertEq(result, SUCCESS, "the account's native becomes its own WETH; nothing leaves");
-    }
-
-    /// @notice Test a wrap is refused when no wrapped native was pinned
-    function test_checkAction_consumeForBurn_refusesAWrapWhenNonePinned() external {
-        _consumeForBurn(cfgA);
-
-        vm.prank(multiplexer);
-        uint256 result = policy.checkAction(cfgA, account, weth, 5 ether, _deposit());
-        assertEq(result, FAILED, "a 64-byte install pins no wrapped native");
-    }
-
-    /// @notice Test deposit() on any other target is a value transfer and is refused
-    function test_checkAction_consumeForBurn_refusesDepositOnAnotherTarget() external {
-        _installWithWrap();
-        _consumeForBurn(cfgW);
-
-        vm.prank(multiplexer);
-        uint256 result = policy.checkAction(cfgW, account, makeAddr("notWeth"), 5 ether, _deposit());
-        assertEq(result, FAILED, "only the pinned wrapped native");
-    }
-
-    /// @notice Test any other selector on the pinned WETH is refused
-    function test_checkAction_consumeForBurn_refusesOtherWethSelectors() external {
-        _installWithWrap();
-        _consumeForBurn(cfgW);
-
-        assertEq(
-            _checkAction(cfgW, weth, abi.encodeCall(IWETH.withdraw, (1 ether))),
-            FAILED,
-            "unwrap is not a wrap"
-        );
-        assertEq(
-            _checkAction(cfgW, weth, abi.encodeCall(IWETH.transfer, (makeAddr("attacker"), 1))),
-            FAILED,
-            "a transfer leaves the account"
-        );
-        assertEq(_checkAction(cfgW, weth, _approve(makeAddr("attacker"))), FAILED, "so does this");
-    }
-
-    /// @notice Test a deposit with bytes appended is refused
-    function test_checkAction_consumeForBurn_refusesWrapWithTrailingBytes() external {
-        _installWithWrap();
-        _consumeForBurn(cfgW);
-
-        vm.prank(multiplexer);
-        uint256 result = policy.checkAction(
-            cfgW, account, weth, 5 ether, abi.encodePacked(_deposit(), hex"00")
-        );
-        assertEq(result, FAILED, "only the exact deposit shape");
-    }
-
-    /// @notice Test a wrap pin does not widen the batch beyond the wrap
-    function test_checkAction_consumeForBurn_wrapPinKeepsRefusingPlainExecutions() external {
-        _installWithWrap();
-        _consumeForBurn(cfgW);
-
-        assertEq(_validatePlain(cfgW), FAILED, "still nothing else");
-        assertEq(_checkAction(cfgW, makeAddr("someToken"), hex"a9059cbb"), FAILED, "not a transfer");
-        assertEq(
-            _checkAction(cfgW, makeAddr("someToken"), _approve(PERMIT2)), SUCCESS, "approve ok"
-        );
-    }
-
-    /// @notice Test a consume validated after a consumeFor does not lift the restriction
-    function test_checkAction_consumeForBurn_notLiftedByALaterConsume() external {
-        _consumeForBurn(cfgA);
-        assertEq(_validateBurn(cfgA), SUCCESS, "a second burn still validates");
-
-        assertEq(_validatePlain(cfgA), FAILED, "the consumeFor still bounds the batch");
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                  THE consumeFor SELF-CALL NAMES ITS OWN ID
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Test a consumeFor naming the session's own id passes, so a Permit2 pre-claim that
-    ///         enables the session in the same settlement can still burn
-    function test_checkAction_consumeForOwnId_returnsSuccess() external {
-        bytes memory nominateOwn = abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_B, WITNESS_1));
-
-        uint256 result = _checkAction(cfgB, address(policy), nominateOwn);
-
-        assertEq(result, SUCCESS, "a burn of the session's own id is allowed");
+        assertTrue(_burned(ID_B), "burned");
+        assertTrue(_settlingCheck(cfgB, WITNESS_1), "and nominated");
     }
 
     /// @notice Test the executor route may not nominate a settlement for another session's id
@@ -336,34 +175,63 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
         bytes memory nominateOther =
             abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID_A, WITNESS_1));
 
-        uint256 result = _checkAction(cfgB, address(policy), nominateOther);
+        assertEq(_checkAction(cfgB, address(policy), nominateOther), FAILED);
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "no nomination for A");
+    }
 
-        assertEq(result, FAILED, "and certainly not another session's id");
+    /// @notice Test a consume does not nominate any settlement
+    function test_checkAction_consume_doesNotNominate() external {
+        _validateBurn(cfgA);
+
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "nothing for the settling check to match");
+    }
+
+    /// @notice Test a burn op carrying value is refused (the burn ops are not payable)
+    function test_checkAction_burnWithValue_returnsFailed() external {
+        vm.prank(multiplexer);
+        uint256 result = policy.checkAction(
+            cfgA, account, address(policy), 1, abi.encodeCall(policy.consume, (ID_A))
+        );
+
+        assertEq(result, FAILED);
+        assertFalse(_burned(ID_A));
     }
 
     /// @notice Test a malformed consume self-call (selector-only calldata) fails closed
     function test_checkAction_malformedConsume_failsClosed() external {
         bytes memory malformed = abi.encodePacked(IOneTimeUseIdPolicy.consume.selector);
 
-        uint256 result = _checkAction(cfgB, address(policy), malformed);
-
-        assertEq(result, FAILED, "malformed consume calldata must fail closed");
+        assertEq(_checkAction(cfgB, address(policy), malformed), FAILED);
     }
 
     /// @notice Test a consumeFor carrying its own id but no witness word fails closed
     function test_checkAction_truncatedConsumeFor_failsClosed() external {
         bytes memory truncated = abi.encodePacked(IOneTimeUseIdPolicy.consumeFor.selector, ID_B);
 
-        uint256 result = _checkAction(cfgB, address(policy), truncated);
-
-        assertEq(result, FAILED, "a consumeFor without its witness must fail closed");
+        assertEq(_checkAction(cfgB, address(policy), truncated), FAILED);
+        assertFalse(_burned(ID_B));
     }
 
     /// @notice Test a self-call with no selector (calldata shorter than 4 bytes) fails closed
     function test_checkAction_selectorlessSelfCall_failsClosed() external {
-        uint256 result = _checkAction(cfgB, address(policy), hex"0011");
+        assertEq(_checkAction(cfgB, address(policy), hex"0011"), FAILED);
+    }
 
-        assertEq(result, FAILED, "a self-call with no selector must fail closed");
+    /// @notice Test a non-burn self-call is a plain execution: refused before the burn, admitted
+    ///         after it
+    function test_checkAction_nonBurnSelfCall_isAPlainExecution() external {
+        bytes memory view_ = abi.encodeCall(policy.isUsed, (multiplexer, account, ID_A));
+
+        assertEq(_checkAction(cfgA, address(policy), view_), FAILED, "before the burn");
+        _validateBurn(cfgA);
+        assertEq(_checkAction(cfgA, address(policy), view_), SUCCESS, "after it");
+    }
+
+    /// @notice Test an action unrelated to this policy passes once the session's burn led the batch
+    function test_checkAction_unrelatedAction_afterTheBurn_returnsSuccess() external {
+        _validateBurn(cfgB);
+
+        assertEq(_checkAction(cfgB, makeAddr("someToken"), hex"a9059cbb"), SUCCESS);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -385,7 +253,9 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
 
         vm.warp(block.timestamp + 1 hours + 1);
 
-        assertEq(_validate(cfgA), FAILED, "an expired authorization cannot settle");
+        assertEq(_validateBurn(cfgA), FAILED, "an expired session cannot even burn");
+        assertEq(_validatePlain(cfgA), FAILED, "nor run anything");
+        assertFalse(_burned(ID_A), "and nothing was spent");
     }
 
     /// @notice Test the deadline is inclusive of the block it names
@@ -397,23 +267,6 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
         vm.warp(expiry);
 
         assertEq(_validate(cfgA), SUCCESS, "valid in the block the deadline names");
-    }
-
-    /// @notice Test the deadline refuses the burn's own op, not just later executions
-    function test_checkAction_afterDeadline_refusesTheConsumeOp() external {
-        vm.warp(1000);
-        _install(cfgA, ID_A, block.timestamp + 1 hours);
-
-        vm.warp(block.timestamp + 1 hours + 1);
-
-        // A well-formed `consume` naming this session's own id, which would otherwise pass.
-        bytes memory data = abi.encodeWithSelector(OneTimeUseIdPolicy.consume.selector, ID_A);
-
-        assertEq(
-            _checkAction(cfgA, address(policy), data),
-            FAILED,
-            "an expired session cannot even dispatch its own burn"
-        );
     }
 
     /// @notice Test expiry does not depend on the id being unburned
@@ -429,7 +282,7 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
     }
 }
 
-/// @title The cross-transaction half of checkAction's strictness
+/// @title The cross-transaction half of checkAction
 /// @notice Split into its own contract deliberately. Transient storage survives every call
 ///         inside one test body - a forge test body IS one transaction - but it IS cleared
 ///         between `setUp` and the body. Burning in `setUp` is therefore the only way to observe
@@ -443,7 +296,6 @@ contract OneTimeUseIdPolicy_checkAction_CrossTransaction_Unit_Test is Test {
 
     ConfigId internal cfg = ConfigId.wrap(keccak256("session.A"));
     uint256 internal constant ID = 0xBEEF;
-    uint256 internal constant WITNESS = 1337;
 
     /// @dev The burn happens HERE, so the test body below runs in a different transaction
     function setUp() public {
@@ -452,17 +304,27 @@ contract OneTimeUseIdPolicy_checkAction_CrossTransaction_Unit_Test is Test {
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID), bytes32(0)));
 
-        vm.prank(account);
-        policy.consumeFor(ID, WITNESS);
+        vm.prank(multiplexer);
+        policy.checkAction(cfg, account, address(policy), 0, abi.encodeCall(policy.consume, (ID)));
+        assertTrue(policy.isUsed(multiplexer, account, ID), "setUp burned");
     }
 
-    /// @notice Test a burn from an earlier transaction still refuses the action surface
-    function test_checkAction_crossTransactionBurnAlsoRefuses() external {
+    /// @notice Test a burn from an earlier transaction refuses every op and every further burn
+    function test_checkAction_laterTransaction_isRefused() external {
         vm.prank(multiplexer);
         assertEq(
             policy.checkAction(cfg, account, address(0), 0, ""),
             VALIDATION_FAILED,
-            "the action surface does not tolerate a burn from an earlier transaction either"
+            "a plain op in a later transaction is refused"
+        );
+
+        vm.prank(multiplexer);
+        assertEq(
+            policy.checkAction(
+                cfg, account, address(policy), 0, abi.encodeCall(policy.consume, (ID))
+            ),
+            VALIDATION_FAILED,
+            "and so is another burn"
         );
     }
 }
