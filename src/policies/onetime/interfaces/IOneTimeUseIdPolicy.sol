@@ -17,8 +17,10 @@ interface IOneTimeUseIdPolicy {
     ///         session no settlement could ever use
     error DeadlineInPast(uint256 deadline, uint256 timestamp);
 
-    /// @notice Thrown when `consume`/`consumeFor` executes without `checkAction` having validated
-    ///         that burn for the caller in this transaction
+    /// @notice Thrown when `consume`/`consumeFor` executes in a transaction where no `checkAction`
+    ///         (of any multiplexer) validated a burn of (caller, id). A diagnostic for a burn op
+    ///         that reached execution without validation; the executed op writes nothing either
+    /// way.
     error BurnNotValidated(uint256 id);
 
     /// @notice Thrown when the constructor's intent executor collides with Permit2 or is zero
@@ -28,8 +30,9 @@ interface IOneTimeUseIdPolicy {
     event IdConsumed(address indexed account, uint256 indexed id);
 
     /// @notice The session's burn op for routes that unlock nothing through Permit2. The burn
-    ///         itself happens when `checkAction` validates this op; the execution only checks that
-    ///         it did. The caller IS the account.
+    ///         itself happens when `checkAction` validates this op; the execution writes nothing
+    ///         and only reverts if no `checkAction` validated a burn of (caller, id) in this
+    ///         transaction. The caller IS the account.
     function consume(uint256 id) external;
 
     /// @notice The session's burn op for a settlement that unlocks through Permit2. Validating it

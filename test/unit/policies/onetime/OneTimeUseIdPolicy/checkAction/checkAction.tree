@@ -38,6 +38,14 @@ OneTimeUseIdPolicy::checkAction
 ├── given the call is unrelated to this policy
 │   └── when the session's burn led the batch
 │       └── it should return VALIDATION_SUCCESS
+├── given the call is a Paymaster gas-refund callback (callbackAllowMaxAmount)
+│   ├── when no burn led the batch
+│   │   └── it should return VALIDATION_FAILED
+│   ├── when the burn led and no callback was admitted yet in this transaction
+│   │   └── it should return VALIDATION_SUCCESS once
+│   ├── when a callback was already admitted in this transaction
+│   │   └── it should return VALIDATION_FAILED for any target
+│   └── it should bound the callback per (multiplexer, account, id)
 └── given a deadline is pinned
     ├── when the deadline is in the future
     │   └── it should return VALIDATION_SUCCESS

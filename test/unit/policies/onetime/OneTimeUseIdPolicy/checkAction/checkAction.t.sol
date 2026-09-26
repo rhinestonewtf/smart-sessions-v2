@@ -11,6 +11,7 @@ import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
 // Interfaces
 import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
+import { Paymaster } from "@compact-utils/executor/StandaloneIntent/aux/Paymaster.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
@@ -232,6 +233,44 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
         _validateBurn(cfgB);
 
         assertEq(_checkAction(cfgB, makeAddr("someToken"), hex"a9059cbb"), SUCCESS);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                  ONE GAS-REFUND CALLBACK PER TRANSACTION (H1)
+    //////////////////////////////////////////////////////////////*/
+
+    function _refundCallback() internal pure returns (bytes memory) {
+        return abi.encodeCall(Paymaster.callbackAllowMaxAmount, (address(0), 1 ether));
+    }
+
+    /// @notice Test the pinned selector is the Paymaster's callback selector
+    function test_checkAction_refundCallbackSelector_matchesThePaymaster() external pure {
+        assertEq(Paymaster.callbackAllowMaxAmount.selector, bytes4(0x482ac196));
+    }
+
+    /// @notice Test the refund callback is admitted once behind the burn
+    function test_checkAction_refundCallback_admittedOncePerTransaction() external {
+        _validateBurn(cfgA);
+
+        assertEq(_checkAction(cfgA, makeAddr("paymaster"), _refundCallback()), SUCCESS, "first");
+        assertEq(_checkAction(cfgA, makeAddr("paymaster"), _refundCallback()), FAILED, "second");
+        assertEq(_checkAction(cfgA, makeAddr("elsewhere"), _refundCallback()), FAILED, "any target");
+        assertEq(_validatePlain(cfgA), SUCCESS, "other ops still ride the burn");
+    }
+
+    /// @notice Test the refund callback needs the burn like any other op
+    function test_checkAction_refundCallback_beforeTheBurn_returnsFailed() external {
+        assertEq(_checkAction(cfgA, makeAddr("paymaster"), _refundCallback()), FAILED);
+    }
+
+    /// @notice Test the once-per-transaction bound is per (multiplexer, account, id)
+    function test_checkAction_refundCallback_isPerSession() external {
+        _validateBurn(cfgA);
+        _validateBurn(cfgB);
+
+        assertEq(_checkAction(cfgA, makeAddr("paymaster"), _refundCallback()), SUCCESS);
+        assertEq(_checkAction(cfgB, makeAddr("paymaster"), _refundCallback()), SUCCESS, "B's own");
+        assertEq(_checkAction(cfgB, makeAddr("paymaster"), _refundCallback()), FAILED);
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -30,17 +30,23 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///      is validated only while that marker is set. A second burn in the same transaction is
 ///      refused (the spend is already set), so at most one nomination - at most one Permit2
 ///      unlock - exists per transaction. The executed `consume`/`consumeFor` write nothing; they
-///      only check that their own validation happened, so a burn op that never passed
-///      `checkAction` (a direct call, a 1271-validated batch) reverts instead of executing.
+///      only check that some `checkAction` validated a burn of this (account, id) in the
+///      transaction (a transient flag any caller of the permissionless `checkAction` can set), so
+///      an honest batch that was never validated (a 1271-validated batch, a direct call) fails
+///      loudly. That check is a diagnostic, not a guard: nothing rides on the executed op.
 ///
 /// @dev What this bounds, and what it does not. The session's OWN action policies still gate
 ///      every op of every batch: the marker admits an op to the batch, it does not widen what the
 ///      op may be. Several batches in the burning transaction - own-arbiter pre-claims through the
 ///      permissionless executor entrypoints, executor-route batches, a fill - are therefore no
-///      more than one larger batch would have been. Cumulative policies count across them as
-///      they would within one. The one thing this policy does not bound is a 1271-validated
-///      batch's CONTENT (`checkAction` never sees it); it refuses every executor-originated 1271
-///      validation instead, so such a batch cannot run under a session carrying this policy.
+///      more than one larger batch would have been, with one exception this policy closes itself:
+///      the executor's gas-refund entrypoints pay once PER EXECUTOR CALL (the Paymaster settles a
+///      refund against the allowance a `callbackAllowMaxAmount` op sets, to an unsigned
+///      recipient), so that op is admitted at most once per transaction. Cumulative policies
+///      count across batches as they would within one. The one thing this policy does not bound
+///      is a 1271-validated batch's CONTENT (`checkAction` never sees it); it refuses every
+///      executor-originated 1271 validation instead, so such a batch cannot run under a session
+///      carrying this policy.
 ///
 /// @dev Multiplexer keying. `checkAction` and `initializeWithMultiplexer` are permissionless, so
 ///      anyone can pin the account's id under their own address and "burn" it there. The spend,
@@ -78,6 +84,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @dev Width of the nonce
     uint256 internal constant NONCE_LENGTH = 32;
+
+    /// @dev `Paymaster.callbackAllowMaxAmount(address,uint256)`: the op that arms one gas refund
+    bytes4 internal constant REFUND_CALLBACK_SELECTOR = 0x482ac196;
 
     /// @notice The Permit2 deployment: the only ERC-1271 caller this policy answers
     ISignatureTransfer public immutable PERMIT2;
@@ -135,8 +144,10 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IOneTimeUseIdPolicy
-    /// @dev Writes nothing. The burn happened in `checkAction`; this only refuses to execute a
-    ///      burn op that validation never saw.
+    /// @dev Writes nothing. The burn happened in `checkAction`; this only refuses to execute when
+    ///      no `checkAction` validated a burn of (caller, id) in this transaction. The flag it
+    /// reads is not multiplexer-keyed, so it can be set by anyone's `checkAction`: a diagnostic for
+    ///      misrouted honest batches, not a security boundary.
     function consume(uint256 id) external override {
         _requireValidated(id);
     }
@@ -232,6 +243,17 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
                 == OneTimeUseIdStorageLib.BURN_NONE
         ) {
             return VALIDATION_FAILED;
+        }
+
+        // The Paymaster settles one gas refund PER EXECUTOR CALL against the allowance this op
+        // sets, to a recipient the caller picks (unsigned). Several executor calls may run in
+        // the burning transaction, so the op is admitted at most once per transaction: one
+        // allowance, one refund - what one executor call could pull.
+        if (data.length >= 4 && bytes4(data[0:4]) == REFUND_CALLBACK_SELECTOR) {
+            if (OneTimeUseIdStorageLib.refundCallbackSeen(msg.sender, account, pinned)) {
+                return VALIDATION_FAILED;
+            }
+            OneTimeUseIdStorageLib.setRefundCallbackSeen(msg.sender, account, pinned);
         }
         return VALIDATION_SUCCESS;
     }

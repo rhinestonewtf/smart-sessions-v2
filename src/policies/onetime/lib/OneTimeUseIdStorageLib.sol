@@ -30,6 +30,10 @@ library OneTimeUseIdStorageLib {
     bytes32 internal constant VALIDATED_POSITION =
         bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.validated")) - 1);
 
+    /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.refundCallback") - 1
+    bytes32 internal constant REFUND_CALLBACK_POSITION =
+        bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.refundCallback")) - 1);
+
     /// @dev Nomination value meaning no settlement was nominated in this transaction
     uint256 internal constant NOT_NOMINATED = 0;
 
@@ -170,9 +174,37 @@ library OneTimeUseIdStorageLib {
         }
     }
 
-    /// @notice Marks, for this transaction, that a burn of `id` for `account` passed validation
-    ///         under some multiplexer. Read by the execution-time `consume`/`consumeFor`, which
-    ///         know the account (their caller) but not the multiplexer.
+    /// @notice Marks, for this transaction, that a gas-refund callback op was admitted under
+    ///         `multiplexer` for (account, id). The Paymaster settles one refund per executor call
+    ///         against the allowance that op sets, so the policy admits it once per transaction.
+    function setRefundCallbackSeen(address multiplexer, address account, uint256 id) internal {
+        bytes32 slot = _key(REFUND_CALLBACK_POSITION, multiplexer, account, id);
+        assembly ("memory-safe") {
+            tstore(slot, 1)
+        }
+    }
+
+    /// @notice Whether a gas-refund callback op was already admitted in this transaction
+    function refundCallbackSeen(
+        address multiplexer,
+        address account,
+        uint256 id
+    )
+        internal
+        view
+        returns (bool seen)
+    {
+        bytes32 slot = _key(REFUND_CALLBACK_POSITION, multiplexer, account, id);
+        assembly ("memory-safe") {
+            seen := tload(slot)
+        }
+    }
+
+    /// @notice Marks, for this transaction, that SOME `checkAction` validated a burn of `id` for
+    ///         `account`. Read by the execution-time `consume`/`consumeFor`, which know the account
+    ///         (their caller) but not the multiplexer. Not multiplexer-keyed, so a third party's
+    ///         own `checkAction` can set it; that only lets the executed op run, and the executed
+    ///         op writes nothing.
     function setValidated(address account, uint256 id) internal {
         bytes32 slot = EfficientHashLib.hash(
             VALIDATED_POSITION, bytes32(uint256(uint160(account))), bytes32(id)

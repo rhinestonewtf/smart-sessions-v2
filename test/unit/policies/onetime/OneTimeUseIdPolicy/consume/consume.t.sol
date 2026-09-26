@@ -65,6 +65,25 @@ contract OneTimeUseIdPolicy_consume_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
         policy.consume(ID_B);
     }
 
+    /// @notice Test the execution guard is a diagnostic, not a boundary: a third party's own
+    ///         `checkAction` sets the (account, id) flag, so the executed op runs - and writes
+    ///         nothing, so the real multiplexer's spend and marker are untouched
+    function test_consume_flagSetByAForeignMultiplexer_letsItRunButChangesNothing() external {
+        address foreign = makeAddr("foreignMultiplexer");
+        vm.prank(foreign);
+        policy.initializeWithMultiplexer(account, cfgA, abi.encodePacked(bytes32(ID_A), bytes32(0)));
+        vm.prank(foreign);
+        policy.checkAction(
+            cfgA, account, address(policy), 0, abi.encodeCall(policy.consume, (ID_A))
+        );
+
+        _execConsume(ID_A);
+
+        assertFalse(_burned(ID_A), "the real multiplexer's spend is untouched");
+        assertEq(_validatePlain(cfgA), FAILED, "and nothing rides under it");
+        assertEq(_validate(cfgA), SUCCESS, "its own burn still validates");
+    }
+
     /// @notice Test the constructor rejects an executor that collides with Permit2 or is zero
     function test_constructor_rejectsInvalidExecutor() external {
         vm.expectRevert(IOneTimeUseIdPolicy.InvalidIntentExecutor.selector);

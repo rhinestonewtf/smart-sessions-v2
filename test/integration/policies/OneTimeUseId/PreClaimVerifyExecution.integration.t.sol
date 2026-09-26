@@ -30,7 +30,7 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         override
         returns (ActionData[] memory extra)
     {
-        extra = new ActionData[](3);
+        extra = new ActionData[](4);
         extra[0] = ActionData({
             actionTarget: address(oncePolicy),
             actionTargetSelector: IOneTimeUseIdPolicy.consumeFor.selector,
@@ -44,6 +44,11 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         extra[2] = ActionData({
             actionTarget: address(env.weth),
             actionTargetSelector: IWETH.deposit.selector,
+            actionPolicies: actionPolicies
+        });
+        extra[3] = ActionData({
+            actionTarget: address(env.target),
+            actionTargetSelector: MockTarget.reverting.selector,
             actionPolicies: actionPolicies
         });
     }
@@ -203,6 +208,37 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
 
         assertFalse(_burned(), "the reverting validation rolled back the burn");
         assertFalse(_nonceBurned($intent.nonce), "nothing settled");
+    }
+
+    /// @dev M2: an HONEST pre-claim through the REAL arbiter whose batch validates but REVERTS at
+    ///      execution (a registered op that reverts, after the burn). The Permit2 executor's
+    ///      `executeOps` bubbles, so the whole executor frame - validation-time burn included -
+    ///      reverts; the arbiter swallows it; the unlock then fails (no consumed nonce, no
+    ///      nomination). The id is UNBURNED and the session is retryable: the same order settles
+    ///      once the reverting op is dropped.
+    function test_permit2PreClaimWhoseBatchReverts_rollsBackTheBurn_andIsRetryable() public {
+        _enableSession(true);
+        Execution[] memory extra = new Execution[](1);
+        extra[0] = Execution({
+            target: address(env.target),
+            value: 0,
+            callData: abi.encodeCall(MockTarget.reverting, ())
+        });
+        _injectViaVerifyExecution(extra);
+        bytes memory cd = _settlementCalldata();
+
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
+
+        assertFalse(_burned(), "the swallowed executor revert rolled the burn back");
+        assertFalse(_nonceBurned($intent.nonce), "nothing settled");
+
+        // Retry: the honest pre-claim without the reverting op settles on the same nonce.
+        _injectViaVerifyExecution(new Execution[](0));
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), _settlementCalldata());
+
+        assertTrue(_burned(), "the retry burned");
+        assertTrue(_nonceBurned($intent.nonce), "and settled");
     }
 
     /// @dev A registered `approve` runs behind the `consumeFor` for the same reason. The

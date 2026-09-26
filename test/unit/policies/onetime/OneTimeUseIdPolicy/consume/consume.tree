@@ -3,6 +3,8 @@ OneTimeUseIdPolicy::consume
 │   └── it should execute (the validation already burned)
 ├── given no validation preceded it
 │   └── it should revert with BurnNotValidated and spend nothing
+├── given only a foreign multiplexer's checkAction validated a burn of (account, id)
+│   └── it should execute, and write nothing (the real multiplexer's spend and marker untouched)
 ├── it should write nothing (no spend, no nomination, no admission), however often it runs
 ├── given a stranger calls with the account's id
 │   └── it should revert with BurnNotValidated
