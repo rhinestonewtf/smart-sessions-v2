@@ -12,18 +12,18 @@ import { Types } from "@compact-utils/types/OrderTypes.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IWETH } from "@compact-utils/interfaces/IWETH.sol";
 
-/// @title A Permit2 pre-claim validated through `verifyExecution` can burn with `consumeFor`
-/// @notice A Permit2 pre-claim may be validated with an execution-emissary sigMode (the SDK
-///         forces it for one-time-use sessions), in which case its `consumeFor` reaches
-///         `checkAction`. Refusing `consumeFor` there makes the Permit2 route unsettleable. What
-///         `checkAction` bounds instead is the REST of that batch: the Permit2 approval the
-///         orchestrator injects passes, anything else is refused (see `RideSingleTx`).
+/// @title A Permit2 pre-claim validated through `verifyExecution` burns with `consumeFor`
+/// @notice A Permit2 pre-claim carries an execution-emissary sigMode (the SDK forces it for
+///         one-time-use sessions), so its `consumeFor` reaches `checkAction`, which burns and
+///         nominates the order. The rest of the batch is bounded by the session's own action
+///         policies, not by this one: a registered op behind the burn runs, an unregistered one is
+///         refused by SmartSessions before any policy sees it.
 contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
     using SmartExecutionLib for *;
 
     /// @dev The pre-claim's `consumeFor` needs an action entry, as a real session's fallback
     ///      action provides; the once-policy sits on it, so it runs through `checkAction`. The
-    ///      approve entry stands in for the same fallback covering the tokenIn.
+    ///      approve and wrap entries stand in for the same fallback covering the tokenIn.
     function _extraActions(PolicyData[] memory actionPolicies)
         internal
         view
@@ -103,6 +103,14 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         });
     }
 
+    function _targetFn(uint256 param) internal view returns (Execution memory) {
+        return Execution({
+            target: address(env.target),
+            value: 0,
+            callData: abi.encodeCall(MockTarget.targetFn, (param))
+        });
+    }
+
     function test_permit2PreClaimThroughVerifyExecution_settlesAndBurns() public {
         _enableSession(true);
         _injectViaVerifyExecution(new Execution[](0));
@@ -113,7 +121,7 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         assertTrue(_nonceBurned($intent.nonce), "and the Permit2 settlement completed");
     }
 
-    /// @dev The batch the orchestrator actually signs: the burn, then `approve(PERMIT2)`.
+    /// @dev The batch the orchestrator signs: the burn, then `approve(PERMIT2)`.
     function test_permit2PreClaimWithPermit2Approval_settlesAndBurns() public {
         _enableSession(true);
         Execution[] memory extra = new Execution[](1);
@@ -131,56 +139,49 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         );
     }
 
-    /// @dev The native-input ACROSS shape: the burn, a wrap of the account's own native, then
-    ///      `approve(PERMIT2)`. The wrap moves nothing out of the account, so it may share a batch
-    ///      with `consumeFor`.
-    function test_permit2PreClaimWithNativeWrapAndApproval_settlesAndBurns() public {
+    /// @dev A pre-claim carrying a wrap of the account's own native, an approval and a user op
+    ///      behind the burn: every registered op rides the burn and the order settles once. A
+    ///      second Permit2 order in the same transaction is refused.
+    function test_permit2PreClaimCarryingAWrapAnApprovalAndAUserOp_settlesOnce() public {
         _enableSession(true);
         vm.deal($intent.sponsor, 10 ether);
-        Execution[] memory extra = new Execution[](2);
+        Execution[] memory extra = new Execution[](3);
         extra[0] = _wrap(3 ether);
         extra[1] = _approve(address(env.permit2));
+        extra[2] = _targetFn(777);
         _injectViaVerifyExecution(extra);
 
         _claim(block.chainid, abi.encodePacked(env.solver.addr), _settlementCalldata());
 
         assertTrue(_burned(), "the pre-claim burned");
         assertTrue(_nonceBurned($intent.nonce), "the Permit2 settlement completed");
-        assertEq(env.weth.balanceOf($intent.sponsor), 3 ether, "and the wrap ran, into the account");
+        assertEq(env.weth.balanceOf($intent.sponsor), 3 ether, "the wrap ran, into the account");
         assertEq($intent.sponsor.balance, 7 ether, "out of the account's own native");
-    }
+        assertEq(
+            env.token1.allowance($intent.sponsor, address(env.permit2)),
+            type(uint256).max,
+            "the approval ran"
+        );
+        assertEq(MockTarget(address(env.target)).param(), 777, "and the user op ran");
 
-    /// @dev A `withdraw` on the same WETH is not a wrap and is refused like any other op.
-    function test_permit2PreClaimWithUnwrap_cannotSettle() public {
-        _enableSession(true);
-        vm.deal($intent.sponsor, 10 ether);
-        Execution[] memory extra = new Execution[](1);
-        extra[0] = Execution({
-            target: address(env.weth), value: 0, callData: abi.encodeCall(IWETH.withdraw, (1))
-        });
-        _injectViaVerifyExecution(extra);
+        uint256 second = $intent.nonce + 1;
+        _useNonce(second);
+        _injectViaVerifyExecution(new Execution[](0));
         bytes memory cd = _settlementCalldata();
-
         vm.expectRevert();
         _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
-
-        assertFalse(_burned(), "nothing burned");
-        assertFalse(_nonceBurned($intent.nonce), "nothing settled");
+        assertFalse(_nonceBurned(second), "no second Permit2 order");
     }
 
-    /// @dev A REGISTERED op behind the `consumeFor` now runs: burn-at-validation bounds repetition
+    /// @dev A REGISTERED op behind the `consumeFor` runs: burn-at-validation bounds repetition
     ///      (one tx, one order), not batch content, so `targetFn` rides the burn and the settlement
     ///      completes. This is no more than the session key could do in any single use; the
-    ///      session's OWN action policy on `targetFn` is what bounds its content. `RideSingleTx`
-    ///      proves it yields no second order and no later transaction.
+    ///      session's OWN action policy on `targetFn` is what bounds its content.
+    ///      `OwnArbiterSameTx` proves it yields no second order and no later transaction.
     function test_permit2PreClaimWithARegisteredOp_settles() public {
         _enableSession(true);
         Execution[] memory extra = new Execution[](1);
-        extra[0] = Execution({
-            target: address(env.target),
-            value: 0,
-            callData: abi.encodeCall(MockTarget.targetFn, (777))
-        });
+        extra[0] = _targetFn(777);
         _injectViaVerifyExecution(extra);
 
         _claim(block.chainid, abi.encodePacked(env.solver.addr), _settlementCalldata());
@@ -190,9 +191,11 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         assertEq(MockTarget(address(env.target)).param(), 777, "and the registered op ran");
     }
 
-    /// @dev An UNREGISTERED op behind the `consumeFor` reverts validation, which rolls back the
-    ///      burn, so nothing settles: the session's action policies still bound WHAT may run.
-    function test_permit2PreClaimWithAnUnregisteredOp_cannotSettle() public {
+    /// @dev CONTROL (SmartSessions action lookup, not this policy): an UNREGISTERED op behind the
+    ///      `consumeFor` is refused by SmartSessions before any policy runs. That reverts the
+    ///      validation, which rolls back the burn, so nothing settles. The session's action list
+    ///      bounds WHAT may run; the once-policy never sees the op.
+    function test_control_smartSessionsRefusesAnUnregisteredOpBehindTheBurn() public {
         _enableSession(true);
         Execution[] memory extra = new Execution[](1);
         extra[0] = Execution({
@@ -210,12 +213,11 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         assertFalse(_nonceBurned($intent.nonce), "nothing settled");
     }
 
-    /// @dev M2: an HONEST pre-claim through the REAL arbiter whose batch validates but REVERTS at
-    ///      execution (a registered op that reverts, after the burn). The Permit2 executor's
-    ///      `executeOps` bubbles, so the whole executor frame - validation-time burn included -
-    ///      reverts; the arbiter swallows it; the unlock then fails (no consumed nonce, no
-    ///      nomination). The id is UNBURNED and the session is retryable: the same order settles
-    ///      once the reverting op is dropped.
+    /// @dev An HONEST pre-claim through the arbiter whose batch validates but REVERTS at execution
+    ///      (a registered op that reverts, after the burn). The Permit2 executor bubbles the
+    ///      revert, so the whole executor frame - validation-time burn included - rolls back, and
+    ///      the unlock then fails (no consumed nonce, no nomination). The id is UNBURNED and the
+    ///      session is retryable: the same order settles once the reverting op is dropped.
     function test_permit2PreClaimWhoseBatchReverts_rollsBackTheBurn_andIsRetryable() public {
         _enableSession(true);
         Execution[] memory extra = new Execution[](1);
@@ -230,7 +232,7 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         vm.expectRevert();
         _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
 
-        assertFalse(_burned(), "the swallowed executor revert rolled the burn back");
+        assertFalse(_burned(), "the executor revert rolled the burn back");
         assertFalse(_nonceBurned($intent.nonce), "nothing settled");
 
         // Retry: the honest pre-claim without the reverting op settles on the same nonce.
@@ -251,7 +253,7 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
     {
         _enableSession(true);
         Execution[] memory extra = new Execution[](1);
-        extra[0] = _approve(makeAddr("attacker"));
+        extra[0] = _approve(makeAddr("otherSpender"));
         _injectViaVerifyExecution(extra);
 
         _claim(block.chainid, abi.encodePacked(env.solver.addr), _settlementCalldata());
@@ -259,7 +261,7 @@ contract OneTimeUseIdPreClaimVerifyExecution_Test is OneTimeUseIdE2E_Base {
         assertTrue(_burned(), "the pre-claim burned");
         assertTrue(_nonceBurned($intent.nonce), "the Permit2 settlement completed once");
         assertEq(
-            env.token1.allowance($intent.sponsor, makeAddr("attacker")),
+            env.token1.allowance($intent.sponsor, makeAddr("otherSpender")),
             type(uint256).max,
             "the registered approve ran - bounded by the approve action policy, not the once-policy"
         );

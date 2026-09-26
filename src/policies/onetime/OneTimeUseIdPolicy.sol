@@ -13,71 +13,48 @@ import { IPermit2IntentExecutor } from "@compact-utils/executor/interfaces/IPerm
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC7579Module.sol";
 
-// forgefmt: disable-start
 /// @title One Time Use Id Policy
 /// @author Rhinestone
 /// @notice Lets one session run executions in at most ONE transaction, unlocking at most one
-///         Permit2 order in it, and only before a pinned deadline. The session pins an id it
-///         invents; the first batch it runs leads with a burn of that id (`consume` or
-///         `consumeFor`); the burn happens when `checkAction` VALIDATES that op, not when it
-///         executes. Every later transaction is refused.
+///         Permit2 order in it, and only before a pinned deadline. The session pins an id; the
+///         first batch it runs leads with a burn of that id (`consume` or `consumeFor`), and the
+///         burn happens when `checkAction` VALIDATES that op. Every later transaction is refused.
 ///
-/// @dev Burn at validation. `checkAction` runs before any op executes, so it cannot be skipped,
-///      starved or swallowed the way an execution can: a pre-claim the arbiter runs
-///      failure-tolerantly still burns, even if its executions revert. On validating the session's
-///      own well-formed burn it writes the durable spend, marks the transaction as the burning
-///      one (transient), and for `consumeFor` records the nomination (transient). Every other op
-///      is validated only while that marker is set. A second burn in the same transaction is
-///      refused (the spend is already set), so at most one nomination - at most one Permit2
-///      unlock - exists per transaction. The executed `consume`/`consumeFor` write nothing; they
-///      only check that some `checkAction` validated a burn of this (account, id) in the
-///      transaction (a transient flag any caller of the permissionless `checkAction` can set), so
-///      an honest batch that was never validated (a 1271-validated batch, a direct call) fails
-///      loudly. That check is a diagnostic, not a guard: nothing rides on the executed op.
+/// @dev The one-transaction semantics. Validating the session's own well-formed burn writes the
+///      durable spend, marks the transaction as the burning one (transient) and, for `consumeFor`,
+///      records the nomination (transient). Every other op is admitted only while that marker is
+///      set, so several batches in the burning transaction are no more than one larger batch
+///      would have been. A second burn is refused (the spend is already set), so at most one
+///      nomination - at most one Permit2 unlock - exists per transaction. The gas-refund callback
+///      op is admitted at most once per transaction, because the executor settles one refund per
+///      call against the allowance it sets. Because the burn is written at validation, a failing
+///      execution cannot skip it: on the Permit2 route a pre-claim whose execution reverts rolls
+///      the whole executor frame back, burn included, and the session is retryable; only a caller
+///      that swallows that revert keeps the spend. The executed `consume`/`consumeFor` write
+///      nothing; they only check that some `checkAction` validated a burn of (account, id) in this
+///      transaction, a diagnostic for honest batches that were never validated, not a guard.
 ///
-/// @dev What this bounds, and what it does not. The session's OWN action policies still gate
-///      every op of every batch: the marker admits an op to the batch, it does not widen what the
-///      op may be. Several batches in the burning transaction - own-arbiter pre-claims through the
-///      permissionless executor entrypoints, executor-route batches, a fill - are therefore no
-///      more than one larger batch would have been, with one exception this policy closes itself:
-///      the executor's gas-refund entrypoints pay once PER EXECUTOR CALL (the Paymaster settles a
-///      refund against the allowance a `callbackAllowMaxAmount` op sets, to an unsigned
-///      recipient), so that op is admitted at most once per transaction. Cumulative policies
-///      count across batches as they would within one. The one thing this policy does not bound
-///      is a 1271-validated batch's CONTENT (`checkAction` never sees it); it refuses every
-///      executor-originated 1271 validation instead, so such a batch cannot run under a session
-///      carrying this policy.
+/// @dev What this bounds, and what it does not. CONTENT is bounded by the session's own action
+///      policies, never by this one: the marker admits an op to the transaction, it does not widen
+///      what the op may be. Approvals granted in the one transaction outlive it, and a gas refund
+///      is whatever size the session signs. A 1271-validated batch's content is never seen here,
+///      so every executor-originated 1271 validation is refused: a session carrying this policy
+///      runs only through `verifyExecution`, and the only 1271 caller answered is Permit2's unlock.
 ///
-/// @dev Multiplexer keying. `checkAction` and `initializeWithMultiplexer` are permissionless, so
-///      anyone can pin the account's id under their own address and "burn" it there. The spend,
+/// @dev Keying. `checkAction` and `initializeWithMultiplexer` are permissionless, so the spend,
 ///      the marker and the nomination are keyed by the multiplexer (msg.sender), and the settling
-///      check reads under ITS msg.sender - the same SmartSessionEmissary that validated the burn -
-///      so a foreign multiplexer's burn changes nothing for the real one.
-///
-/// @dev The Permit2 route. The pre-claim must be validated through `verifyExecution` (an
-///      execution-emissary sigMode) so its `consumeFor(id, nonce)` reaches `checkAction`; that
-///      validation burns and nominates the order. The unlock then validates ERC-1271 from Permit2:
-///
-///        _permit2PreClaimOps -> executePreClaimOpsWithPermit2Stub
-///                                 |- verifyExecution -> checkAction(consumeFor) <- BURN + nominate
-///                                 `- executeOps(preClaimOps)                    <- consumeFor: check only
-///        _unlockPermit2      -> Permit2.permitWitnessTransferFrom
-///                                 `- account.isValidSignature -> check1271SignedAction (settling)
-///
-///      The settling check requires the nomination to name the nonce in the claim blob AND the
-///      executor to have consumed that nonce. Only a pre-claim that passed validation consumes it,
-///      and that pre-claim is the burn. A `Permit2ClaimPolicy` binding the blob to the digest must
-///      be installed alongside, or `signature[20:52]` is caller-chosen; it must also pin the
-///      arbiter (FIELD_ARBITER) for the 1271-validated legs of hybrid sigModes.
+///      check reads under ITS msg.sender - the same SmartSession contract that validated the burn.
+///      That check requires the nomination to name the nonce in the claim blob AND the executor to
+///      have consumed that nonce, which only a pre-claim that passed validation does.
 ///
 /// @dev Install-time requirements. Install on EVERY action the session permits, including an
-///      action for the session's own `consume`/`consumeFor`. Every blob (action slots and the 1271
-///      list) must carry the same id and deadline: SmartSessions gives each slot its own ConfigId
-///      and nothing here can cross-check. One session must cover every settlement layer. The id
+///      action for the session's own `consume`/`consumeFor`, and on the 1271 list alongside a
+///      `Permit2ClaimPolicy` that binds the claim blob to the digest (or `signature[20:52]` is
+///      caller-chosen) and pins the arbiter. Every blob must carry the same id and deadline:
+///      SmartSessions gives each slot its own ConfigId and nothing here can cross-check. The id
 ///      must be fresh per enable and unique per account: the spend is never cleared, so a reused
 ///      id yields a session that cannot settle - denial, never a second spend. The burn leads the
 ///      first batch of the transaction and appears exactly once per chain.
-// forgefmt: disable-end
 contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev Start of the nonce in `Permit2ClaimPolicy`'s claim blob, after the arbiter
     uint256 internal constant PERMIT2_NONCE_START = 20;
@@ -145,9 +122,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
     /// @inheritdoc IOneTimeUseIdPolicy
     /// @dev Writes nothing. The burn happened in `checkAction`; this only refuses to execute when
-    ///      no `checkAction` validated a burn of (caller, id) in this transaction. The flag it
-    /// reads is not multiplexer-keyed, so it can be set by anyone's `checkAction`: a diagnostic for
-    ///      misrouted honest batches, not a security boundary.
+    ///      no `checkAction` validated a burn of (caller, id) in this transaction. That flag is not
+    ///      multiplexer-keyed, so anyone's `checkAction` can set it: a diagnostic for misrouted
+    ///      honest batches, not a security boundary.
     function consume(uint256 id) external override {
         _requireValidated(id);
     }
@@ -189,7 +166,8 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
         if (pinned == 0) return VALIDATION_FAILED;
         if (OneTimeUseIdStorageLib.isExpired($pin.deadline)) return VALIDATION_FAILED;
 
-        uint256 burnKind = OneTimeUseIdStorageLib.BURN_NONE;
+        bool isBurn;
+        bool nominates;
         if (target == address(this)) {
             // A self-call with no selector can only revert at execution; fail closed.
             if (data.length < 4) return VALIDATION_FAILED;
@@ -200,10 +178,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             uint256 burnLength;
             if (selector == this.consume.selector) {
                 burnLength = 36;
-                burnKind = OneTimeUseIdStorageLib.BURN_CONSUME;
             } else if (selector == this.consumeFor.selector) {
                 burnLength = 68;
-                burnKind = OneTimeUseIdStorageLib.BURN_CONSUME_FOR;
+                nominates = true;
             }
             if (burnLength != 0) {
                 if (
@@ -211,10 +188,11 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
                 ) {
                     return VALIDATION_FAILED;
                 }
+                isBurn = true;
             }
         }
 
-        if (burnKind != OneTimeUseIdStorageLib.BURN_NONE) {
+        if (isBurn) {
             // The burn. Exactly one per (multiplexer, account, id), ever: a spent id refuses a
             // second burn in this transaction as in every later one.
             OneTimeUseIdStorageLib.SpendStorage storage $spend =
@@ -222,9 +200,9 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
             if ($spend.burned) return VALIDATION_FAILED;
             $spend.burned = true;
 
-            OneTimeUseIdStorageLib.setBurnedInTx(msg.sender, account, pinned, burnKind);
+            OneTimeUseIdStorageLib.setBurnedInTx(msg.sender, account, pinned);
             OneTimeUseIdStorageLib.setValidated(account, pinned);
-            if (burnKind == OneTimeUseIdStorageLib.BURN_CONSUME_FOR) {
+            if (nominates) {
                 OneTimeUseIdStorageLib.setNomination(
                     msg.sender,
                     account,
@@ -238,17 +216,14 @@ contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
 
         // Every other op rides the burn validated earlier in this transaction. With no marker
         // the batch never burned, or burned in an earlier transaction; either way it is refused.
-        if (
-            OneTimeUseIdStorageLib.burnedInTx(msg.sender, account, pinned)
-                == OneTimeUseIdStorageLib.BURN_NONE
-        ) {
+        if (!OneTimeUseIdStorageLib.burnedInTx(msg.sender, account, pinned)) {
             return VALIDATION_FAILED;
         }
 
         // The Paymaster settles one gas refund PER EXECUTOR CALL against the allowance this op
-        // sets, to a recipient the caller picks (unsigned). Several executor calls may run in
-        // the burning transaction, so the op is admitted at most once per transaction: one
-        // allowance, one refund - what one executor call could pull.
+        // sets. Several executor calls may run in the burning transaction, so the op is admitted
+        // at most once per transaction: one allowance, one refund - what one executor call could
+        // pull.
         if (data.length >= 4 && bytes4(data[0:4]) == REFUND_CALLBACK_SELECTOR) {
             if (OneTimeUseIdStorageLib.refundCallbackSeen(msg.sender, account, pinned)) {
                 return VALIDATION_FAILED;

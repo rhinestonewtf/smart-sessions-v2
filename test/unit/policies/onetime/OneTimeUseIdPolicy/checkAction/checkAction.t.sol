@@ -236,7 +236,7 @@ contract OneTimeUseIdPolicy_checkAction_Unit_Test is OneTimeUseIdPolicy_Unit_Tes
     }
 
     /*//////////////////////////////////////////////////////////////
-                  ONE GAS-REFUND CALLBACK PER TRANSACTION (H1)
+                    ONE GAS-REFUND CALLBACK PER TRANSACTION
     //////////////////////////////////////////////////////////////*/
 
     function _refundCallback() internal pure returns (bytes memory) {

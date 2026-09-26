@@ -32,21 +32,28 @@ import {
     IStandaloneIntentExecutor
 } from "@compact-utils/executor/interfaces/IStandaloneIntent.sol";
 import { FIELD_ARBITER, MODE_CHECK_STORAGE } from "@policies/claim/base/types/BaseDataTypes.sol";
+import { ValidateSignature } from "@compact-utils/executor/VerifySignature/VerifySignature.sol";
 
 /// @title OneTimeUseIdPolicy — the E2E harness
 /// @notice Both routes settle for real. The policy sits on BOTH surfaces and neither of them
 ///         knows anything about a settlement layer:
 ///
-///   Permit2   router -> arbiter -> _permit2PreClaimOps
-///                       |- isValidSignature          -> check1271SignedAction  (unspent + nonce)
-///                       `- executeOps(preClaimOps)   -> consumeFor             (BURN)
+///   Permit2   router -> arbiter -> _permit2PreClaimOps -> executePreClaimOpsWithPermit2Stub
+///                       |- verifyExecution -> checkAction(consumeFor)        (BURN + nominate)
+///                       `- executeOps(preClaimOps) -> consumeFor             (check only)
 ///                     -> _unlockPermit2 -> Permit2.permitWitnessTransferFrom
-///                       `- account.isValidSignature  -> check1271SignedAction  (settling: proof)
+///                       `- account.isValidSignature -> check1271SignedAction (settling)
 ///
 ///   executor  solver -> StandaloneIntentExecutor.executeSinglechainOps
 ///                     -> sigMode EMISSARY_EXECUTION -> emissary.verifyExecution
-///                       |- _enforceActionPolicies    -> checkAction            (burn must lead)
-///                       `- executeOps                -> consume                (BURN)
+///                       |- _enforceActionPolicies -> checkAction(consume)    (BURN)
+///                       `- executeOps -> consume                             (check only)
+///
+///         A refusal on the router route surfaces as an EMPTY revert (the Router drops the
+///         reason), so those are asserted with a bare `vm.expectRevert()` next to a positive
+///         control. A direct executor entrypoint surfaces the emissary's `PolicyViolation` as
+///         `ValidateSignature.InvalidSignature`; with the once-policy the only action policy on the
+///         session, that is the once-policy refusing.
 abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     using SmartExecutionLib for *;
     using ModuleKitHelpers for *;
@@ -118,6 +125,16 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         $intent.digest = _hashTypedDataPermit2(block.chainid, $intent.permit2Hash);
     }
 
+    /// @dev The session validator and its init data. The matrix uses the permissive mock so the
+    ///      policy, not the signature, decides every case; `RejectingValidator` overrides both.
+    function _sessionValidator() internal view virtual returns (ISessionValidator) {
+        return ISessionValidator(address(yesSessionValidator));
+    }
+
+    function _sessionValidatorInitData() internal view virtual returns (bytes memory) {
+        return "mockInitData";
+    }
+
     /// @dev Override to register further actions on the session. Empty by default: the matrix
     ///      registers only what an honest settlement calls.
     function _extraActions(PolicyData[] memory) internal virtual returns (ActionData[] memory) {
@@ -132,8 +149,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         _enableSession(bounded, NO_DEADLINE);
     }
 
-    /// @dev `deadline` is pinned into BOTH halves of the session, as the contract requires. So
-    ///      is the chain's wrapped native, the one non-approval a Permit2 pre-claim may carry.
+    /// @dev `deadline` is pinned into BOTH halves of the session, as the contract requires.
     function _enableSession(bool bounded, uint256 deadline) internal {
         activeFieldMode = FIELD_ARBITER;
 
@@ -184,9 +200,9 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
         allowedContent[0].appDomainSeparator = bytes32(0);
 
         Session memory session = Session({
-            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            sessionValidator: _sessionValidator(),
             salt: keccak256(abi.encodePacked("oneTimeUseIdMatrix", block.timestamp)),
-            sessionValidatorInitData: "mockInitData",
+            sessionValidatorInitData: _sessionValidatorInitData(),
             erc7739Policies: ERC7739Data({
                 allowedERC7739Content: allowedContent, erc1271Policies: erc1271Policies
             }),
@@ -209,6 +225,10 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     /// @dev Split from the claim because `_createPolicyData` makes an external staticcall — an
     ///      `expectRevert` armed before it binds to THAT call and passes on the prepare step.
     function _preparePermit2Settlement() internal returns (bytes memory) {
+        return _preparePermit2Settlement(_emissarySig());
+    }
+
+    function _preparePermit2Settlement(bytes memory preClaimSig) internal returns (bytes memory) {
         Types.Order memory order = _getPermit2Order();
         $intent.userEmissarySig = _createSmartSessionSignature(_createPolicyData());
 
@@ -220,7 +240,7 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
             (MockAdapter.ClaimDataPermit2({
                     order: order,
                     userSigs: Types.Signatures({
-                        notarizedClaimSig: $intent.userEmissarySig, preClaimSig: _emissarySig()
+                        notarizedClaimSig: $intent.userEmissarySig, preClaimSig: preClaimSig
                     })
                 }))
         );
@@ -237,15 +257,20 @@ abstract contract OneTimeUseIdE2E_Base is Permit2ClaimPolicy_Integration_Test {
     /// @dev The emissary path takes a different envelope from the 1271 path: mode, permissionId
     ///      and packed signature directly, with no module-address prefix.
     function _emissarySig() internal view returns (bytes memory) {
-        bytes memory validatorSig =
-            abi.encodePacked(bytes32(uint256(0x1234)), bytes32(uint256(0x5678)), uint8(27));
-
         return abi.encodePacked(
             SmartSessionMode.USE,
             defaultPermissionId,
-            uint256(validatorSig.length) + 64,
-            validatorSig
+            uint256(65 + 64),
+            bytes32(uint256(0x1234)),
+            bytes32(uint256(0x5678)),
+            uint8(27)
         );
+    }
+
+    /// @dev Packs a real session-validator signature into the USE envelope for
+    ///      `defaultPermissionId`: mode, permissionId, then the signature the validator reads.
+    function _emissarySig(bytes memory validatorSig) internal view returns (bytes memory) {
+        return abi.encodePacked(SmartSessionMode.USE, defaultPermissionId, validatorSig);
     }
 
     /// @dev Parameterised on the executor nonce because the executor refuses a REPLAY of the same
@@ -340,7 +365,7 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
         _enableSession(true);
         _settleViaPermit2();
 
-        vm.expectRevert();
+        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _settleViaExecutor(0);
     }
 
@@ -350,7 +375,7 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
         _enableSession(true);
         _settleViaExecutor(0);
 
-        vm.expectRevert();
+        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _settleViaExecutor(1);
     }
 
@@ -359,7 +384,7 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
         _settleViaExecutor(0);
 
         for (uint256 i = 1; i <= 5; ++i) {
-            vm.expectRevert();
+            vm.expectRevert(ValidateSignature.InvalidSignature.selector);
             _settleViaExecutor(i);
         }
     }
@@ -399,12 +424,11 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev The burn is required, not optional: `checkAction` refuses every execution the session's
-    ///      own burn did not lead, so a settlement that omits it cannot land at all. This is the
-    ///      one refusal here that `consume` reverting `AlreadyConsumed` cannot explain.
+    ///      own burn did not lead, so a settlement that omits it cannot land at all.
     function test_aSettlementOmittingTheBurnIsRefused() public {
         _enableSession(true);
 
-        vm.expectRevert();
+        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _settleViaExecutorWithoutConsume(0, 42);
 
         assertFalse(_burned(), "nothing burned");
@@ -419,7 +443,7 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
         _settleViaExecutor(0, 42);
         assertTrue(_burned(), "the injected call burned");
 
-        vm.expectRevert();
+        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _settleViaExecutor(1, 43);
     }
 
@@ -455,7 +479,7 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
 
         vm.warp(block.timestamp + 2);
 
-        vm.expectRevert();
+        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _settleViaExecutor(0);
 
         assertEq(env.target.param(), 0, "the executor settlement never executed");
@@ -480,9 +504,9 @@ contract OneTimeUseIdMatrixE2E_Test is OneTimeUseIdE2E_Base {
     }
 
     /// @dev CONTROL. Unbounded, a Permit2 settlement lands even though its injected `consumeFor`
-    ///      reverts inside the (swallowed) pre-claim: without the once-policy on the 1271 list,
-    ///      only `Permit2ClaimPolicy` gates the unlock. So the bounded refusals are the
-    /// once-policy.
+    ///      reverts `BurnNotValidated` inside the pre-claim (no `checkAction` validated it): with
+    ///      the once-policy off the 1271 list only `Permit2ClaimPolicy` gates the unlock. So the
+    ///      bounded refusals are the once-policy.
     function test_control_permit2LandsWithoutThePolicy() public {
         _enableSession(false);
 

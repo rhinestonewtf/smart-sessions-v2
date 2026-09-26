@@ -40,11 +40,6 @@ library OneTimeUseIdStorageLib {
     /// @dev Deadline value meaning the pinned id never expires
     uint256 internal constant NO_DEADLINE = 0;
 
-    /// @dev Burn kinds: none, a `consume`, or a `consumeFor`
-    uint256 internal constant BURN_NONE = 0;
-    uint256 internal constant BURN_CONSUME = 1;
-    uint256 internal constant BURN_CONSUME_FOR = 2;
-
     /// @dev Zero id means "not configured"; zero deadline means "never expires"
     struct PinStorage {
         uint256 id;
@@ -142,23 +137,15 @@ library OneTimeUseIdStorageLib {
     }
 
     /// @notice Marks, for this transaction, that the session's burn of `id` was validated under
-    ///         `multiplexer`, and which burn it was
-    function setBurnedInTx(
-        address multiplexer,
-        address account,
-        uint256 id,
-        uint256 kind
-    )
-        internal
-    {
+    ///         `multiplexer`
+    function setBurnedInTx(address multiplexer, address account, uint256 id) internal {
         bytes32 slot = _key(BURNED_IN_TX_POSITION, multiplexer, account, id);
         assembly ("memory-safe") {
-            tstore(slot, kind)
+            tstore(slot, 1)
         }
     }
 
-    /// @notice Which burn of `id` was validated under `multiplexer` earlier in this transaction:
-    ///         BURN_NONE, BURN_CONSUME or BURN_CONSUME_FOR
+    /// @notice Whether a burn of `id` was validated under `multiplexer` earlier in this transaction
     function burnedInTx(
         address multiplexer,
         address account,
@@ -166,11 +153,11 @@ library OneTimeUseIdStorageLib {
     )
         internal
         view
-        returns (uint256 kind)
+        returns (bool burned)
     {
         bytes32 slot = _key(BURNED_IN_TX_POSITION, multiplexer, account, id);
         assembly ("memory-safe") {
-            kind := tload(slot)
+            burned := tload(slot)
         }
     }
 

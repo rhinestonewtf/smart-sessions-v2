@@ -6,23 +6,17 @@ import { MockAdapter } from "@mocks/MockAdapter.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
 
 /// @title The burn is mandatory
-/// @notice Regression for the audit's headline finding. The burn lived inside the pre-claim, which
-///         the arbiter runs failure-tolerantly by design - so ANY way of making the pre-claim fail
-///         used to skip the burn while the settlement completed anyway.
-///
-///         Burn-at-validation moves the burn to `checkAction`, which runs inside the pre-claim's
-///         validation. A pre-claim that never validates (a withheld or garbled pre-claim
-///         signature, so `verifyExecution` cannot parse it) never burns AND never consumes its
-///         executor nonce - so the Permit2 settling check, which demands both a matching
-///         nomination and a consumed nonce, refuses it.
-contract OneTimeUseIdBurnSkippable_Test is OneTimeUseIdE2E_Base {
+/// @notice The burn happens in `checkAction`, inside the pre-claim's validation. A pre-claim that
+///         never validates (a withheld or garbled pre-claim signature, so `verifyExecution` cannot
+///         parse it) never burns AND never consumes its executor nonce, so the Permit2 settling
+///         check, which demands both a matching nomination and a consumed nonce, refuses it.
+contract OneTimeUseIdBurnMandatory_Test is OneTimeUseIdE2E_Base {
     function _nonceBurned(uint256 nonce) internal view returns (bool) {
         return (env.permit2.nonceBitmap($intent.sponsor, nonce >> 8) >> (nonce & 0xff)) & 1 == 1;
     }
 
-    /// @dev The settlement a submitter who withholds a valid pre-claim signature would build: the
-    ///      pre-claim ops are the honest EMISSARY_EXECUTION burn, but the preClaimSig is garbage,
-    ///      so `verifyExecution` cannot parse it and the pre-claim validates FALSE (swallowed).
+    /// @dev The pre-claim ops are the honest EMISSARY_EXECUTION burn, but the preClaimSig is
+    ///      garbage, so `verifyExecution` cannot parse it and the pre-claim validates FALSE.
     function _prepareWithGarbledPreClaimSig() internal returns (bytes memory) {
         Types.Order memory order = _getPermit2Order();
         $intent.userEmissarySig = _createSmartSessionSignature(_createPolicyData());

@@ -18,8 +18,8 @@ import { ValidateSignature } from "@compact-utils/executor/VerifySignature/Verif
 /// @notice An executor settlement may call `consumeFor` and nominate a Permit2 nonce it does not
 ///         own. A Permit2 settlement on that nonce that skips its own burn is still refused: the
 ///         settling check also requires the executor to have consumed the nonce, which happens only
-///         in the order's own pre-claim. And a `consumeFor` batch on the executor route can carry
-///         nothing else (`RideSingleTx`), so the forged nomination is all that settlement does.
+///         in the order's own pre-claim. A registered op may ride behind that `consumeFor`, but the
+///         nomination still carries no order of its own.
 contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
     using SmartExecutionLib for *;
 
@@ -91,7 +91,7 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
         );
     }
 
-    /// @dev The ride, end to end. An executor settlement burns the id while nominating Permit2
+    /// @dev End to end. An executor settlement burns the id while nominating Permit2
     ///      nonce 4242, which it does not own. A Permit2 settlement on 4242 with a starved
     ///      pre-claim then tries to settle on that nomination. It is refused: its own pre-claim
     ///      never ran, so the executor never consumed nonce 4242. One burn, one settlement.
@@ -131,8 +131,8 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
         assertFalse(_nonceBurned(4242), "the forged nomination carries no Permit2 order");
     }
 
-    /// @dev The same attack with the witness NOT matching is refused, so the settlement above
-    ///      really did ride the nomination rather than settle for some unrelated reason.
+    /// @dev The same pair with the witness NOT matching is refused too, so the nomination is what
+    ///      the settling check reads and not some unrelated condition.
     function test_control_aNominationNamingAnotherSettlementIsNoHelp() public {
         _enableSession(true);
         _useNonce(4242);
@@ -149,9 +149,7 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
     }
 
     /// @dev With NO executor settlement first, there is no nomination to ride and the starved
-    ///      Permit2 settlement refuses. This is the second half of the attack in isolation: it
-    ///      shows the starved settlement has no path of its own, so the spend above came entirely
-    ///      from the borrowed nomination.
+    ///      Permit2 settlement refuses: the starved settlement has no path of its own.
     function test_aStarvedPermit2SettlementHasNoNominationToRide() public {
         _enableSession(true);
         _useNonce(4242);

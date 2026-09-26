@@ -5,12 +5,9 @@ import { OneTimeUseIdE2E_Base } from "./OneTimeUseIdMatrixE2E.integration.t.sol"
 import { MockAdapter } from "@mocks/MockAdapter.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
 
-/// @title The gas-starvation vector
-/// @notice `preClaimGasStipend` is the LOW 128 bits of `packedGasValues`, and only `minGas` (the
-///         high half) enters the signed mandate hash — so the submitter picks the gas budget of a
-///         call the user signed. Starve it and the pre-claim OOGs, which the arbiter swallows.
-///
-///         Before the witness fix this settled with `isUsed == false`, repeatedly.
+/// @title A starved pre-claim
+/// @notice A pre-claim that runs out of gas never validates, so it neither burns nor consumes its
+///         executor nonce; the settling check then has no nomination to match and refuses.
 contract OneTimeUseIdGasStarve_Test is OneTimeUseIdE2E_Base {
     function _nonceBurned(uint256 nonce) internal view returns (bool) {
         return (env.permit2.nonceBitmap($intent.sponsor, nonce >> 8) >> (nonce & 0xff)) & 1 == 1;
@@ -33,8 +30,7 @@ contract OneTimeUseIdGasStarve_Test is OneTimeUseIdE2E_Base {
         );
     }
 
-    /// @dev THE regression for Kevin's blocker. Starve the pre-claim so `consume` never runs —
-    ///      the settling check has no witness to match and must refuse.
+    /// @dev Starve the pre-claim so `checkAction` never runs: no burn, no nomination, refused.
     function test_aStarvedPreClaimCannotSettle() public {
         _enableSession(true);
         _useNonce(1337);
@@ -48,7 +44,7 @@ contract OneTimeUseIdGasStarve_Test is OneTimeUseIdE2E_Base {
         assertFalse(_burned(), "and nothing burned");
     }
 
-    /// @dev The measured threshold from the audit: 50k skipped the burn, 100k performed it.
+    /// @dev A small but nonzero stipend, short of what validation needs.
     function test_aStarvedPreClaimCannotSettle_atTheMeasuredThreshold() public {
         _enableSession(true);
         _useNonce(1337);
@@ -58,7 +54,7 @@ contract OneTimeUseIdGasStarve_Test is OneTimeUseIdE2E_Base {
         vm.expectRevert();
         _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
 
-        assertFalse(_burned(), "50k was enough to skip the burn, and is no longer enough to settle");
+        assertFalse(_burned(), "a starved pre-claim burns nothing and cannot settle");
     }
 
     /// @dev CONTROL. A funded pre-claim burns and settles, so the refusals above are the missing

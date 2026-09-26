@@ -19,8 +19,7 @@ interface IOneTimeUseIdPolicy {
 
     /// @notice Thrown when `consume`/`consumeFor` executes in a transaction where no `checkAction`
     ///         (of any multiplexer) validated a burn of (caller, id). A diagnostic for a burn op
-    ///         that reached execution without validation; the executed op writes nothing either
-    /// way.
+    ///         that reached execution unvalidated; the executed op writes nothing either way.
     error BurnNotValidated(uint256 id);
 
     /// @notice Thrown when the constructor's intent executor collides with Permit2 or is zero
