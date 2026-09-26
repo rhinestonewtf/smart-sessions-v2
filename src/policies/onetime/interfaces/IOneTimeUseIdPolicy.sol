@@ -17,35 +17,39 @@ interface IOneTimeUseIdPolicy {
     ///         session no settlement could ever use
     error DeadlineInPast(uint256 deadline, uint256 timestamp);
 
-    /// @notice Thrown when `consume` is called for an id already burned for the caller
-    error AlreadyConsumed(uint256 id);
+    /// @notice Thrown when `consume`/`consumeFor` executes in a transaction where no `checkAction`
+    ///         (of any multiplexer) validated a burn of (caller, id). A diagnostic for a burn op
+    ///         that reached execution without validation; the executed op writes nothing either
+    /// way.
+    error BurnNotValidated(uint256 id);
 
     /// @notice Thrown when the constructor's intent executor collides with Permit2 or is zero
     error InvalidIntentExecutor();
 
-    /// @notice Emitted when an account's id is consumed, by either burn site
+    /// @notice Emitted when an account's id is burned - at validation, by `checkAction`
     event IdConsumed(address indexed account, uint256 indexed id);
 
-    /// @notice Burns `id` for the caller WITHOUT nominating any settlement. The caller IS the
-    ///         account. This is the burn for routes gated by `checkAction`, which is strict and
-    ///         reads the durable record directly, so it needs no nomination.
+    /// @notice The session's burn op for routes that unlock nothing through Permit2. The burn
+    ///         itself happens when `checkAction` validates this op; the execution writes nothing
+    ///         and only reverts if no `checkAction` validated a burn of (caller, id) in this
+    ///         transaction. The caller IS the account.
     function consume(uint256 id) external;
 
-    /// @notice Burns `id` AND nominates the settlement doing it. The caller IS the account.
-    /// @dev Only the ERC-1271 route needs this: it validates twice with the burn in between, so
-    ///      its settling check must be able to tell its own burn from someone else's.
+    /// @notice The session's burn op for a settlement that unlocks through Permit2. Validating it
+    ///         burns AND nominates that settlement. The caller IS the account.
     /// @param id The pinned id
-    /// @param witness A value unique to THIS settlement that its settling check can also name -
-    ///        the Permit2 nonce. Not known at install time; it only has to match within one
-    ///        settlement, which is why this design still needs no nonce pinned in advance.
+    /// @param witness The Permit2 nonce of the settlement this burn nominates; the settling check
+    ///        must present the same nonce. Not known at install time; it only has to match within
+    ///        one transaction.
     function consumeFor(uint256 id, uint256 witness) external;
 
-    /// @notice Whether an account's id has been consumed
-    function isUsed(address account, uint256 id) external view returns (bool);
+    /// @notice Whether an account's id has been burned under `multiplexer` (the SmartSession
+    ///         contract that validated the burn)
+    function isUsed(address multiplexer, address account, uint256 id) external view returns (bool);
 
     /// @notice The id pinned for a configuration, whether it has been consumed, and when it expires
     /// @return pinned The pinned id, or zero if the configuration was never initialized
-    /// @return consumed Whether that id has been burned
+    /// @return consumed Whether that id has been burned under `multiplexer`
     /// @return deadline The last timestamp a settlement may use it, or zero if it never expires
     function usage(
         ConfigId configId,

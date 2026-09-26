@@ -109,6 +109,23 @@ contract OneTimeUseIdRideSingleTx_Test is OneTimeUseIdE2E_Base {
         return SmartExecutionLib.SigMode.EMISSARY_EXECUTION.encode(calls);
     }
 
+    /// @dev A rogue pre-claim nominating TWO Permit2 orders in one batch: the second burn is
+    ///      refused, so this whole pre-claim validates FALSE.
+    function _rogueOpsTwoOrders() internal view returns (Types.Operation memory) {
+        Execution[] memory calls = new Execution[](2);
+        calls[0] = Execution({
+            target: address(oncePolicy),
+            value: 0,
+            callData: abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID, NONCE))
+        });
+        calls[1] = Execution({
+            target: address(oncePolicy),
+            value: 0,
+            callData: abi.encodeCall(IOneTimeUseIdPolicy.consumeFor, (ID, NONCE + 1))
+        });
+        return SmartExecutionLib.SigMode.EMISSARY_EXECUTION.encode(calls);
+    }
+
     function _ride(Types.Operation memory ops, bytes memory cd) internal {
         RideAttacker(env.solver.addr)
             .run(
@@ -136,32 +153,50 @@ contract OneTimeUseIdRideSingleTx_Test is OneTimeUseIdE2E_Base {
         vm.etch(env.solver.addr, type(RideAttacker).runtimeCode);
     }
 
-    /// @dev The regression: the rogue pre-claim is refused at validation, so it consumes no nonce,
-    ///      burns nothing and executes nothing. The refusal is the executor's own, because
-    ///      `verifyExecution` returned invalid for X behind the `consumeFor`.
-    function test_singleTxRideByHostileSessionKeyContract_isRefused() public {
+    /// @dev The ride now RUNS - the rogue own-arbiter pre-claim burns, its registered X executes,
+    ///      and order N settles - but it is exactly ONE transaction and ONE Permit2 order. X is no
+    ///      more than the session key could run in any single use; order N is the settlement the
+    ///      session signed. Nothing rides beyond it: a later transaction and a second Permit2 order
+    ///      are both refused.
+    function test_singleTxRide_yieldsOneTransactionOneOrder() public {
         bytes memory cd = _preparePermit2Settlement();
 
-        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _ride(_rogueOps(true), cd);
 
-        assertFalse(_burned(), "nothing burned");
-        assertTrue(MockTarget(address(env.target)).param() != 777, "X never executed");
-        assertFalse(_nonceBurned(NONCE), "order N never settled");
-        assertFalse(
-            IPermit2IntentExecutor(address(env.intentExecutor))
-                .isPermit2IntentNonceConsumed(NONCE, env.smartAccount1.account),
-            "the executor nonce was not consumed"
-        );
+        assertTrue(_burned(), "the rogue pre-claim burned");
+        assertTrue(_nonceBurned(NONCE), "order N settled once");
+        assertEq(MockTarget(address(env.target)).param(), 777, "X ran - one session use");
+
+        // A later transaction is refused (durable spend set, no marker).
+        vm.expectRevert();
+        _settleViaExecutor(0, 555);
+        assertTrue(MockTarget(address(env.target)).param() != 555, "no later transaction");
+
+        // And a second Permit2 order is refused: its pre-claim's burn hits the durable spend.
+        _useNonce(NONCE + 1);
+        bytes memory second = _preparePermit2Settlement();
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), second);
+        assertFalse(_nonceBurned(NONCE + 1), "no second Permit2 order");
     }
 
-    /// @dev CONTROL: the honest settlement of the same order N still lands after the refusal,
-    ///      so the refusal above is the ride's, not the harness's.
-    function test_control_honestSettlementOfOrderNStillLands() public {
+    /// @dev A SECOND `consumeFor` in the rogue batch - a second Permit2 order in one transaction -
+    ///      is refused at validation: the second burn hits the durable spend the first just set, so
+    ///      the whole pre-claim validates FALSE, rolls back the first burn, and nothing settles.
+    function test_secondOrderInTheSameTransaction_isRefused() public {
         bytes memory cd = _preparePermit2Settlement();
 
-        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
-        _ride(_rogueOps(true), cd);
+        vm.expectRevert();
+        _ride(_rogueOpsTwoOrders(), cd);
+
+        assertFalse(_burned(), "the rolled-back burn spent nothing");
+        assertFalse(_nonceBurned(NONCE), "no order settled");
+    }
+
+    /// @dev CONTROL: order N settles honestly on its own, so the "no second order" refusal above is
+    ///      the single-use guarantee spent by the ride, not the harness being unable to settle N.
+    function test_control_honestSettlementOfOrderNLands() public {
+        bytes memory cd = _preparePermit2Settlement();
 
         _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
 
@@ -189,18 +224,25 @@ contract OneTimeUseIdRideSingleTx_Test is OneTimeUseIdE2E_Base {
         assertTrue(MockTarget(address(env.target)).param() != 777, "still nothing else");
     }
 
-    /// @dev The wrap does not smuggle X in beside it.
-    function test_rideCarryingAWrapAndX_isRefused() public {
+    /// @dev A wrap AND X both ride the burn (both are registered), and it is still one transaction,
+    ///      one order: the wrap moves the account's own native into its own WETH, X runs once,
+    /// order N settles once. No second order, no later transaction.
+    function test_rideCarryingAWrapAndX_yieldsOneTransactionOneOrder() public {
         vm.deal(env.smartAccount1.account, 10 ether);
         bytes memory cd = _preparePermit2Settlement();
 
-        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _ride(_rogueOps(true, true), cd);
 
-        assertFalse(_burned(), "nothing burned");
-        assertEq(env.weth.balanceOf(env.smartAccount1.account), 0, "no wrap");
-        assertTrue(MockTarget(address(env.target)).param() != 777, "X never executed");
-        assertFalse(_nonceBurned(NONCE), "order N never settled");
+        assertTrue(_burned(), "the rogue pre-claim burned");
+        assertTrue(_nonceBurned(NONCE), "order N settled once");
+        assertEq(env.weth.balanceOf(env.smartAccount1.account), 10 ether, "the wrap ran");
+        assertEq(MockTarget(address(env.target)).param(), 777, "X ran once");
+
+        _useNonce(NONCE + 1);
+        bytes memory second = _preparePermit2Settlement();
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), second);
+        assertFalse(_nonceBurned(NONCE + 1), "no second Permit2 order");
     }
 
     /// @dev The accepted residual: a rogue pre-claim that ONLY burns still nominates order N, and

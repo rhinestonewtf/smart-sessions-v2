@@ -25,7 +25,10 @@ contract OneTimeUseIdGasStarve_Test is OneTimeUseIdE2E_Base {
         return abi.encodeCall(
             MockAdapter.mock_permit2_handleClaim,
             (MockAdapter.ClaimDataPermit2({
-                    order: order, userSigs: Types.Signatures($intent.userEmissarySig, "")
+                    order: order,
+                    userSigs: Types.Signatures({
+                        notarizedClaimSig: $intent.userEmissarySig, preClaimSig: _emissarySig()
+                    })
                 }))
         );
     }

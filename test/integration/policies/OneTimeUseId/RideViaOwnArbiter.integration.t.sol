@@ -37,7 +37,13 @@ contract OneTimeUseIdRideViaOwnArbiter_Test is OneTimeUseIdE2E_Base {
         return (env.permit2.nonceBitmap($intent.sponsor, nonce >> 8) >> (nonce & 0xff)) & 1 == 1;
     }
 
-    function test_ownArbiterPreClaimWithX_isRefused() public {
+    /// @dev A standalone own-arbiter pre-claim in ONE transaction burns and runs its registered X -
+    ///      that is one session use, all the hostile key ever had - and its nomination is
+    /// transient. A SEPARATE-transaction settlement of the same order cannot ride it: the
+    /// nomination did
+    ///      not cross the boundary and the id is already burned, so the claim is refused. The key
+    ///      cannot pre-authorise a later settlement.
+    function test_ownArbiterPreClaimBurnsAndRunsXButCannotPreAuthoriseALaterSettlement() public {
         _enableSession(true);
         _useNonce(4242);
 
@@ -56,7 +62,6 @@ contract OneTimeUseIdRideViaOwnArbiter_Test is OneTimeUseIdE2E_Base {
         bytes memory sig = _emissarySig();
 
         vm.prank(makeAddr("attackerArbiter"));
-        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         IPermit2IntentExecutor(address(env.intentExecutor))
             .executePreClaimOpsWithPermit2Stub(
                 env.smartAccount1.account,
@@ -68,12 +73,13 @@ contract OneTimeUseIdRideViaOwnArbiter_Test is OneTimeUseIdE2E_Base {
                 sig
             );
 
-        assertFalse(_burned(), "settlement 1 burned nothing");
-        assertTrue(MockTarget(address(env.target)).param() != 777, "and executed nothing");
+        assertTrue(_burned(), "the own-arbiter pre-claim burned - one session use");
+        assertEq(MockTarget(address(env.target)).param(), 777, "and its registered X ran");
 
-        // The real arbiter's settlement of order N is then just the honest settlement.
-        _claim(block.chainid, abi.encodePacked(env.solver.addr), _preparePermit2Settlement());
-        assertTrue(_burned(), "the honest pre-claim burned");
-        assertTrue(_nonceBurned(4242), "and settled once");
+        // A separate-transaction settlement of order 4242 cannot ride the transient nomination.
+        bytes memory cd = _preparePermit2Settlement();
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
+        assertFalse(_nonceBurned(4242), "no settlement rode a nomination from an earlier tx");
     }
 }

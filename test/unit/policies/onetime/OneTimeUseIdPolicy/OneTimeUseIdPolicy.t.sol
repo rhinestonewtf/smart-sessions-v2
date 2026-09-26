@@ -33,7 +33,8 @@ contract MockPermit2NonceExecutor {
 /// @notice Base contract for OneTimeUseIdPolicy unit tests. Every session in this fixture is
 ///         installed on every action it permits, so `cfgA`/`cfgB` stand in for two action slots
 ///         of the SAME session sharing one spend, while `ID_A`/`ID_B` stand in for two DIFFERENT
-///         sessions on the same account.
+///         sessions on the same account. The burn is `checkAction` validating the session's own
+///         burn op; `_execConsume`/`_execConsumeFor` are the account executing that op afterwards.
 abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
     /*//////////////////////////////////////////////////////////////
                                CONSTANTS
@@ -42,8 +43,7 @@ abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
     uint256 internal constant SUCCESS = VALIDATION_SUCCESS;
     uint256 internal constant FAILED = VALIDATION_FAILED;
 
-    /// @dev The real Permit2 deployment address. The policy tells the settling ERC-1271 check
-    ///      apart from the pre-claim one purely by whether the caller is this address.
+    /// @dev The real Permit2 deployment address, the only ERC-1271 caller the policy answers
     address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     ConfigId internal cfgA = ConfigId.wrap(keccak256("session.A"));
@@ -68,7 +68,7 @@ abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
     address internal multiplexer;
     address internal account;
 
-    /// @dev Stands in for the executor's pre-claim ERC-1271 call, which arrives before the burn
+    /// @dev Stands in for the executor's ERC-1271 call, which the policy refuses
     address internal executor;
 
     /// @dev The id pinned under each config, so a settlement batch can lead with its own burn
@@ -127,26 +127,39 @@ abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
         return _validatePlain(cfg);
     }
 
-    /// @notice The action surface's check of the session's own burn, which leads every batch
+    /// @notice The action surface's check of the session's own `consume`, which IS the burn
     function _validateBurn(ConfigId cfg) internal returns (uint256) {
         return _checkAction(cfg, address(policy), abi.encodeCall(policy.consume, (pinnedId[cfg])));
     }
 
-    /// @notice A plain, self-call-free execution against `cfg`, with no burn validated before it
+    /// @notice The action surface's check of the session's own `consumeFor`, which burns AND
+    ///         nominates the settlement identified by `witness`
+    function _validateBurnFor(ConfigId cfg, uint256 witness) internal returns (uint256) {
+        return _checkAction(
+            cfg, address(policy), abi.encodeCall(policy.consumeFor, (pinnedId[cfg], witness))
+        );
+    }
+
+    /// @notice A plain, self-call-free execution against `cfg`
     function _validatePlain(ConfigId cfg) internal returns (uint256) {
         return _checkAction(cfg, address(0), "");
     }
 
-    /// @notice The account burns `id`, nominating no settlement
-    function _consume(uint256 id) internal {
+    /// @notice The account executing its `consume` op
+    function _execConsume(uint256 id) internal {
         vm.prank(account);
         policy.consume(id);
     }
 
-    /// @notice The account burns `id`, nominating the settlement identified by `witness`
-    function _consumeFor(uint256 id, uint256 witness) internal {
+    /// @notice The account executing its `consumeFor` op
+    function _execConsumeFor(uint256 id, uint256 witness) internal {
         vm.prank(account);
         policy.consumeFor(id, witness);
+    }
+
+    /// @notice Whether the id is burned under the multiplexer of this fixture
+    function _burned(uint256 id) internal view returns (bool) {
+        return policy.isUsed(multiplexer, account, id);
     }
 
     /// @notice A claim blob shaped like `Permit2ClaimPolicy`'s: arbiter(20) . nonce(32) .
@@ -155,8 +168,8 @@ abstract contract OneTimeUseIdPolicy_Unit_Test is Test {
         return abi.encodePacked(address(0xA4B17E4), bytes32(nonce), bytes32(uint256(99)));
     }
 
-    /// @notice The pre-claim ERC-1271 check, which runs before the burn
-    function _preClaimCheck(ConfigId cfg, uint256 nonce) internal returns (bool) {
+    /// @notice The executor's ERC-1271 check, which the policy refuses
+    function _executorCheck(ConfigId cfg, uint256 nonce) internal returns (bool) {
         vm.prank(multiplexer);
         return policy.check1271SignedAction(cfg, executor, account, bytes32(0), _blob(nonce));
     }

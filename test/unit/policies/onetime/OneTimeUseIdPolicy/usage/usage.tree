@@ -3,7 +3,8 @@ OneTimeUseIdPolicy::usage
 │   └── it should return pinned = 0, consumed = false
 ├── given the configId is initialized and unburned
 │   └── it should return the pinned id, consumed = false
-├── given the pinned id has been burned
-│   └── it should return the pinned id, consumed = true
+├── given the pinned id has been burned under this multiplexer
+│   ├── it should return the pinned id, consumed = true
+│   └── it should return consumed = false for another multiplexer
 └── given a deadline is pinned
     └── it should return the deadline alongside the id and spend

@@ -110,17 +110,25 @@ contract OneTimeUseIdWitnessForgery_Test is OneTimeUseIdE2E_Base {
         assertFalse(_nonceBurned(4242), "the ride is refused: no second spend");
     }
 
-    /// @dev The executor route cannot even execute anything behind the forged nomination: a
-    ///      `consumeFor` batch is bounded to the burn (and Permit2 approvals) on every route.
-    function test_theExecutorRouteCannotExecuteBehindAConsumeFor() public {
+    /// @dev A registered op DOES run behind the executor-route `consumeFor` (burn-at-validation
+    ///      bounds repetition, not batch content), but the forged nomination still buys nothing:
+    /// the starved Permit2 settlement on that nonce is refused because its own pre-claim never
+    ///      consumed the nonce. So the ride is: one executor use, one forged nomination that
+    /// carries no Permit2 order.
+    function test_theExecutorRouteRunsXButTheForgedNominationCarriesNothing() public {
         _enableSession(true);
         _useNonce(4242);
 
-        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _settleViaExecutorNominating({ executorNonce: 0, forgedWitness: 4242, withX: true });
 
-        assertFalse(_burned(), "refused at validation, nothing burned");
-        assertTrue(env.target.param() != 42, "and nothing executed");
+        assertTrue(_burned(), "the executor settlement burned the id once");
+        assertEq(env.target.param(), 42, "and the registered op ran - one session use");
+
+        bytes memory cd = _prepareStarved();
+        vm.expectRevert();
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), cd);
+
+        assertFalse(_nonceBurned(4242), "the forged nomination carries no Permit2 order");
     }
 
     /// @dev The same attack with the witness NOT matching is refused, so the settlement above

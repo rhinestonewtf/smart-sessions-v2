@@ -6,8 +6,9 @@ import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 
 /// @title One Time Use Id Storage Library
 /// @author Rhinestone
-/// @notice Namespaced storage for OneTimeUseIdPolicy: the pinned id per configuration, the spend
-/// per (id, account), and the transient per-settlement nomination.
+/// @notice Namespaced storage for OneTimeUseIdPolicy: the pinned id per configuration, the durable
+///         spend per (multiplexer, account, id), and the transient per-transaction records the
+///         burn's validation leaves behind.
 library OneTimeUseIdStorageLib {
     /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.pin") - 1
     bytes32 internal constant PIN_POSITION =
@@ -21,9 +22,17 @@ library OneTimeUseIdStorageLib {
     bytes32 internal constant NOMINATION_POSITION =
         bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.nomination")) - 1);
 
-    /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.burnApproved") - 1
-    bytes32 internal constant BURN_APPROVED_POSITION =
-        bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.burnApproved")) - 1);
+    /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.burnedInTx") - 1
+    bytes32 internal constant BURNED_IN_TX_POSITION =
+        bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.burnedInTx")) - 1);
+
+    /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.validated") - 1
+    bytes32 internal constant VALIDATED_POSITION =
+        bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.validated")) - 1);
+
+    /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.refundCallback") - 1
+    bytes32 internal constant REFUND_CALLBACK_POSITION =
+        bytes32(uint256(keccak256("rhinestone.storage.OneTimeUseIdPolicy.refundCallback")) - 1);
 
     /// @dev Nomination value meaning no settlement was nominated in this transaction
     uint256 internal constant NOT_NOMINATED = 0;
@@ -31,17 +40,15 @@ library OneTimeUseIdStorageLib {
     /// @dev Deadline value meaning the pinned id never expires
     uint256 internal constant NO_DEADLINE = 0;
 
-    /// @dev Burn-approved values: none this transaction, a `consume`, or a `consumeFor`
+    /// @dev Burn kinds: none, a `consume`, or a `consumeFor`
     uint256 internal constant BURN_NONE = 0;
     uint256 internal constant BURN_CONSUME = 1;
     uint256 internal constant BURN_CONSUME_FOR = 2;
 
-    /// @dev Zero id means "not configured"; zero deadline means "never expires"; zero
-    ///      wrappedNative means "no wrap may run behind a consumeFor"
+    /// @dev Zero id means "not configured"; zero deadline means "never expires"
     struct PinStorage {
         uint256 id;
         uint256 deadline;
-        address wrappedNative;
     }
 
     struct SpendStorage {
@@ -69,19 +76,20 @@ library OneTimeUseIdStorageLib {
         }
     }
 
-    /// @notice The spend record for an (id, account). Not keyed by configId so it is reachable from
-    ///         `consume` (called by the account, which knows no configId) and shared across a
-    ///         session's policy surfaces, which SmartSessions gives distinct configIds.
+    /// @notice The durable spend for (multiplexer, account, id). Keyed by the multiplexer because
+    ///         `checkAction` is permissionless: anyone can pin the account's id under their own
+    ///         address and "burn" it there, which must not touch the record the real multiplexer
+    ///         reads. Not keyed by configId so every action slot of one session shares one spend.
     function spendRecord(
-        uint256 id,
-        address account
+        address multiplexer,
+        address account,
+        uint256 id
     )
         internal
         pure
         returns (SpendStorage storage $)
     {
-        bytes32 slot =
-            EfficientHashLib.hash(SPEND_POSITION, bytes32(id), bytes32(uint256(uint160(account))));
+        bytes32 slot = _key(SPEND_POSITION, multiplexer, account, id);
         assembly {
             $.slot := slot
         }
@@ -102,60 +110,135 @@ library OneTimeUseIdStorageLib {
         if (value == NOT_NOMINATED) value = 1;
     }
 
-    /// @notice Records the nomination for an (id, account) in transient storage
-    function setNomination(uint256 id, address account, uint256 value) internal {
-        bytes32 slot = EfficientHashLib.hash(
-            NOMINATION_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
-        );
+    /// @notice Records, for this transaction, the settlement the burn of `id` nominated
+    function setNomination(
+        address multiplexer,
+        address account,
+        uint256 id,
+        uint256 value
+    )
+        internal
+    {
+        bytes32 slot = _key(NOMINATION_POSITION, multiplexer, account, id);
         assembly ("memory-safe") {
             tstore(slot, value)
         }
     }
 
-    /// @notice The nomination recorded for an (id, account) in this transaction
-    function nomination(uint256 id, address account) internal view returns (uint256 value) {
-        bytes32 slot = EfficientHashLib.hash(
-            NOMINATION_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
-        );
+    /// @notice The nomination the burn of `id` recorded in this transaction, or NOT_NOMINATED
+    function nomination(
+        address multiplexer,
+        address account,
+        uint256 id
+    )
+        internal
+        view
+        returns (uint256 value)
+    {
+        bytes32 slot = _key(NOMINATION_POSITION, multiplexer, account, id);
         assembly ("memory-safe") {
             value := tload(slot)
         }
     }
 
-    /// @notice Marks, for this transaction, that the session's burn of `id` passed validation under
-    ///         `multiplexer`, and which burn it was. A `consumeFor` is never downgraded by a later
-    ///         `consume` in the same transaction.
-    function approveBurn(address multiplexer, uint256 id, address account, uint256 kind) internal {
-        bytes32 slot = EfficientHashLib.hash(
-            BURN_APPROVED_POSITION,
-            bytes32(uint256(uint160(multiplexer))),
-            bytes32(uint256(uint160(account))),
-            bytes32(id)
-        );
+    /// @notice Marks, for this transaction, that the session's burn of `id` was validated under
+    ///         `multiplexer`, and which burn it was
+    function setBurnedInTx(
+        address multiplexer,
+        address account,
+        uint256 id,
+        uint256 kind
+    )
+        internal
+    {
+        bytes32 slot = _key(BURNED_IN_TX_POSITION, multiplexer, account, id);
         assembly ("memory-safe") {
-            if lt(tload(slot), kind) { tstore(slot, kind) }
+            tstore(slot, kind)
         }
     }
 
-    /// @notice Which of the session's burns of `id` passed validation under `multiplexer` earlier
-    ///         in this transaction: BURN_NONE, BURN_CONSUME or BURN_CONSUME_FOR
-    function burnApproved(
+    /// @notice Which burn of `id` was validated under `multiplexer` earlier in this transaction:
+    ///         BURN_NONE, BURN_CONSUME or BURN_CONSUME_FOR
+    function burnedInTx(
         address multiplexer,
-        uint256 id,
-        address account
+        address account,
+        uint256 id
     )
         internal
         view
-        returns (uint256 approved)
+        returns (uint256 kind)
     {
+        bytes32 slot = _key(BURNED_IN_TX_POSITION, multiplexer, account, id);
+        assembly ("memory-safe") {
+            kind := tload(slot)
+        }
+    }
+
+    /// @notice Marks, for this transaction, that a gas-refund callback op was admitted under
+    ///         `multiplexer` for (account, id). The Paymaster settles one refund per executor call
+    ///         against the allowance that op sets, so the policy admits it once per transaction.
+    function setRefundCallbackSeen(address multiplexer, address account, uint256 id) internal {
+        bytes32 slot = _key(REFUND_CALLBACK_POSITION, multiplexer, account, id);
+        assembly ("memory-safe") {
+            tstore(slot, 1)
+        }
+    }
+
+    /// @notice Whether a gas-refund callback op was already admitted in this transaction
+    function refundCallbackSeen(
+        address multiplexer,
+        address account,
+        uint256 id
+    )
+        internal
+        view
+        returns (bool seen)
+    {
+        bytes32 slot = _key(REFUND_CALLBACK_POSITION, multiplexer, account, id);
+        assembly ("memory-safe") {
+            seen := tload(slot)
+        }
+    }
+
+    /// @notice Marks, for this transaction, that SOME `checkAction` validated a burn of `id` for
+    ///         `account`. Read by the execution-time `consume`/`consumeFor`, which know the account
+    ///         (their caller) but not the multiplexer. Not multiplexer-keyed, so a third party's
+    ///         own `checkAction` can set it; that only lets the executed op run, and the executed
+    ///         op writes nothing.
+    function setValidated(address account, uint256 id) internal {
         bytes32 slot = EfficientHashLib.hash(
-            BURN_APPROVED_POSITION,
+            VALIDATED_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+        );
+        assembly ("memory-safe") {
+            tstore(slot, 1)
+        }
+    }
+
+    /// @notice Whether a burn of `id` for `account` passed validation in this transaction
+    function validated(address account, uint256 id) internal view returns (bool yes) {
+        bytes32 slot = EfficientHashLib.hash(
+            VALIDATED_POSITION, bytes32(uint256(uint160(account))), bytes32(id)
+        );
+        assembly ("memory-safe") {
+            yes := tload(slot)
+        }
+    }
+
+    function _key(
+        bytes32 position,
+        address multiplexer,
+        address account,
+        uint256 id
+    )
+        private
+        pure
+        returns (bytes32)
+    {
+        return EfficientHashLib.hash(
+            position,
             bytes32(uint256(uint160(multiplexer))),
             bytes32(uint256(uint160(account))),
             bytes32(id)
         );
-        assembly ("memory-safe") {
-            approved := tload(slot)
-        }
     }
 }

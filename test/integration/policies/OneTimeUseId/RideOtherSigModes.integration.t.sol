@@ -106,13 +106,19 @@ contract OneTimeUseIdRideOtherSigModes_Test is OneTimeUseIdE2E_Base {
         _assertNothingHappened();
     }
 
-    function test_emissaryExecutionThenErc1271_refused() public {
+    /// @dev EMISSARYEXECUTION_ERC1271 tries `verifyExecution` FIRST, so it reaches `checkAction`
+    ///      just like EMISSARY_EXECUTION: the burn happens and the registered X runs. That is one
+    ///      session use, not a ride - it burns the id and nominates transiently, so no separate-tx
+    ///      settlement can ride it (see `RideViaOwnArbiter`). Only the pure-1271 and 1271-first
+    ///      modes above never reach `checkAction` and stay refused.
+    function test_emissaryExecutionThenErc1271_reachesCheckActionAndRunsOneUse() public {
         Types.Operation memory ops = _rogueOps(SmartExecutionLib.SigMode.EMISSARYEXECUTION_ERC1271);
         bytes memory sig = _emissarySig();
 
-        vm.expectRevert(ValidateSignature.InvalidSignature.selector);
         _roguePreClaim(ops, sig);
-        _assertNothingHappened();
+
+        assertTrue(_burned(), "the execution-emissary mode reached checkAction and burned");
+        assertEq(MockTarget(address(env.target)).param(), 777, "and its registered X ran once");
     }
 
     function test_erc1271ThenEmissary_refused() public {
