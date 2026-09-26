@@ -1,9 +1,11 @@
 OneTimeUseIdPolicy::consumeFor
-├── it should burn the id for the caller and record the witness's nomination
-├── given the id was already burned
-│   └── when consumeFor is called again
-│       └── it should not revert, and clear the nomination instead of reissuing it
-├── given a stranger calls with another account's id
-│   └── it should burn the stranger's own record and leave the account's untouched
-└── given a different id is burned
-    └── it should leave this id untouched
+├── given checkAction validated the caller's consumeFor in this transaction
+│   └── it should execute (the validation already burned and nominated)
+├── given no validation preceded it
+│   └── it should revert with BurnNotValidated, spending and nominating nothing
+├── given it executes with a witness other than the validated one
+│   └── it should not change the nomination
+├── given a stranger calls with the account's id
+│   └── it should revert with BurnNotValidated
+└── given the caller's validation named a different id
+    └── it should revert with BurnNotValidated

@@ -12,156 +12,128 @@ import {
 import { OneTimeUseIdPolicy } from "@policies/onetime/OneTimeUseIdPolicy.sol";
 
 // Interfaces
-import { IOneTimeUseIdPolicy } from "@policies/onetime/interfaces/IOneTimeUseIdPolicy.sol";
 import { ISignatureTransfer } from "permit2/src/interfaces/ISignatureTransfer.sol";
 
 // Types
 import { ConfigId } from "@smartsessions/DataTypes.sol";
 
 /// @title OneTimeUseIdPolicy.check1271SignedAction Unit Tests
-/// @notice Unit tests for the check1271SignedAction function. The two checks of one settlement
-///         arrive from DIFFERENT callers and are treated differently:
-///
-///           pre-claim check  <- the executor : runs BEFORE the burn, so it can only ask
-///                                              "is this unspent?"
-///           settling check  <- Permit2       : runs AFTER the burn and moves the money, so it
-///                                              demands proof that THIS settlement performed it
+/// @notice The settling check, from Permit2, demands the nomination this transaction's burn
+///         recorded for the presented nonce. Every other caller - the executor included - is
+///         refused: an ERC-1271 validation carries no burn.
 contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
     /*//////////////////////////////////////////////////////////////
                                  SCOPING
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Test an unconfigured configId fails closed on both callers
+    /// @notice Test an unconfigured configId fails closed
     function test_check1271SignedAction_unconfigured_returnsFalse() external {
         ConfigId never = ConfigId.wrap(keccak256("never"));
 
-        assertFalse(_settlingCheck(never, WITNESS_1), "fails closed for the settling caller");
-        assertFalse(_preClaimCheck(never, WITNESS_1), "and for the pre-claim caller");
+        assertFalse(_settlingCheck(never, WITNESS_1));
     }
 
     /*//////////////////////////////////////////////////////////////
-                    THE PRE-CLAIM CHECK - FROM THE EXECUTOR
+                       EVERY NON-PERMIT2 CALLER IS REFUSED
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Test the pre-claim check passes while the id is unburned
-    function test_check1271SignedAction_preClaim_unburned_returnsTrue() external {
-        assertTrue(_preClaimCheck(cfgA, WITNESS_1), "pre-claim, nothing burned yet");
+    /// @notice Test the executor's ERC-1271 read is refused, burn or no burn
+    function test_check1271SignedAction_executorCaller_returnsFalse() external {
+        assertFalse(_executorCheck(cfgA, WITNESS_1), "unburned: refused");
+
+        _validateBurnFor(cfgA, WITNESS_1);
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "the same blob settles for Permit2");
+        assertFalse(_executorCheck(cfgA, WITNESS_1), "burned and nominated: still refused");
+    }
+
+    /// @notice Test a caller that is neither Permit2 nor the executor (e.g. the Compact route) is
+    ///         refused
+    function test_check1271SignedAction_unknownCaller_failsClosed() external {
+        _validateBurnFor(cfgA, WITNESS_1);
+
+        vm.prank(multiplexer);
+        assertFalse(
+            policy.check1271SignedAction(
+                cfgA, makeAddr("theCompact"), account, bytes32(0), _blob(WITNESS_1)
+            )
+        );
     }
 
     /*//////////////////////////////////////////////////////////////
                        THE SETTLING CHECK - PROOF REQUIRED
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Test the honest path: pre-claim passes, the burn happens, then the settling check
+    /// @notice Test the honest path: the pre-claim's consumeFor is validated (burn + nomination),
+    ///         then the settling check presents the same nonce
     function test_check1271SignedAction_honestSettlement_completes() external {
-        assertTrue(_preClaimCheck(cfgA, WITNESS_1), "pre-claim, nothing burned yet");
-
-        _consumeFor(ID_A, WITNESS_1);
+        assertEq(_validateBurnFor(cfgA, WITNESS_1), SUCCESS, "the pre-claim burned");
 
         assertTrue(_settlingCheck(cfgA, WITNESS_1), "settling check, proof presented");
     }
 
-    /// @notice Test the settling check accepts proof from its own burn in the same transaction
-    function test_check1271SignedAction_settlingCheck_acceptsProofFromItsOwnBurn() external {
-        _consumeFor(ID_A, WITNESS_1);
-
-        assertTrue(
-            _settlingCheck(cfgA, WITNESS_1), "a settlement must not be refused by its own burn"
-        );
-    }
-
-    /// @notice Test a nomination cannot carry a Permit2 settlement whose own pre-claim never ran: a
-    ///         burn nominating the nonce elsewhere (the executor route) leaves it unconsumed
+    /// @notice Test a nomination cannot carry a Permit2 settlement whose own pre-claim never ran
     function test_check1271SignedAction_nominationWithoutItsPreClaim_returnsFalse() external {
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurnFor(cfgA, WITNESS_1);
         MockPermit2NonceExecutor(executor).setUnconsumed(WITNESS_1);
 
-        assertFalse(
-            _settlingCheck(cfgA, WITNESS_1), "the order's own pre-claim never consumed its nonce"
-        );
-    }
-
-    /// @notice Test the executor's read refuses a nonce no pre-claim consumed, so an
-    ///         executor-originated validation that is not the order's pre-claim is refused
-    function test_check1271SignedAction_preClaim_unconsumedNonce_returnsFalse() external {
-        MockPermit2NonceExecutor(executor).setUnconsumed(WITNESS_1);
-
-        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "no pre-claim consumed this nonce");
-    }
-
-    /// @notice Test the executor's read refuses a blob too short to carry a nonce
-    function test_check1271SignedAction_preClaim_shortBlob_returnsFalse() external {
-        vm.prank(multiplexer);
-        assertFalse(
-            policy.check1271SignedAction(cfgA, executor, account, bytes32(0), hex"00"),
-            "no nonce, no read"
-        );
-    }
-
-    /// @notice Test the pre-claim read refuses once the id is burned
-    function test_check1271SignedAction_preClaim_burned_returnsFalse() external {
-        _consume(ID_A);
-
-        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "a spent id reads as spent");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "the order's own pre-claim never ran");
     }
 
     /// @notice Test a signature too short to carry a nonce is refused
     function test_check1271SignedAction_shortBlobIsRefused() external {
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurnFor(cfgA, WITNESS_1);
 
         vm.prank(multiplexer);
-        assertFalse(
-            policy.check1271SignedAction(cfgA, PERMIT2, account, bytes32(0), hex"1234"),
-            "a blob too short to carry a nonce cannot prove anything"
-        );
+        assertFalse(policy.check1271SignedAction(cfgA, PERMIT2, account, bytes32(0), hex"1234"));
     }
 
     /// @notice Test a second settlement cannot ride the first settlement's burn
     function test_check1271SignedAction_secondSettlementCannotRideTheFirstsBurn() external {
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurnFor(cfgA, WITNESS_1);
         assertTrue(_settlingCheck(cfgA, WITNESS_1), "settlement one completes");
 
-        // Settlement two, different nonce, same transaction, never calls consumeFor itself.
         assertFalse(_settlingCheck(cfgA, WITNESS_2), "settlement two cannot ride it");
     }
 
-    /// @notice Test re-consuming an already-burned id clears the nomination instead of reissuing it
-    function test_check1271SignedAction_secondSettlementCannotRenominateItself() external {
-        _consumeFor(ID_A, WITNESS_1);
-        _consumeFor(ID_A, WITNESS_2);
+    /// @notice Test a second settlement cannot nominate itself: its burn is refused at validation
+    function test_check1271SignedAction_secondSettlementCannotNominateItself() external {
+        _validateBurnFor(cfgA, WITNESS_1);
+        assertEq(_validateBurnFor(cfgA, WITNESS_2), FAILED, "the second burn is refused");
 
-        assertFalse(_settlingCheck(cfgA, WITNESS_2), "a repeat consumeFor nominates nothing");
-        assertFalse(_settlingCheck(cfgA, WITNESS_1), "and revokes the original nomination");
+        assertFalse(_settlingCheck(cfgA, WITNESS_2), "so it has no nomination");
+        assertTrue(_settlingCheck(cfgA, WITNESS_1), "and the first keeps its own");
     }
 
-    /// @notice Test a settlement that never performs its burn cannot settle
+    /// @notice Test a settlement whose burn was never validated cannot settle
     function test_check1271SignedAction_skippedBurnCannotSettle() external {
-        assertTrue(_preClaimCheck(cfgA, WITNESS_1), "the pre-claim check still passes");
-
-        // ...and then the burn never happens.
-
-        assertFalse(_settlingCheck(cfgA, WITNESS_1), "so the settlement cannot complete");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1));
     }
 
     /// @notice Test a burn nominating a different settlement's witness does not count
     function test_check1271SignedAction_burnNominatingAnotherSettlementDoesNotCount() external {
-        _consumeFor(ID_A, WITNESS_2);
+        _validateBurnFor(cfgA, WITNESS_2);
 
         assertFalse(_settlingCheck(cfgA, WITNESS_1), "the nomination must name THIS settlement");
     }
 
-    /// @notice Test a caller that is neither Permit2 nor the executor is refused while unspent
-    function test_check1271SignedAction_unknownCaller_failsClosed() external {
-        address compact = makeAddr("theCompact");
-        // A matching nomination is live, so only the caller check can refuse.
-        _consumeFor(ID_A, WITNESS_1);
-        assertTrue(_settlingCheck(cfgA, WITNESS_1), "the same blob settles for Permit2");
+    /// @notice Test a plain consume nominates nothing, so no Permit2 order settles on it
+    function test_check1271SignedAction_consumeNominatesNothing() external {
+        _validateBurn(cfgA);
 
-        vm.prank(multiplexer);
-        assertFalse(
-            policy.check1271SignedAction(cfgA, compact, account, bytes32(0), _blob(WITNESS_1)),
-            "an unknown route (e.g. Compact) must fail closed even while unspent"
+        assertFalse(_settlingCheck(cfgA, WITNESS_1));
+    }
+
+    /// @notice Test a nomination under another multiplexer does not settle here
+    function test_check1271SignedAction_nominationUnderAnotherMultiplexer_returnsFalse() external {
+        address other = makeAddr("otherMultiplexer");
+        vm.prank(other);
+        policy.initializeWithMultiplexer(account, cfgA, abi.encodePacked(bytes32(ID_A), bytes32(0)));
+        vm.prank(other);
+        policy.checkAction(
+            cfgA, account, address(policy), 0, abi.encodeCall(policy.consumeFor, (ID_A, WITNESS_1))
         );
+
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "the real multiplexer sees no nomination");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -170,16 +142,16 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
 
     /// @notice Test Permit2 nonce zero is a valid settlement witness
     function test_check1271SignedAction_permit2NonceZero_canSettle() external {
-        _consumeFor(ID_A, 0);
+        _validateBurnFor(cfgA, 0);
 
-        assertTrue(_settlingCheck(cfgA, 0), "nonce zero is a valid settlement");
+        assertTrue(_settlingCheck(cfgA, 0));
     }
 
     /// @notice Test the max uint256 nonce is a valid settlement witness
     function test_check1271SignedAction_maxNonce_canSettle() external {
-        _consumeFor(ID_A, type(uint256).max);
+        _validateBurnFor(cfgA, type(uint256).max);
 
-        assertTrue(_settlingCheck(cfgA, type(uint256).max), "the max nonce is a valid settlement");
+        assertTrue(_settlingCheck(cfgA, type(uint256).max));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -191,9 +163,9 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         vm.warp(1000);
         _install(cfgA, ID_A, block.timestamp + 1 hours);
 
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurnFor(cfgA, WITNESS_1);
 
-        assertTrue(_settlingCheck(cfgA, WITNESS_1), "a proven burn settles before the deadline");
+        assertTrue(_settlingCheck(cfgA, WITNESS_1));
     }
 
     /// @notice Test the settling check refuses a proven burn once the deadline has passed
@@ -201,24 +173,12 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         vm.warp(1000);
         _install(cfgA, ID_A, block.timestamp + 1 hours);
 
-        // The burn and its nomination are transient, so they must be established in the same
-        // transaction as the settling read; warp first, then burn, then settle.
-        vm.warp(block.timestamp + 1 hours + 1);
-        _consumeFor(ID_A, WITNESS_1);
-
-        assertFalse(
-            _settlingCheck(cfgA, WITNESS_1), "the deadline outranks a correctly proven burn"
-        );
-    }
-
-    /// @notice Test the executor's pre-claim check also refuses after the deadline
-    function test_check1271SignedAction_afterDeadline_refusesThePreClaimRead() external {
-        vm.warp(1000);
-        _install(cfgA, ID_A, block.timestamp + 1 hours);
-
+        // The nomination is transient, so burn first, then cross the deadline in the same
+        // transaction: the settling read must still refuse.
+        _validateBurnFor(cfgA, WITNESS_1);
         vm.warp(block.timestamp + 1 hours + 1);
 
-        assertFalse(_preClaimCheck(cfgA, WITNESS_1), "the pre-claim check is expired too");
+        assertFalse(_settlingCheck(cfgA, WITNESS_1), "the deadline outranks a proven burn");
     }
 
     /// @notice Test the deadline is inclusive on the settling surface
@@ -228,9 +188,9 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         _install(cfgA, ID_A, expiry);
 
         vm.warp(expiry);
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurnFor(cfgA, WITNESS_1);
 
-        assertTrue(_settlingCheck(cfgA, WITNESS_1), "valid in the block the deadline names");
+        assertTrue(_settlingCheck(cfgA, WITNESS_1));
     }
 
     /// @notice Test a zero deadline leaves the settling check unbounded in time
@@ -238,13 +198,13 @@ contract OneTimeUseIdPolicy_check1271SignedAction_Unit_Test is OneTimeUseIdPolic
         _install(cfgA, ID_A, NO_DEADLINE);
 
         vm.warp(block.timestamp + 3650 days);
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurnFor(cfgA, WITNESS_1);
 
-        assertTrue(_settlingCheck(cfgA, WITNESS_1), "zero means no expiry");
+        assertTrue(_settlingCheck(cfgA, WITNESS_1));
     }
 }
 
-/// @title The cross-transaction half of the settling check's tolerance
+/// @title The cross-transaction half of the settling check
 /// @notice Split into its own contract deliberately. Transient storage survives every call
 ///         inside one test body - a forge test body IS one transaction - but it IS cleared
 ///         between `setUp` and the body. Burning in `setUp` is therefore the only way to observe
@@ -269,16 +229,17 @@ contract OneTimeUseIdPolicy_check1271SignedAction_CrossTransaction_Unit_Test is 
         vm.prank(multiplexer);
         policy.initializeWithMultiplexer(account, cfg, abi.encodePacked(bytes32(ID), bytes32(0)));
 
-        vm.prank(account);
-        policy.consumeFor(ID, WITNESS);
+        vm.prank(multiplexer);
+        policy.checkAction(
+            cfg, account, address(policy), 0, abi.encodeCall(policy.consumeFor, (ID, WITNESS))
+        );
     }
 
     function _blob(uint256 nonce) internal pure returns (bytes memory) {
         return abi.encodePacked(address(0xA4B17E4), bytes32(nonce), bytes32(uint256(9)));
     }
 
-    /// @notice Test the same proof that was tolerated inside the burning transaction is refused
-    /// later
+    /// @notice Test the nomination does not survive into a later transaction
     function test_check1271SignedAction_crossTransactionBurnIsRefused() external {
         vm.prank(multiplexer);
         bool ok = policy.check1271SignedAction(cfg, PERMIT2, account, bytes32(0), _blob(WITNESS));

@@ -37,33 +37,15 @@ contract OneTimeUseIdPolicy_initializeWithMultiplexer_Unit_Test is OneTimeUseIdP
         );
     }
 
-    /// @notice Test a third word that is not a whole address is refused
-    function test_initializeWithMultiplexer_revertsWhen_wrappedNativeTruncated() external {
+    /// @notice Test the retired wrapped-native pin (a third, 20-byte word) is refused
+    function test_initializeWithMultiplexer_revertsWhen_trailingWordAppended() external {
         bytes memory initData =
-            abi.encodePacked(bytes32(ID_A), bytes32(NO_DEADLINE), bytes19(bytes20(address(1))));
+            abi.encodePacked(bytes32(ID_A), bytes32(NO_DEADLINE), makeAddr("weth"));
         vm.prank(multiplexer);
         vm.expectRevert(
-            abi.encodeWithSelector(IOneTimeUseIdPolicy.InvalidInitDataLength.selector, uint256(83))
+            abi.encodeWithSelector(IOneTimeUseIdPolicy.InvalidInitDataLength.selector, uint256(84))
         );
-        policy.initializeWithMultiplexer(account, ConfigId.wrap(keccak256("short.weth")), initData);
-    }
-
-    /// @notice Test a wrapped native pinned at install is what checkAction lets deposit() through
-    /// on
-    function test_initializeWithMultiplexer_pinsTheWrappedNative() external {
-        address weth = makeAddr("weth");
-        ConfigId cfg = ConfigId.wrap(keccak256("with.weth"));
-        vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(
-            account, cfg, abi.encodePacked(bytes32(ID_A), bytes32(NO_DEADLINE), weth)
-        );
-        pinnedId[cfg] = ID_A;
-        _checkAction(cfg, address(policy), abi.encodeCall(policy.consumeFor, (ID_A, WITNESS_1)));
-
-        vm.prank(multiplexer);
-        uint256 result =
-            policy.checkAction(cfg, account, weth, 1 ether, abi.encodeWithSignature("deposit()"));
-        assertEq(result, SUCCESS, "the pinned wrapped native may be deposited into");
+        policy.initializeWithMultiplexer(account, ConfigId.wrap(keccak256("with.weth")), initData);
     }
 
     /// @notice Test reverts when the id is zero
@@ -125,7 +107,9 @@ contract OneTimeUseIdPolicy_initializeWithMultiplexer_Unit_Test is OneTimeUseIdP
         address rogue = makeAddr("rogue");
 
         vm.prank(rogue);
-        uint256 result = policy.checkAction(cfgA, account, address(0), 0, "");
+        uint256 result = policy.checkAction(
+            cfgA, account, address(policy), 0, abi.encodeCall(policy.consume, (ID_A))
+        );
 
         assertEq(result, FAILED, "a different multiplexer has no configuration");
     }
@@ -138,15 +122,15 @@ contract OneTimeUseIdPolicy_initializeWithMultiplexer_Unit_Test is OneTimeUseIdP
     function test_initializeWithMultiplexer_reEnablingOnABurnedId_doesNotRestoreTheSpend()
         external
     {
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurn(cfgA);
         _install(cfgA, ID_A);
 
-        assertEq(_validate(cfgA), FAILED, "a stale pin denies");
+        assertEq(_validateBurn(cfgA), FAILED, "a stale pin cannot burn again");
     }
 
     /// @notice Test re-initializing with a fresh id settles again
     function test_initializeWithMultiplexer_reEnablingOnAFreshId_settlesAgain() external {
-        _consumeFor(ID_A, WITNESS_1);
+        _validateBurn(cfgA);
         _install(cfgA, ID_A + 99);
 
         assertEq(_validate(cfgA), SUCCESS, "a fresh pin is a fresh spend");

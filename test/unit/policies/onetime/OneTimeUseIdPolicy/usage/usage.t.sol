@@ -33,13 +33,22 @@ contract OneTimeUseIdPolicy_usage_Unit_Test is OneTimeUseIdPolicy_Unit_Test {
 
     /// @notice Test a burned id reports consumed = true alongside its pinned value
     function test_usage_burnedId_returnsConsumedTrue() external {
-        _consume(ID_A);
+        _validateBurn(cfgA);
 
         (uint256 pinned, bool consumed, uint256 deadline) = policy.usage(cfgA, multiplexer, account);
 
         assertEq(pinned, ID_A);
         assertTrue(consumed);
         assertEq(deadline, NO_DEADLINE);
+    }
+
+    /// @notice Test the spend is reported per multiplexer
+    function test_usage_burnedId_isPerMultiplexer() external {
+        _validateBurn(cfgA);
+
+        (, bool consumed,) = policy.usage(cfgA, makeAddr("otherMultiplexer"), account);
+
+        assertFalse(consumed, "another multiplexer never pinned nor burned");
     }
 
     /// @notice Test a configuration pinned with a deadline reports it back

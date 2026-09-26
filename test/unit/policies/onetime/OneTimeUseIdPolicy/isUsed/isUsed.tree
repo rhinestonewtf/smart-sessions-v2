@@ -1,7 +1,9 @@
 OneTimeUseIdPolicy::isUsed
-├── given the id has never been burned for the account
+├── given the id has never been burned for the account under the multiplexer
 │   └── it should return false
-├── given the id has been burned for the account
+├── given checkAction validated the burn under the multiplexer
 │   └── it should return true
+├── given the burn was validated under a different multiplexer
+│   └── it should return false
 └── given the burn happened in an earlier transaction
     └── it should still return true (the durable record survives)
