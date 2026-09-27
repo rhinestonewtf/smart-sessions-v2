@@ -89,14 +89,18 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
         // Setup: enable session for transfer on whitelisted target
         bytes memory initData = "";
         PermissionId pid = enableActionSession(
-            account, address(intentPolicy), initData, alice.addr, whitelistedTarget, transferSelector
+            account,
+            address(intentPolicy),
+            initData,
+            alice.addr,
+            whitelistedTarget,
+            transferSelector
         );
 
         // Create test digest and calldata
         bytes memory callData =
             abi.encodeWithSelector(transferSelector, address(0xBEEF), uint256(100));
-        bytes32 digest =
-            createTestDigest(account.account, whitelistedTarget, 0, callData, 1);
+        bytes32 digest = createTestDigest(account.account, whitelistedTarget, 0, callData, 1);
 
         // Validate
         bool valid = validateExecutionWithKey(
@@ -121,8 +125,7 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
         // Create test digest and calldata
         bytes memory callData =
             abi.encodeWithSelector(transferSelector, address(0xBEEF), uint256(100));
-        bytes32 digest =
-            createTestDigest(account.account, nonWhitelistedTarget, 0, callData, 1);
+        bytes32 digest = createTestDigest(account.account, nonWhitelistedTarget, 0, callData, 1);
 
         // Validate
         bool valid = validateExecutionWithKey(
@@ -146,8 +149,7 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
         // Create approve calldata with whitelisted address as spender
         bytes memory callData =
             abi.encodeWithSelector(approveSelector, whitelistedSpender, uint256(1000));
-        bytes32 digest =
-            createTestDigest(account.account, whitelistedTarget, 0, callData, 1);
+        bytes32 digest = createTestDigest(account.account, whitelistedTarget, 0, callData, 1);
 
         // Validate
         bool valid = validateExecutionWithKey(
@@ -174,8 +176,7 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
         address randomSpender = makeAddr("randomSpender");
         bytes memory callData =
             abi.encodeWithSelector(approveSelector, randomSpender, uint256(1000));
-        bytes32 digest =
-            createTestDigest(account.account, nonWhitelistedTarget, 0, callData, 1);
+        bytes32 digest = createTestDigest(account.account, nonWhitelistedTarget, 0, callData, 1);
 
         // Validate
         bool valid = validateExecutionWithKey(
@@ -193,13 +194,17 @@ contract IntentExecutionPolicy_Integration_Test is ActionPolicy_Integration_Test
         // Setup: enable session for alice
         bytes memory initData = "";
         PermissionId pid = enableActionSession(
-            account, address(intentPolicy), initData, alice.addr, whitelistedTarget, transferSelector
+            account,
+            address(intentPolicy),
+            initData,
+            alice.addr,
+            whitelistedTarget,
+            transferSelector
         );
 
         bytes memory callData =
             abi.encodeWithSelector(transferSelector, address(0xBEEF), uint256(100));
-        bytes32 digest =
-            createTestDigest(account.account, whitelistedTarget, 0, callData, 1);
+        bytes32 digest = createTestDigest(account.account, whitelistedTarget, 0, callData, 1);
 
         // Try to validate with bob's key
         bool valid = validateExecutionWithKey(

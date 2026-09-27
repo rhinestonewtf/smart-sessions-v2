@@ -76,7 +76,6 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
     // Gas refund params
     address constant GAS_TOKEN = Constants.NATIVE_TOKEN;
     uint256 constant MAX_GAS_REFUND = 0.1 ether;
-    uint256 constant EXCHANGE_RATE = 1e18; // 1:1 for native token
 
     // MockTarget params
     uint256 constant TARGET_PARAM_VALUE = 42;
@@ -108,8 +107,11 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         // Call Base_Test setup
         Base_Test.setUp();
 
-        // Redeploy SmartSessionEmissary with intentExecutor
-        smartSessionEmissary = new SmartSessionEmissary(address(ADDRESSBOOK));
+        // The IntentExecutor fixes its emissary at construction, so the emissary's code must live
+        // at that address for verifyExecution to reach the session policies.
+        SmartSessionEmissary emissary = new SmartSessionEmissary(address(ADDRESSBOOK));
+        vm.etch(address(env.emissary), address(emissary).code);
+        smartSessionEmissary = SmartSessionEmissary(address(env.emissary));
 
         // Setup lockTag
         testLockTag = env.lockTag;
@@ -155,11 +157,9 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         address solver = env.solver.addr;
         vm.prank(solver);
         env.intentExecutor
-            .executeSinglechainOpsWithGasRefund(
+            .executeSinglechainOpsWithGasRefund_ETH(
                 signedOps,
-                IStandaloneIntentExecutor.GasRefund({
-                    token: GAS_TOKEN, exchangeRate: EXCHANGE_RATE
-                }),
+                MAX_GAS_REFUND << 128, // no gas overhead; refund capped at MAX_GAS_REFUND
                 solver // gasRefundRecipient
             );
 
@@ -197,13 +197,7 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         vm.prank(solver);
         vm.expectRevert();
         env.intentExecutor
-            .executeSinglechainOpsWithGasRefund(
-                signedOps,
-                IStandaloneIntentExecutor.GasRefund({
-                    token: GAS_TOKEN, exchangeRate: EXCHANGE_RATE
-                }),
-                solver
-            );
+            .executeSinglechainOpsWithGasRefund_ETH(signedOps, MAX_GAS_REFUND << 128, solver);
     }
 
     /// @notice Test batch fails when callback maxAmount exceeds ArgPolicy limit
@@ -239,13 +233,7 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         vm.prank(solver);
         vm.expectRevert();
         env.intentExecutor
-            .executeSinglechainOpsWithGasRefund(
-                signedOps,
-                IStandaloneIntentExecutor.GasRefund({
-                    token: GAS_TOKEN, exchangeRate: EXCHANGE_RATE
-                }),
-                solver
-            );
+            .executeSinglechainOpsWithGasRefund_ETH(signedOps, MAX_GAS_REFUND << 128, solver);
     }
 
     /// @notice Test batch fails when callback uses wrong token
@@ -277,13 +265,7 @@ contract SmartSessionEmissary_StandaloneExecutor_Integration_Test is
         vm.prank(solver);
         vm.expectRevert();
         env.intentExecutor
-            .executeSinglechainOpsWithGasRefund(
-                signedOps,
-                IStandaloneIntentExecutor.GasRefund({
-                    token: GAS_TOKEN, exchangeRate: EXCHANGE_RATE
-                }),
-                solver
-            );
+            .executeSinglechainOpsWithGasRefund_ETH(signedOps, MAX_GAS_REFUND << 128, solver);
     }
 
     /*//////////////////////////////////////////////////////////////

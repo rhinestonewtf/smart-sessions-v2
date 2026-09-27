@@ -2536,7 +2536,8 @@ contract CompactClaimPolicy_check1271SignedAction_Test is CompactClaimPolicy_Uni
     }
 
     /// @notice Create Compact data with an expanded target (recipient == sponsor) plus destOps,
-    ///         matching a config that pairs per-chain destOps with the recipientIsSponsor target check.
+    ///         matching a config that pairs per-chain destOps with the recipientIsSponsor target
+    /// check.
     function _createCompactDataWithTargetAndDestOps(
         bytes32 destOpsHash,
         uint256 targetChainId
