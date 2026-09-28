@@ -9,6 +9,12 @@ import { EfficientHashLib } from "@solady/utils/EfficientHashLib.sol";
 /// @notice Namespaced storage for OneTimeUseIdPolicy: the pinned id per configuration, the durable
 ///         spend per (multiplexer, account, id), and the transient per-transaction records the
 ///         burn's validation leaves behind.
+/// @dev Keying. `checkAction` and `initializeWithMultiplexer` are permissionless, so the spend,
+///      the burn marker and the nomination are keyed by the multiplexer (msg.sender), and the
+///      policy's settling check reads under ITS msg.sender - the same SmartSession contract that
+///      validated the burn. The `validated` flag is the one exception: read by the executed
+///      `consume`/`consumeFor`, which know the account but not the multiplexer, so it is keyed by
+///      account alone and guards nothing.
 library OneTimeUseIdStorageLib {
     /// @dev keccak256("rhinestone.storage.OneTimeUseIdPolicy.pin") - 1
     bytes32 internal constant PIN_POSITION =
