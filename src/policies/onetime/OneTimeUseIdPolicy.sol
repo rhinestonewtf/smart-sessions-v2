@@ -21,20 +21,23 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///         burn happens when `checkAction` VALIDATES that op. Every later transaction is refused.
 ///
 /// @dev Validating the session's own burn writes the durable spend and marks this transaction as
-///      the burning one (transient). Every other op is admitted only while that marker is set, and
-///      a second burn is refused, so at most one `consumeFor` nomination - one Permit2 unlock -
-///      exists per transaction. The burn is written at validation, so a reverting execution rolls
-///      it back with the executor frame and the session stays retryable. CONTENT is bounded by the
-///      session's other action policies, never by this one.
+///      the burning one (transient). Every other op is admitted only while that marker is set, the
+///      gas-refund callback op at most once, and a second burn is refused, so at most one
+///      `consumeFor` nomination - one Permit2 unlock - exists per transaction. The burn stands or
+///      falls with the validating frame: where the executor bubbles a failed execution (the Permit2
+///      pre-claim) it rolls back and the session stays retryable; where the failure is swallowed
+///      (the Compact pre-claim's try-execute, or a caller's try/catch) the id is spent. CONTENT is
+///      bounded by the session's other action policies, never by this one: approvals granted in
+///      the one transaction outlive it, and a gas refund is whatever size the session signs.
 ///
 /// @dev Install requirements:
 ///      - on EVERY action the session permits, including one for its own `consume`/`consumeFor`;
 ///      - on the 1271 list alongside a `Permit2ClaimPolicy` that binds the claim blob to the
-///        digest and pins the arbiter, or `signature[20:52]` is caller-chosen;
+///        digest (else `signature[20:52]` is caller-chosen) and pins the arbiter;
 ///      - every blob carries the same id and deadline: each slot has its own ConfigId and nothing
 ///        here can cross-check;
 ///      - the id is fresh per enable and unique per account: the spend is never cleared, so a
-///        reused id yields a session that cannot settle;
+///        reused id yields a session that cannot settle - denial, never a second spend;
 ///      - the burn leads the first batch of the transaction and appears exactly once per chain.
 contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev Start of the nonce in `Permit2ClaimPolicy`'s claim blob, after the arbiter
