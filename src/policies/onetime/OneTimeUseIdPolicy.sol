@@ -20,41 +20,25 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 ///         first batch it runs leads with a burn of that id (`consume` or `consumeFor`), and the
 ///         burn happens when `checkAction` VALIDATES that op. Every later transaction is refused.
 ///
-/// @dev The one-transaction semantics. Validating the session's own well-formed burn writes the
-///      durable spend, marks the transaction as the burning one (transient) and, for `consumeFor`,
-///      records the nomination (transient). Every other op is admitted only while that marker is
-///      set, so several batches in the burning transaction are no more than one larger batch
-///      would have been. A second burn is refused (the spend is already set), so at most one
-///      nomination - at most one Permit2 unlock - exists per transaction. The gas-refund callback
-///      op is admitted at most once per transaction, because the executor settles one refund per
-///      call against the allowance it sets. Because the burn is written at validation, a failing
-///      execution cannot skip it: on the Permit2 route a pre-claim whose execution reverts rolls
-///      the whole executor frame back, burn included, and the session is retryable; only a caller
-///      that swallows that revert keeps the spend. The executed `consume`/`consumeFor` write
-///      nothing; they only check that some `checkAction` validated a burn of (account, id) in this
-///      transaction, a diagnostic for honest batches that were never validated, not a guard.
+/// @dev Validating the session's own burn writes the durable spend and marks this transaction as
+///      the burning one (transient). Every other op is admitted only while that marker is set, the
+///      gas-refund callback op at most once, and a second burn is refused, so at most one
+///      `consumeFor` nomination - one Permit2 unlock - exists per transaction. The burn stands or
+///      falls with the validating frame: where the executor bubbles a failed execution (the Permit2
+///      pre-claim) it rolls back and the session stays retryable; where the failure is swallowed
+///      (the Compact pre-claim's try-execute, or a caller's try/catch) the id is spent. CONTENT is
+///      bounded by the session's other action policies, never by this one: approvals granted in
+///      the one transaction outlive it, and a gas refund is whatever size the session signs.
 ///
-/// @dev What this bounds, and what it does not. CONTENT is bounded by the session's own action
-///      policies, never by this one: the marker admits an op to the transaction, it does not widen
-///      what the op may be. Approvals granted in the one transaction outlive it, and a gas refund
-///      is whatever size the session signs. A 1271-validated batch's content is never seen here,
-///      so every executor-originated 1271 validation is refused: a session carrying this policy
-///      runs only through `verifyExecution`, and the only 1271 caller answered is Permit2's unlock.
-///
-/// @dev Keying. `checkAction` and `initializeWithMultiplexer` are permissionless, so the spend,
-///      the marker and the nomination are keyed by the multiplexer (msg.sender), and the settling
-///      check reads under ITS msg.sender - the same SmartSession contract that validated the burn.
-///      That check requires the nomination to name the nonce in the claim blob AND the executor to
-///      have consumed that nonce, which only a pre-claim that passed validation does.
-///
-/// @dev Install-time requirements. Install on EVERY action the session permits, including an
-///      action for the session's own `consume`/`consumeFor`, and on the 1271 list alongside a
-///      `Permit2ClaimPolicy` that binds the claim blob to the digest (or `signature[20:52]` is
-///      caller-chosen) and pins the arbiter. Every blob must carry the same id and deadline:
-///      SmartSessions gives each slot its own ConfigId and nothing here can cross-check. The id
-///      must be fresh per enable and unique per account: the spend is never cleared, so a reused
-///      id yields a session that cannot settle - denial, never a second spend. The burn leads the
-///      first batch of the transaction and appears exactly once per chain.
+/// @dev Install requirements:
+///      - on EVERY action the session permits, including one for its own `consume`/`consumeFor`;
+///      - on the 1271 list alongside a `Permit2ClaimPolicy` that binds the claim blob to the
+///        digest (else `signature[20:52]` is caller-chosen) and pins the arbiter;
+///      - every blob carries the same id and deadline: each slot has its own ConfigId and nothing
+///        here can cross-check;
+///      - the id is fresh per enable and unique per account: the spend is never cleared, so a
+///        reused id yields a session that cannot settle - denial, never a second spend;
+///      - the burn leads the first batch of the transaction and appears exactly once per chain.
 contract OneTimeUseIdPolicy is IOneTimeUseIdPolicy, IActionPolicy, I1271Policy {
     /// @dev Start of the nonce in `Permit2ClaimPolicy`'s claim blob, after the arbiter
     uint256 internal constant PERMIT2_NONCE_START = 20;
