@@ -23,7 +23,8 @@ contract BaseClaimPolicy_getDestOpsRequired_Unit_Test is BaseClaimPolicy_Unit_Te
     /// @notice Test returns true when required=true
     function test_getDestOpsRequired_requiredTrue() external {
         // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
         bool[] memory required = new bool[](1);
         chainIds[0] = chainId1;
@@ -42,7 +43,8 @@ contract BaseClaimPolicy_getDestOpsRequired_Unit_Test is BaseClaimPolicy_Unit_Te
     /// @notice Test returns false when required=false
     function test_getDestOpsRequired_requiredFalse() external {
         // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
         bool[] memory required = new bool[](1);
         chainIds[0] = chainId1;
@@ -61,7 +63,8 @@ contract BaseClaimPolicy_getDestOpsRequired_Unit_Test is BaseClaimPolicy_Unit_Te
     /// @notice Test returns correct value per chainId
     function test_getDestOpsRequired_multipleChainIds() external {
         // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](2);
         bool[] memory required = new bool[](2);
         chainIds[0] = chainId1;
@@ -82,7 +85,8 @@ contract BaseClaimPolicy_getDestOpsRequired_Unit_Test is BaseClaimPolicy_Unit_Te
     /// @notice Test returns false for unconfigured chainId
     function test_getDestOpsRequired_unconfiguredChainId() external {
         // Arrange
-        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE);
+        uint32 modeConfig = _buildModeConfig(FIELD_DEST_OPS, MODE_CHECK_STORAGE)
+            | _buildModeConfig(FIELD_RECIPIENT_IS_SPONSOR, MODE_CHECK_STORAGE);
         uint256[] memory chainIds = new uint256[](1);
         bool[] memory required = new bool[](1);
         chainIds[0] = chainId1;

@@ -1,0 +1,14 @@
+IntentExecutionPolicy::setWhitelistedTargets
+├── given caller is owner
+│   ├── when adding a single target
+│   │   ├── it should set whitelistedTargets[target] to true
+│   │   └── it should emit TargetWhitelisted(target, true)
+│   ├── when removing a single target
+│   │   ├── it should set whitelistedTargets[target] to false
+│   │   └── it should emit TargetWhitelisted(target, false)
+│   ├── when adding multiple targets
+│   │   └── it should set whitelistedTargets to true for all entries
+│   └── when mixing adds and removes
+│       └── it should apply each entry correctly
+└── given caller is not owner
+    └── it should revert

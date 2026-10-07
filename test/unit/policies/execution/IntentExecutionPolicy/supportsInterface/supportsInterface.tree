@@ -1,0 +1,7 @@
+IntentExecutionPolicy::supportsInterface
+├── given interfaceId is IActionPolicy
+│   └── it should return true
+├── given interfaceId is IERC165
+│   └── it should return true
+└── given interfaceId is unknown
+    └── it should return false

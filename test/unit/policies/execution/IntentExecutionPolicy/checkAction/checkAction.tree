@@ -1,0 +1,17 @@
+IntentExecutionPolicy::checkAction
+├── given target is whitelisted
+│   └── it should return VALIDATION_SUCCESS (regardless of selector/spender)
+├── given target is not whitelisted
+│   ├── given selector is approve(address,uint256)
+│   │   ├── given spender is paymaster
+│   │   │   └── it should return VALIDATION_SUCCESS
+│   │   ├── given spender is a whitelisted address
+│   │   │   └── it should return VALIDATION_SUCCESS
+│   │   ├── given spender is not paymaster or whitelisted
+│   │   │   └── it should return VALIDATION_FAILED
+│   │   └── given calldata is too short (no spender argument)
+│   │       └── it should return VALIDATION_FAILED
+│   └── given selector is not approve
+│       └── it should return VALIDATION_FAILED
+└── given calldata is empty or less than 4 bytes
+    └── it should fall through to VALIDATION_FAILED for non-whitelisted target
