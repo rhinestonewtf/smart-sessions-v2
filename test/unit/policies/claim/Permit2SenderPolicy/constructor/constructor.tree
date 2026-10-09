@@ -1,0 +1,5 @@
+Permit2SenderPolicy::constructor
+├── given a non-zero Permit2
+│   └── it should store it as PERMIT2
+└── given the zero address
+    └── it should revert with InvalidPermit2

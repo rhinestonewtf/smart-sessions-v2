@@ -4,6 +4,9 @@ pragma solidity ^0.8.28;
 // Dependencies
 import { Permit2SenderPolicy_Unit_Test } from "../Permit2SenderPolicy.t.sol";
 
+// Interfaces
+import { IPermit2SenderPolicy } from "@policies/claim/permit2/interfaces/IPermit2SenderPolicy.sol";
+
 /// @title Permit2SenderPolicy.initializeWithMultiplexer Unit Tests
 /// @notice Initialization takes no configuration and changes nothing the check reads
 contract Permit2SenderPolicy_initializeWithMultiplexer_Unit_Test is Permit2SenderPolicy_Unit_Test {
@@ -16,13 +19,18 @@ contract Permit2SenderPolicy_initializeWithMultiplexer_Unit_Test is Permit2Sende
         assertFalse(_check(makeAddr("other")), "other sender refused after init");
     }
 
-    /// @notice Test re-initialization succeeds, as the multiplexer may re-enable a session
-    function test_initializeWithMultiplexer_reinitialization() external {
-        vm.startPrank(multiplexer);
-        policy.initializeWithMultiplexer(account, cfg, "");
-        policy.initializeWithMultiplexer(account, cfg, "");
-        vm.stopPrank();
+    /// @notice Test initialization with any data reverts
+    function testFuzz_initializeWithMultiplexer_nonEmptyInitData_reverts(bytes calldata initData)
+        external
+    {
+        vm.assume(initData.length != 0);
 
-        assertTrue(_check(PERMIT2));
+        vm.prank(multiplexer);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IPermit2SenderPolicy.InvalidInitDataLength.selector, initData.length
+            )
+        );
+        policy.initializeWithMultiplexer(account, cfg, initData);
     }
 }

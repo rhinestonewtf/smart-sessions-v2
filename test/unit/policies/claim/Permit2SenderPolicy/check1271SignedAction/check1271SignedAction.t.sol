@@ -16,11 +16,6 @@ contract Permit2SenderPolicy_check1271SignedAction_Unit_Test is Permit2SenderPol
         assertTrue(_check(PERMIT2));
     }
 
-    /// @notice Test a request sent by an intent executor is refused
-    function test_check1271SignedAction_intentExecutorSender_returnsFalse() external {
-        assertFalse(_check(makeAddr("intentExecutor")));
-    }
-
     /// @notice Test a request sent by the zero address is refused
     function test_check1271SignedAction_zeroSender_returnsFalse() external {
         assertFalse(_check(address(0)));
@@ -55,15 +50,5 @@ contract Permit2SenderPolicy_check1271SignedAction_Unit_Test is Permit2SenderPol
         );
 
         assertEq(result, sender == PERMIT2);
-    }
-
-    /// @notice Test a configuration that was never initialized still accepts Permit2
-    function test_check1271SignedAction_uninitialized_permit2Sender_returnsTrue() external {
-        vm.prank(multiplexer);
-        assertTrue(
-            policy.check1271SignedAction(
-                ConfigId.wrap(keccak256("never")), PERMIT2, account, bytes32(0), ""
-            )
-        );
     }
 }

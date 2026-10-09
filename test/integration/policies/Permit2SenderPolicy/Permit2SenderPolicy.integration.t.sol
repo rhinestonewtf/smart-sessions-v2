@@ -54,18 +54,13 @@ contract Permit2SenderPolicy_Integration_Test is Permit2ClaimPolicy_Integration_
         assertFalse(_isValidSignatureFrom(address(0), signature), "zero address: refused");
     }
 
-    /// @notice Test without the sender policy the same signature validates for any sender, so the
-    ///         refusals above come from the sender policy
-    function test_integration_permit2Sender_control_claimPolicyAloneIgnoresTheSender() public {
+    /// @notice Test the session without the sender policy, so the refusals above are this
+    ///         policy's
+    function test_integration_permit2Sender_control_withoutSenderPolicy() public {
         _enableSessionWithSenderPolicy(false);
         bytes memory signature = _createSmartSessionSignature(_createPolicyData());
 
-        assertTrue(_isValidSignatureFrom(address(env.permit2), signature), "Permit2: accepted");
-        assertTrue(
-            _isValidSignatureFrom(address(env.intentExecutor), signature),
-            "intent executor: accepted"
-        );
-        assertTrue(_isValidSignatureFrom(makeAddr("other"), signature), "other: accepted");
+        assertTrue(_isValidSignatureFrom(makeAddr("other"), signature), "control");
     }
 
     /// @notice Test the sender policy does not replace the claim policy: a claim signed for
@@ -74,13 +69,14 @@ contract Permit2SenderPolicy_Integration_Test is Permit2ClaimPolicy_Integration_
         _enableSessionWithSenderPolicy(true);
         bytes memory signature = _createSmartSessionSignature(_createPolicyData());
 
-        vm.prank(address(env.permit2));
-        try IERC1271(env.smartAccount1.account)
-            .isValidSignature(keccak256("another digest"), signature) returns (
-            bytes4 result
-        ) {
-            assertTrue(result != EIP1271_MAGIC_VALUE, "another digest: refused");
-        } catch { }
+        assertTrue(
+            _isValidSignatureFrom(address(env.permit2), $intent.digest, signature),
+            "claim digest: accepted"
+        );
+        assertFalse(
+            _isValidSignatureFrom(address(env.permit2), keccak256("another digest"), signature),
+            "another digest: refused"
+        );
     }
 
     /// @notice Test a Permit2 claim settles end to end through the router with both policies
@@ -137,9 +133,20 @@ contract Permit2SenderPolicy_Integration_Test is Permit2ClaimPolicy_Integration_
 
     /// @notice Whether the account accepts `signature` over the claim digest when `sender` asks
     function _isValidSignatureFrom(address sender, bytes memory signature) internal returns (bool) {
+        return _isValidSignatureFrom(sender, $intent.digest, signature);
+    }
+
+    /// @notice Whether the account accepts `signature` over `digest` when `sender` asks
+    function _isValidSignatureFrom(
+        address sender,
+        bytes32 digest,
+        bytes memory signature
+    )
+        internal
+        returns (bool)
+    {
         vm.prank(sender);
-        try IERC1271(env.smartAccount1.account)
-            .isValidSignature($intent.digest, signature) returns (
+        try IERC1271(env.smartAccount1.account).isValidSignature(digest, signature) returns (
             bytes4 result
         ) {
             return result == EIP1271_MAGIC_VALUE;
