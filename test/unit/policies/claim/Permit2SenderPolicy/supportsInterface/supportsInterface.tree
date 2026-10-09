@@ -1,0 +1,11 @@
+Permit2SenderPolicy::supportsInterface
+├── given I1271Policy interface
+│   └── it should return true
+├── given IERC165 interface
+│   └── it should return true
+├── given IActionPolicy interface
+│   └── it should return false
+├── given IUserOpPolicy interface
+│   └── it should return false
+└── given unsupported interface
+    └── it should return false

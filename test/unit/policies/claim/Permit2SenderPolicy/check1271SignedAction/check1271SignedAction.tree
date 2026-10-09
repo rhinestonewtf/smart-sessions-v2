@@ -1,0 +1,11 @@
+Permit2SenderPolicy::check1271SignedAction
+├── given the sender is Permit2
+│   └── it should return true
+├── given the sender is the zero address
+│   └── it should return false
+├── given the sender is the account
+│   └── it should return false
+├── given any other sender
+│   └── it should return false
+└── given any configId, account, hash or signature
+    └── it should depend on the sender only

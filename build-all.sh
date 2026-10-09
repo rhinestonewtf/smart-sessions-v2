@@ -8,6 +8,7 @@ CONTRACTS=(
     "src/core/SmartSessionLens.sol"
     "src/policies/claim/compact/CompactClaimPolicy.sol"
     "src/policies/claim/permit2/Permit2ClaimPolicy.sol"
+    "src/policies/claim/permit2/Permit2SenderPolicy.sol"
     "src/policies/onetime/OneTimeUseIdPolicy.sol"
 )
 

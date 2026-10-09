@@ -1,0 +1,5 @@
+Permit2SenderPolicy::initializeWithMultiplexer
+├── given empty init data
+│   └── it should succeed and leave the check unchanged
+└── given non-empty init data
+    └── it should revert with InvalidInitDataLength
