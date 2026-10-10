@@ -1,0 +1,19 @@
+onlyBuiltDependencies:
+  - "@erc7579/enumerablemap4337"
+  - "@rhinestone/checknsignatures"
+  - "@rhinestone/compact-utils"
+  - "@rhinestone/flatbytes"
+  - "@rhinestone/modulekit"
+  - "@rhinestone/module-bases"
+  - "@rhinestone/registry"
+  - "@rhinestone/safe7579"
+  - "@rhinestone/webauthn-sol"
+  - "@uniswap/permit2"
+  - "@uniswap/the-compact"
+  - FreshCryptoLib
+  - erc7579-implementation
+  - excessively-safe-call
+  - permit2
+  - smartsessions
+  - the-compact
+  - webauthn-sol
