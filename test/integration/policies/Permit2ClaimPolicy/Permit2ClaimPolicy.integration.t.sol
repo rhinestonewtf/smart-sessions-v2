@@ -49,7 +49,7 @@ import {
     MODULE_TYPE_VALIDATOR
 } from "@modulekit/accounts/common/interfaces/IERC7579Module.sol";
 import { CALLTYPE_STATIC } from "erc7579/lib/ModeLib.sol";
-import { IS_VALID_SIG_1271 } from "@lib/ModeLib.sol";
+import { IS_VALID_SIG_1271, IS_VALID_SIG_1271_7739 } from "@lib/ModeLib.sol";
 
 /// @title Permit2ClaimPolicy Integration Test
 /// @notice Integration tests for Permit2ClaimPolicy validation via SmartSessionEmissary
@@ -374,6 +374,35 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
                 MockAdapter.mock_permit2_handleClaim,
                 (MockAdapter.ClaimDataPermit2({
                         order: order, userSigs: Types.Signatures($intent.userEmissarySig, "")
+                    }))
+            )
+        );
+    }
+
+    /// @notice A mode 0x01 signature for the pinned recipient must not settle a different one.
+    /// @dev Unlike the 0x00 recipient tests, the signature is not rebuilt after the recipient
+    /// changes.
+    function test_integration_verifyClaim_permit2_recipient_revertsWhen_7739SignatureReused()
+        public
+    {
+        address pinned = $intent.element.mandate.target.recipient;
+        uint256 targetChainId = $intent.element.mandate.target.targetChain;
+        _setupSessionWithRecipientConfig(targetChainId, pinned);
+
+        bytes memory policyData = _createPolicyData();
+        bytes memory sig = _createSmartSessionSignature7739(policyData);
+
+        $intent.element.mandate.target.recipient = makeAddr("other");
+        Types.Order memory order = _getPermit2Order();
+
+        vm.expectRevert();
+        _claim(
+            block.chainid,
+            abi.encodePacked(env.solver.addr),
+            abi.encodeCall(
+                MockAdapter.mock_permit2_handleClaim,
+                (MockAdapter.ClaimDataPermit2({
+                        order: order, userSigs: Types.Signatures(sig, "")
                     }))
             )
         );
@@ -980,6 +1009,34 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
             uint256(sessionValidatorSignature.length) + 64,
             sessionValidatorSignature,
             policyData
+        );
+    }
+
+    /// @notice Same layout as `_createSmartSessionSignature`, with mode `IS_VALID_SIG_1271_7739`
+    /// and the ERC-7739 tail from `SmartSessionEmissary` (domain, contents hash, description,
+    /// length). Domain 0 matches the session enabled in `_enableSession`.
+    function _createSmartSessionSignature7739(bytes memory policyData)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
+        bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
+        uint8 v = 27;
+        bytes memory sessionValidatorSignature = abi.encodePacked(r, s, v);
+        bytes memory contentsDescription = "";
+
+        return abi.encodePacked(
+            address(smartSessionEmissary),
+            IS_VALID_SIG_1271_7739,
+            defaultPermissionId,
+            uint256(sessionValidatorSignature.length) + 64,
+            sessionValidatorSignature,
+            policyData,
+            bytes32(0),
+            bytes32(0),
+            contentsDescription,
+            uint16(contentsDescription.length)
         );
     }
 
