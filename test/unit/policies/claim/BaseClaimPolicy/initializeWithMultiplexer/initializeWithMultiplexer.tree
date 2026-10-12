@@ -52,10 +52,10 @@ BaseClaimPolicy::initializeWithMultiplexer
 │   ├── it should store for multiple chainIds
 │   ├── it should overwrite on re-initialization
 │   ├── it should revert when per-chain destOps has no target check
-│   ├── it should allow per-chain destOps with a target check
-│   ├── it should allow catch-all destOps without a target check
 │   ├── it should revert when subpolicy destOps has no target check
-│   └── it should allow subpolicy destOps with a target check
+│   ├── it should allow subpolicy destOps with a target check
+│   ├── it should allow per-chain destOps with a target check
+│   └── it should allow catch-all destOps without a target check
 ├── given modeConfig with QUALIFICATION enabled
 │   ├── it should store useArbiterHash=false
 │   ├── it should store useArbiterHash=true
