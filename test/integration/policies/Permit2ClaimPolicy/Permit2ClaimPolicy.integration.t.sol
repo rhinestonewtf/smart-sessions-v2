@@ -440,6 +440,29 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
     }
 
+    /// @notice A 7739 signature for one recipient does not settle a claim to another recipient
+    /// the session allows: Permit2's hash no longer matches the signed contents.
+    function test_integration_verifyClaim_permit2_recipient_7739_revertsWhen_hashNotBoundToContents()
+        public
+    {
+        // Arrange - the session pins the new recipient and the policy data describes it, so the
+        // policy would accept; the signed contents remain the original recipient's struct hash
+        address newRecipient = makeAddr("other");
+        _setupSessionWithRecipientConfig($intent.element.mandate.target.targetChain, newRecipient);
+        $intent.element.mandate.target.recipient = newRecipient;
+        bytes memory sig = _createSmartSessionSignature7739(_createPolicyData());
+        bytes memory adapterCalldata = _claimCalldata7739(sig);
+
+        // Act & Assert - rejected before the policy is consulted
+        vm.expectCall(
+            address(permit2ClaimPolicy),
+            abi.encodeWithSelector(permit2ClaimPolicy.check1271SignedAction.selector),
+            0
+        );
+        vm.expectRevert(bytes4(0));
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
     function _claimCalldata7739(bytes memory sig) internal view returns (bytes memory) {
         return abi.encodeCall(
             MockAdapter.mock_permit2_handleClaim,
