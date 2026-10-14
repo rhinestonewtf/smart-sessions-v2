@@ -108,9 +108,11 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     ///      Mode 0x01 (IS_VALID_SIG_1271_7739) - ERC-7739 nested EIP-712 validation:
     ///        Signature format: [mode (1)] [permissionId (32)] [policyDataOffset (32)]
     ///                          [validatorSig (variable)] [policyData (variable)]
-    ///                          [appDomainSeparator (32)] [contentHash (32)]
-    ///                          [contentsDescription (variable)]
+    ///                          [appDomainSeparator (32)] [encodeData (32 * n)]
+    ///                          [contentsDescription (variable)] [uint16(n)]
     ///                          [uint16(contentsDescription.length)]
+    ///        The contents hash is derived from contentsType and encodeData, so the session
+    ///        can only sign the content types it allows
     ///        Validates typed data signatures with app-specific domain separation
     ///
     /// @param sender The address of the smart account (ERC-1271 sender)

@@ -715,7 +715,7 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         vm.chainId(order.notarizedChainId);
 
         bytes memory sig =
-            _createSmartSessionSignature7739(_createPolicyDataForElement(0), $intent.claimHash);
+            _createSmartSessionSignature7739(_createPolicyDataForElement(0), _compactEncodeData());
 
         (, bytes memory allocatorSig) =
             _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
@@ -742,8 +742,8 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         public
     {
         // Arrange - the session pins the new recipient and the policy data describes it, so the
-        // policy would accept; the signed contents remain the original recipient's claim hash
-        bytes32 signedClaimHash = $intent.claimHash;
+        // policy would accept; the signed contents remain the original recipient's claim
+        bytes memory signedEncodeData = _compactEncodeData();
         address newRecipient = makeAddr("other");
         $intent.compact.elements[0].mandate.target.recipient = newRecipient;
         ($intent.claimHash, $intent.elementHashes) = hashCompact(arbiter, $intent.compact);
@@ -753,7 +753,7 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         vm.chainId(order.notarizedChainId);
 
         bytes memory sig =
-            _createSmartSessionSignature7739(_createPolicyDataForElement(0), signedClaimHash);
+            _createSmartSessionSignature7739(_createPolicyDataForElement(0), signedEncodeData);
 
         (, bytes memory allocatorSig) =
             _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
@@ -1377,20 +1377,17 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         );
     }
 
-    /// @notice ERC-7739 `TypedDataSign` signature, checked by the account's ERC-1271, whose
-    /// contents are `claimHash` under the notarized chain's Compact domain.
-    /// @dev Tail: [appDomainSeparator] [contents] [contentsDescription] [uint16 length].
+    /// @notice Typed-data signature, checked by the account's ERC-1271, whose contents are the
+    /// MultichainCompact with `encodeData` under the notarized chain's Compact domain.
+    /// @dev Tail: [appDomainSeparator] [encodeData] [contentsDescription] [uint16 words]
+    /// [uint16 length].
     function _createSmartSessionSignature7739(
         bytes memory policyData,
-        bytes32 claimHash
+        bytes memory encodeData
     )
         internal
         returns (bytes memory)
     {
-        require(
-            keccak256(bytes(COMPACT_CONTENTS_TYPE)) == EIP712TypeHashLib.TYPEHASH_COMPACT,
-            "contents type does not match the Compact typehash"
-        );
         bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
         uint8 v = 27;
@@ -1405,9 +1402,25 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
             sessionValidatorSignature,
             policyData,
             _notarizedDomainSeparator(),
-            claimHash,
+            encodeData,
             contentsDescription,
+            uint16(encodeData.length / 32),
             uint16(contentsDescription.length)
+        );
+    }
+
+    /// @notice EIP-712 `encodeData` of the MultichainCompact of `$intent`.
+    function _compactEncodeData() internal view returns (bytes memory encodeData) {
+        encodeData = abi.encode(
+            $intent.compact.sponsor,
+            $intent.compact.nonce,
+            $intent.compact.expires,
+            keccak256(abi.encodePacked($intent.elementHashes))
+        );
+        require(
+            keccak256(abi.encodePacked(keccak256(bytes(COMPACT_CONTENTS_TYPE)), encodeData))
+                == $intent.claimHash,
+            "encodeData does not hash to claimHash"
         );
     }
 

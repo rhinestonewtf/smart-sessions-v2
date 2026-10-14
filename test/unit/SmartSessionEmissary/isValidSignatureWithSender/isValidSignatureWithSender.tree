@@ -24,7 +24,9 @@ SmartSessionEmissary::isValidSignatureWithSender
 │   │   └── it returns INVALID_SIGNATURE
 │   ├── when header is shorter than 64 bytes
 │   │   └── it returns INVALID_SIGNATURE
-│   └── when app domain separator is zero
+│   ├── when app domain separator is zero
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when contents type does not match the signed struct
 │       └── it returns INVALID_SIGNATURE
 ├── given direct mode (0x00)
 │   ├── when domain zero is enabled
