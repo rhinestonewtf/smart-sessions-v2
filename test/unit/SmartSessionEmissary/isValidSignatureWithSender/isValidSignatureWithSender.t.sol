@@ -312,6 +312,42 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
         assertEq(result, ERC1271_MAGIC_VALUE, "Should handle ERC6492 wrapped signature");
     }
 
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_HashNotBoundToContents()
+        public
+        withEnabledSession
+    {
+        // Arrange - a valid signature over `testContentHash`, presented for an unrelated hash
+        TestTemps memory t = _prepareTestTemps();
+        bytes memory signature = _createValidSignature(t);
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+        bytes32 unrelatedHash = keccak256("unrelated message");
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(unrelatedHash, fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should reject a hash that is not bound to contents");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_EmptyContentsDescription()
+        public
+        withEnabledSession
+    {
+        // Arrange
+        TestTemps memory t = _prepareTestTemps();
+        (t.v, t.r, t.s) = vm.sign(t.privateKey, testMessageHash);
+        bytes memory signature =
+            abi.encodePacked(t.r, t.s, t.v, appDomainSeparator, testContentHash, uint16(0));
+        signature = abi.encodePacked(bytes1(0x01), testPermissionId, uint256(64 + 65), signature);
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should reject an empty contents description");
+    }
+
     /*//////////////////////////////////////////////////////////////
                           DIRECT MODE (0x00)
     //////////////////////////////////////////////////////////////*/

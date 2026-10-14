@@ -10,11 +10,13 @@ abstract contract SmartSessionERC7739 {
     /*                     ERC1271 OPERATIONS                     */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev Returns whether the `hash` and `signature` are valid.
+    /// @dev Returns whether the `hash` and `signature` are valid. `nestedHash` is the ERC-7739
+    /// `TypedDataSign` hash the signature covers, unused in direct mode.
     /// Override if you need non-ECDSA logic.
     function _erc1271IsValidSignatureNowCalldata(
         address sender,
         bytes32 hash,
+        bytes32 nestedHash,
         bytes calldata signature,
         bytes32 appDomainSeparator,
         bytes calldata contents
@@ -122,6 +124,7 @@ abstract contract SmartSessionERC7739 {
     {
         bytes calldata contents = signature;
         bytes32 appDomainSeparator;
+        bytes32 nestedHash;
         uint256 t = uint256(uint160(address(this)));
         // Forces the compiler to pop the variables after the scope, avoiding stack-too-deep.
         if (t != uint256(0)) {
@@ -157,6 +160,12 @@ abstract contract SmartSessionERC7739 {
                 mstore(0x00, 0x1901) // Store the "\x19\x01" prefix.
                 calldatacopy(0x20, o, 0x40) // Copy the `APP_DOMAIN_SEPARATOR` and `contents` struct
                 // hash.
+                // Reject if the reconstructed hash doesn't match, or if the appended data is
+                // invalid. Solady falls back to `PersonalSign` here, which is not supported.
+                if or(xor(keccak256(0x1e, 0x42), hash), or(lt(signature.length, l), iszero(c))) {
+                    t := 0 // Set `t` to 0, denoting that the signature is rejected.
+                    break
+                }
                 // Only use the `TypedDataSign` workflow.
                 // `TypedDataSign({ContentsName} contents,string name,...){ContentsType}`.
                 mstore(m, "TypedDataSign(") // Store the start of `TypedDataSign`'s type encoding.
@@ -198,14 +207,15 @@ abstract contract SmartSessionERC7739 {
                 appDomainSeparator := mload(0x20) // Load the `APP_DOMAIN_SEPARATOR`.
                 mstore(0x40, keccak256(t, 0xe0)) // `hashStruct(typedDataSign)`.
                 // Compute the final hash, corrupted if `contentsName` is invalid.
-                hash := keccak256(0x1e, add(0x42, and(1, d)))
+                nestedHash := keccak256(0x1e, add(0x42, and(1, d)))
                 signature.length := sub(signature.length, l) // Truncate the signature.
                 break
             }
             mstore(0x40, m) // Restore the free memory pointer.
         }
+        if (t == uint256(0)) return false;
         result = _erc1271IsValidSignatureNowCalldata(
-            sender, hash, signature, appDomainSeparator, contents
+            sender, hash, nestedHash, signature, appDomainSeparator, contents
         );
     }
 }

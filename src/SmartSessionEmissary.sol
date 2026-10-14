@@ -149,6 +149,7 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
             success = _erc1271IsValidSignatureNowCalldata({
                 sender: sender, // The address of ERC-1271 sender
                 hash: hash, // The hash of the message
+                nestedHash: bytes32(0), // No ERC-7739 nested hash
                 signature: actualSignature, // The signature without mode byte
                 appDomainSeparator: bytes32(0), // No app domain separator
                 contents: signature[0:0] // No additional contents

@@ -14,8 +14,12 @@ SmartSessionEmissary::isValidSignatureWithSender
 │   │   └── it returns INVALID_SIGNATURE
 │   ├── when content type is not enabled for session
 │   │   └── it returns INVALID_SIGNATURE
-│   └── when signature is wrapped with ERC6492
-│       └── it returns ERC1271_MAGIC_VALUE
+│   ├── when signature is wrapped with ERC6492
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when hash is not the app hash of the signed contents
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when contents description is empty
+│       └── it returns INVALID_SIGNATURE
 ├── given direct mode (0x00)
 │   ├── when domain zero is enabled
 │   │   ├── when signature is valid
