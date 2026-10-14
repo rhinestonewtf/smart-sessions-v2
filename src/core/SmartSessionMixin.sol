@@ -336,7 +336,8 @@ abstract contract SmartSessionMixin is
     ///
     /// @param sender The address initiating the signature validation
     /// @param hash The hash of the data to be signed, as passed to isValidSignature
-    /// @param nestedHash The ERC-7739 TypedDataSign hash of `hash` (unused in direct mode)
+    /// @param nestedHash The ERC-7739 TypedDataSign hash the session key signed
+    ///        (zero in direct mode)
     /// @param signature The signature to be validated
     ///        Format: [permissionId(32)][policyDataOffset(32)][validatorSig][policyData]
     /// @param appDomainSeparator The app's domain separator (bytes32(0) = direct mode)
@@ -402,7 +403,7 @@ abstract contract SmartSessionMixin is
 
         // Determine the digest based on mode:
         // 1) Direct mode: Hash bound to msg.sender and wrapped via ERC191 toEthSignedMessageHash
-        // 2) ERC-7739 mode: Hash wrapped via ERC7739 _erc1271IsValidSignatureViaNestedEIP712
+        // 2) ERC-7739 mode: `nestedHash`, computed in _erc1271IsValidSignatureViaNestedEIP712
         bytes32 digest =
             directMode ? ECDSA.toEthSignedMessageHash(abi.encode(msg.sender, hash)) : nestedHash;
 

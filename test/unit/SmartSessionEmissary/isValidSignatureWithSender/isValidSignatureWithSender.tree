@@ -18,7 +18,13 @@ SmartSessionEmissary::isValidSignatureWithSender
 │   │   └── it returns ERC1271_MAGIC_VALUE
 │   ├── when hash is not the app hash of the signed contents
 │   │   └── it returns INVALID_SIGNATURE
-│   └── when contents description is empty
+│   ├── when contents description is empty
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when appended data exceeds the signature
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when header is shorter than 64 bytes
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when app domain separator is zero
 │       └── it returns INVALID_SIGNATURE
 ├── given direct mode (0x00)
 │   ├── when domain zero is enabled

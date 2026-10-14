@@ -331,21 +331,117 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
 
     function test_isValidSignatureWithSender_7739Mode_revertsWhen_EmptyContentsDescription()
         public
-        withEnabledSession
     {
-        // Arrange
+        // Arrange - the empty contents description is enabled for the app domain, so only its
+        // length rejects it
+        testPermissionId = _enableSessionWithContent("", appDomainSeparator, "emptyContentSalt");
         TestTemps memory t = _prepareTestTemps();
-        (t.v, t.r, t.s) = vm.sign(t.privateKey, testMessageHash);
+        (t.v, t.r, t.s) = vm.sign(t.privateKey, _toERC1271Hash(t.account, testContentHash, "", ""));
         bytes memory signature =
             abi.encodePacked(t.r, t.s, t.v, appDomainSeparator, testContentHash, uint16(0));
         signature = abi.encodePacked(bytes1(0x01), testPermissionId, uint256(64 + 65), signature);
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act - capped, so a call that ran on would run out of gas instead of returning
+        bytes4 result = IERC1271(instance.account).isValidSignature{ gas: 1_000_000 }(
+            testMessageHash, fullSignature
+        );
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should reject an empty contents description");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_AppendedDataExceedsSignature()
+        public
+    {
+        // Arrange - an ERC-6492 wrapper places the app domain and contents right before the
+        // signature's length word, and the trailer length reaches back to them, so the hash
+        // matches. The contents this selects are enabled, so only the bounds check rejects.
+        bytes32 salt = "outOfBoundsSalt";
+        PermissionId permissionId = _permissionIdFor(salt);
+        bytes memory header = abi.encodePacked(bytes1(0x01), permissionId, uint256(64));
+        // The trailer length `0x42 + c` reaches 0x60 bytes before the signature
+        uint16 c = uint16(header.length + 2 + 0x1e);
+        bytes memory inner = abi.encodePacked(header, c);
+        bytes memory contents = abi.encodePacked(uint256(inner.length), header);
+        assertEq(
+            PermissionId.unwrap(
+                _enableSessionWithContent(string(contents), appDomainSeparator, salt)
+            ),
+            PermissionId.unwrap(permissionId)
+        );
+
+        bytes memory wrapped = abi.encodePacked(
+            bytes32(0),
+            bytes32(0),
+            uint256(0xa0), // Offset of the inner signature's length word.
+            appDomainSeparator,
+            testContentHash,
+            uint256(inner.length),
+            inner,
+            bytes32(0x6492649264926492649264926492649264926492649264926492649264926492)
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), wrapped);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should reject appended data beyond the signature");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_HeaderShorterThan64Bytes()
+        public
+        withEnabledSession
+    {
+        // Arrange - a valid appended tail after only the 32-byte permissionId
+        bytes memory contentsDescription = abi.encodePacked(TEST_CONTENT_TYPE, TEST_CONTENT_NAME);
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01),
+            testPermissionId,
+            appDomainSeparator,
+            testContentHash,
+            contentsDescription,
+            uint16(contentsDescription.length)
+        );
         bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
 
         // Act
         bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
 
         // Assert
-        assertEq(result, INVALID_SIGNATURE, "Should reject an empty contents description");
+        assertEq(result, INVALID_SIGNATURE, "Should reject a header shorter than 64 bytes");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_AppDomainSeparatorIsZero()
+        public
+        withEnabledSessionDirectMode
+    {
+        // Arrange - a hash bound to the contents under a zero app domain, with domain 0 enabled
+        TestTemps memory t = _prepareTestTemps();
+        bytes32 hash = keccak256(abi.encodePacked(hex"1901", bytes32(0), testContentHash));
+        (t.v, t.r, t.s) =
+            vm.sign(t.privateKey, ECDSA.toEthSignedMessageHash(abi.encode(t.account, hash)));
+        bytes memory contentsDescription = abi.encodePacked(TEST_CONTENT_TYPE, TEST_CONTENT_NAME);
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01),
+            testPermissionId,
+            uint256(64 + 65),
+            t.r,
+            t.s,
+            t.v,
+            bytes32(0),
+            testContentHash,
+            contentsDescription,
+            uint16(contentsDescription.length)
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(hash, fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should reject a zero app domain separator");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -599,6 +695,43 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
             testPermissionId,
             policyDataOffset,
             signatureWithWrapper
+        );
+    }
+
+    function _enableSessionWithContent(
+        string memory contentName,
+        bytes32 domain,
+        bytes32 salt
+    )
+        internal
+        returns (PermissionId)
+    {
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({ policy: address(sudoPolicy), initData: "" });
+
+        ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
+        allowedContent[0].contentNames = Solarray.strings(contentName);
+        allowedContent[0].appDomainSeparator = domain;
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: salt,
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: ERC7739Data({
+                allowedERC7739Content: allowedContent, erc1271Policies: policyDatas
+            }),
+            actions: new ActionData[](0),
+            claimPolicies: new PolicyData[](0)
+        });
+
+        vm.prank(instance.account);
+        return smartSessionEmissary.enableSessions(sessions, bytes12(0))[0];
+    }
+
+    function _permissionIdFor(bytes32 salt) internal view returns (PermissionId) {
+        return PermissionId.wrap(
+            keccak256(abi.encode(address(yesSessionValidator), bytes("mockInitData"), salt))
         );
     }
 

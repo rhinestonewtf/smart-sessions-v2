@@ -11,7 +11,7 @@ abstract contract SmartSessionERC7739 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Returns whether the `hash` and `signature` are valid. `nestedHash` is the ERC-7739
-    /// `TypedDataSign` hash the signature covers, unused in direct mode.
+    /// `TypedDataSign` hash the signature covers, zero when not using ERC-7739.
     /// Override if you need non-ECDSA logic.
     function _erc1271IsValidSignatureNowCalldata(
         address sender,
@@ -160,9 +160,13 @@ abstract contract SmartSessionERC7739 {
                 mstore(0x00, 0x1901) // Store the "\x19\x01" prefix.
                 calldatacopy(0x20, o, 0x40) // Copy the `APP_DOMAIN_SEPARATOR` and `contents` struct
                 // hash.
-                // Reject if the reconstructed hash doesn't match, or if the appended data is
-                // invalid. Solady falls back to `PersonalSign` here, which is not supported.
-                if or(xor(keccak256(0x1e, 0x42), hash), or(lt(signature.length, l), iszero(c))) {
+                // Reject if the reconstructed hash doesn't match, if the appended data is invalid
+                // or leaves no 64-byte header, or if `APP_DOMAIN_SEPARATOR` is zero (direct mode).
+                // Solady falls back to `PersonalSign` here, which is not supported.
+                if or(
+                    or(xor(keccak256(0x1e, 0x42), hash), lt(signature.length, add(l, 0x40))),
+                    or(iszero(c), iszero(mload(0x20)))
+                ) {
                     t := 0 // Set `t` to 0, denoting that the signature is rejected.
                     break
                 }
