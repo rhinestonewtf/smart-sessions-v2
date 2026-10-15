@@ -1,0 +1,10 @@
+SmartSessionERC7739::erc6492Envelope
+└── given an envelope signed by the session key, wrapped in ERC-6492
+    ├── when the envelope is unchanged
+    │   └── it returns ERC1271_MAGIC_VALUE
+    ├── when the factory and factory data are arbitrary
+    │   └── it never reverts and returns ERC1271_MAGIC_VALUE
+    ├── when one byte of the permission id or the ERC-7739 tail of the wrapped envelope is flipped
+    │   └── it never reverts and returns INVALID_SIGNATURE
+    └── when the wrapped envelope carries a struct the session key did not sign
+        └── it returns INVALID_SIGNATURE
