@@ -687,6 +687,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
                                   FUZZ
     //////////////////////////////////////////////////////////////*/
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_NeverRevertsOnArbitrarySignature(
         bytes32 hash,
         bytes calldata body
@@ -709,6 +710,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
         );
     }
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_NeverRevertsOnArbitraryAppendedData(
         bytes32 hash,
         bool bindHash,
@@ -753,6 +755,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
         );
     }
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_CorrectEnvelope_ReturnsMagic(
         uint256 wordCount,
         bytes32[16] memory values,
@@ -792,6 +795,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
         assertEq(result, ERC1271_MAGIC_VALUE, "Should accept a correctly built envelope");
     }
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_SingleByteFlip_ReturnsInvalid(
         uint256 wordCount,
         bytes32[16] memory values,
@@ -842,6 +846,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
         assertEq(result, INVALID_SIGNATURE, "Should reject a flipped byte");
     }
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_TypeConfusion_NeverReturnsMagic(
         uint256 seedA,
         uint256 seedB,
@@ -883,6 +888,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
         assertEq(result, INVALID_SIGNATURE, "Should reject a struct of another type");
     }
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_HeaderLength_MagicOnlyFromWellFormed64Bytes(
         uint256 headerLength,
         bool wellFormed,
@@ -925,6 +931,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
         );
     }
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_NonProbeHash_NeverReturnsProbeValue(
         bytes32 hash,
         bytes calldata signature
@@ -941,6 +948,7 @@ contract SmartSessionERC7739_erc1271IsValidSignatureViaNestedEIP712_Test is
         assertNotEq(result, ERC7739_SUPPORT_VALUE, "Should not return the ERC-7739 probe value");
     }
 
+    /// forge-config: default.fuzz.runs = 10000
     function testFuzz_erc1271IsValidSignatureViaNestedEIP712_ProbeHash_ReturnsProbeValue(
         address sender,
         bytes calldata signature

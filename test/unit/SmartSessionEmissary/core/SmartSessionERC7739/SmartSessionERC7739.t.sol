@@ -283,11 +283,28 @@ contract SmartSessionERC7739_Unit_Test is SmartSessionEmissary_Unit_Test {
         pure
         returns (bytes memory)
     {
+        return _envelope(permissionId, validatorSignature, "", domain, encodeData, description);
+    }
+
+    /// @notice A mode 0x01 signature whose header carries `policyData` for the ERC-1271 policies
+    function _envelope(
+        PermissionId permissionId,
+        bytes memory validatorSignature,
+        bytes memory policyData,
+        bytes32 domain,
+        bytes memory encodeData,
+        bytes memory description
+    )
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(
             bytes1(0x01),
             permissionId,
             uint256(64 + validatorSignature.length),
             validatorSignature,
+            policyData,
             domain,
             encodeData,
             description,
@@ -318,10 +335,21 @@ contract SmartSessionERC7739_Unit_Test is SmartSessionEmissary_Unit_Test {
         internal
         returns (bool reverted, bytes4 result)
     {
+        return _tryIsValidSignature(address(this), hash, signature);
+    }
+
+    /// @notice Calls the emissary as `instance` for the ERC-1271 caller `sender`, reporting a
+    ///         revert instead of propagating it
+    function _tryIsValidSignature(
+        address sender,
+        bytes32 hash,
+        bytes memory signature
+    )
+        internal
+        returns (bool reverted, bytes4 result)
+    {
         vm.prank(instance.account);
-        try smartSessionEmissary.isValidSignatureWithSender(
-            address(this), hash, signature
-        ) returns (
+        try smartSessionEmissary.isValidSignatureWithSender(sender, hash, signature) returns (
             bytes4 value
         ) {
             result = value;
