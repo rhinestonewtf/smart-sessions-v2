@@ -1,0 +1,20 @@
+SmartSessionERC7739::policyInterplay
+└── given a session whose ERC-1271 policy is the OneTimeUseIdPolicy
+    ├── when the id was burned nominating the order and Permit2 asks
+    │   └── it returns ERC1271_MAGIC_VALUE
+    ├── when the caller is not Permit2
+    │   └── it returns INVALID_SIGNATURE
+    ├── when the id was not burned
+    │   └── it returns INVALID_SIGNATURE
+    ├── when the claim blob names another nonce
+    │   └── it returns INVALID_SIGNATURE
+    ├── when the executor has not consumed the nonce
+    │   └── it returns INVALID_SIGNATURE
+    ├── when the hash is not the one the envelope binds
+    │   └── it returns INVALID_SIGNATURE
+    ├── when the envelope is signed by another key
+    │   └── it returns INVALID_SIGNATURE
+    ├── when the id is burned again for another order
+    │   └── it refuses the burn, keeps the first nomination and returns INVALID_SIGNATURE for the other order
+    └── given fuzzed burn, caller and tampering
+        └── it never reverts and returns ERC1271_MAGIC_VALUE only when the policy and the envelope both accept
