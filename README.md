@@ -17,7 +17,7 @@ This contract adds **claim policies** and **execution validation** to enable ses
 
   - Granular session key control
   - Action-specific policies
-  - ERC-1271 signature validation with ERC-7739 nested EIP-712
+  - ERC-1271 signature validation with ERC-7739 nested EIP-712 (the appended data carries the struct's `encodeData`, not the `contents` hash)
   - Enable flow for permission requests
   - Native ERC-7579 batched execution support
 

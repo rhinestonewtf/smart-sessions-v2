@@ -1411,6 +1411,10 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
 
     /// @notice EIP-712 `encodeData` of the MultichainCompact of `$intent`.
     function _compactEncodeData() internal view returns (bytes memory encodeData) {
+        require(
+            keccak256(bytes(COMPACT_CONTENTS_TYPE)) == EIP712TypeHashLib.TYPEHASH_COMPACT,
+            "contents type does not match the Compact typehash"
+        );
         encodeData = abi.encode(
             $intent.compact.sponsor,
             $intent.compact.nonce,

@@ -89,31 +89,23 @@ abstract contract SmartSessionERC7739 {
     /// The order of the fields is important: `contents` comes before `name`.
     ///
     /// The signature will be `r ‖ s ‖ v ‖ APP_DOMAIN_SEPARATOR ‖ encodeData ‖
-    /// contentsDescription ‖
-    ///     uint16(encodeData.length / 32) ‖ uint16(contentsDescription.length)`,
+    /// contentsDescription
+    ///     ‖ uint16(encodeData.length / 32) ‖ uint16(contentsDescription.length)`,
     /// where `encodeData` is the EIP-712 `encodeData` of the original struct.
     ///
     /// Unlike ERC-7739, which appends the `contents` struct hash, `contents` is derived as
     /// `keccak256(keccak256(contentsType) ‖ encodeData)`, so a session can only sign the
     /// content types it allows. The `APP_DOMAIN_SEPARATOR` and `contents` are then used to
-    /// verify that `hash` is correct.
+    /// verify that `hash` is correct. `contentsType` must be the app's EIP-712 `encodeType`,
+    /// primary type first, so an explicit-mode description only works when it is already in
+    /// that order.
     /// __________________________________________________________________________________________
     ///
     /// `PersonalSign` is not supported.
     /// __________________________________________________________________________________________
     ///
-    /// For demo and typescript code, see:
-    /// - https://github.com/junomonster/nested-eip-712
-    /// - https://github.com/frangio/eip712-wrapper-for-eip1271
-    ///
-    /// Their nomenclature may differ from ours, although the high-level idea is similar.
-    ///
-    /// Of course, if you have control over the codebase of the wallet client(s) too,
-    /// you can choose a more minimalistic signature scheme like
-    /// `keccak256(abi.encode(address(this), hash))` instead of all these acrobatics.
-    /// All these are just for widespread out-of-the-box compatibility with other wallet clients.
-    /// We want to create bazaars, not walled castles.
-    /// And we'll use push the Turing Completeness of the EVM to the limits to do so.
+    /// The signed `TypedDataSign` hash is the same as in ERC-7739, but the appended data is not,
+    /// so standard ERC-7739 signature encoders do not produce it.
 
     function _erc1271IsValidSignatureViaNestedEIP712(
         address sender,
@@ -169,11 +161,10 @@ abstract contract SmartSessionERC7739 {
                 // `TypedDataSign({ContentsName} contents,string name,...){ContentsType}`.
                 mstore(m, "TypedDataSign(") // Store the start of `TypedDataSign`'s type encoding.
                 let p := add(m, 0x0e) // Advance 14 bytes to skip "TypedDataSign(".
-                // Set the offset of `contents`.
+                // Set the offset and length of `contents`.
                 contents.offset := sub(add(signature.offset, signature.length), add(c, 4))
+                contents.length := c
                 calldatacopy(p, contents.offset, c) // Copy `contentsName`, optimistically.
-
-                contents.length := c // Set the length of `contents`.
                 mstore(add(p, c), 40) // Store a '(' after the end.
                 if iszero(eq(byte(0, mload(sub(add(p, c), 1))), 41)) {
                     let e := 0 // Length of `contentsName` in explicit mode.
@@ -205,7 +196,7 @@ abstract contract SmartSessionERC7739 {
                 mstore(m, keccak256(p, c)) // Store the `contentsType` typehash.
                 let n := sub(contents.offset, add(o, 0x20)) // `encodeData.length`.
                 calldatacopy(add(m, 0x20), add(o, 0x20), n) // Copy `encodeData`.
-                mstore(add(t, 0x20), keccak256(m, add(0x20, n))) // Store `contents`.
+                mstore(add(t, 0x20), keccak256(m, add(0x20, n))) // Store `contents` struct hash.
                 mstore(0x00, 0x1901) // Store the "\x19\x01" prefix.
                 calldatacopy(0x20, o, 0x20) // Copy the `APP_DOMAIN_SEPARATOR`.
                 mstore(0x40, mload(add(t, 0x20))) // Copy `contents`.
@@ -218,7 +209,8 @@ abstract contract SmartSessionERC7739 {
                 }
                 mstore(0x40, keccak256(t, 0xe0)) // `hashStruct(typedDataSign)`.
                 // Store the final hash, corrupted if `contentsName` is invalid, at `t`, and the
-                // `APP_DOMAIN_SEPARATOR` after it.
+                // `APP_DOMAIN_SEPARATOR` after it. Passed through memory: two more stack slots
+                // here exceed the stack limit.
                 mstore(t, keccak256(0x1e, add(0x42, and(1, d))))
                 mstore(add(t, 0x20), mload(0x20))
                 signature.length := sub(o, signature.offset) // Truncate the signature.

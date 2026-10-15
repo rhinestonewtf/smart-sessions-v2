@@ -128,9 +128,10 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         view
         returns (bytes4 result)
     {
-        // ERC-7739 support detection
+        // ERC-7739 support detection. Not version 1: the appended data carries `encodeData`
+        // instead of the `contents` struct hash.
         if (hash == 0x7739773977397739773977397739773977397739773977397739773977397739) {
-            return bytes4(0x77390001);
+            return bytes4(0x77390002);
         }
         // disallow that session can be authorized by other sessions
         if (sender == address(this)) return INVALID_SIGNATURE;

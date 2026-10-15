@@ -74,7 +74,7 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
 
     bytes32 constant ERC7739_DETECTION_HASH =
         0x7739773977397739773977397739773977397739773977397739773977397739;
-    bytes4 constant ERC7739_SUPPORT_VALUE = 0x77390001;
+    bytes4 constant ERC7739_SUPPORT_VALUE = 0x77390002;
     string constant TEST_CONTENT_TYPE = "TestContent(string data)";
     string constant TEST_CONTENT_NAME = "TestContent";
 
@@ -404,6 +404,126 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
 
         // Assert
         assertEq(result, INVALID_SIGNATURE, "Should reject appended data beyond the signature");
+    }
+
+    function test_isValidSignatureWithSender_7739Detection_ReturnsVersion2() public view {
+        // Act
+        bytes4 result = smartSessionEmissary.isValidSignatureWithSender(
+            address(this), ERC7739_DETECTION_HASH, ""
+        );
+
+        // Assert
+        assertEq(result, ERC7739_SUPPORT_VALUE, "Should not report ERC-7739 version 1");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_HeaderOf64Bytes() public withEnabledSession {
+        // Arrange - permissionId and policyDataOffset only, empty validator signature
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01), testPermissionId, uint256(64), _testTail(testEncodeData)
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(result, ERC1271_MAGIC_VALUE, "Should accept a 64-byte header");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_HeaderOf63Bytes()
+        public
+        withEnabledSession
+    {
+        // Arrange
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01), testPermissionId, bytes31(0), _testTail(testEncodeData)
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account).isValidSignature(testMessageHash, fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should reject a 63-byte header");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_StructWithSeveralFields() public {
+        // Arrange - a three-word `encodeData`
+        string memory contentsType = "Order(uint256 amount,address to,bytes32 salt)";
+        bytes memory encodeData = abi.encode(uint256(1), address(2), bytes32(uint256(3)));
+        PermissionId permissionId =
+            _enableSessionWithContent(contentsType, appDomainSeparator, "severalFieldsSalt");
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01),
+            permissionId,
+            uint256(64),
+            appDomainSeparator,
+            encodeData,
+            contentsType,
+            uint16(encodeData.length / 32),
+            uint16(bytes(contentsType).length)
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account)
+            .isValidSignature(_toContentsHash(_hashStruct(contentsType, encodeData)), fullSignature);
+
+        // Assert
+        assertEq(result, ERC1271_MAGIC_VALUE, "Should accept a struct with several fields");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_revertsWhen_EncodeDataWordCountWrong()
+        public
+    {
+        // Arrange - the same struct, with its word count off by one
+        string memory contentsType = "Order(uint256 amount,address to,bytes32 salt)";
+        bytes memory encodeData = abi.encode(uint256(1), address(2), bytes32(uint256(3)));
+        PermissionId permissionId =
+            _enableSessionWithContent(contentsType, appDomainSeparator, "wordCountSalt");
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01),
+            permissionId,
+            uint256(64),
+            appDomainSeparator,
+            encodeData,
+            contentsType,
+            uint16(encodeData.length / 32 - 1),
+            uint16(bytes(contentsType).length)
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result = IERC1271(instance.account)
+            .isValidSignature(_toContentsHash(_hashStruct(contentsType, encodeData)), fullSignature);
+
+        // Assert
+        assertEq(result, INVALID_SIGNATURE, "Should reject a wrong encodeData word count");
+    }
+
+    function test_isValidSignatureWithSender_7739Mode_StructWithoutFields() public {
+        // Arrange - a struct with no fields has empty `encodeData`
+        string memory contentsType = "Empty()";
+        PermissionId permissionId =
+            _enableSessionWithContent(contentsType, appDomainSeparator, "emptyStructSalt");
+        bytes32 contents = _hashStruct(contentsType, "");
+        bytes memory signature = abi.encodePacked(
+            bytes1(0x01),
+            permissionId,
+            uint256(64),
+            appDomainSeparator,
+            contentsType,
+            uint16(0),
+            uint16(bytes(contentsType).length)
+        );
+        bytes memory fullSignature = abi.encodePacked(address(smartSessionEmissary), signature);
+
+        // Act
+        bytes4 result =
+            IERC1271(instance.account).isValidSignature(_toContentsHash(contents), fullSignature);
+
+        // Assert
+        assertEq(result, ERC1271_MAGIC_VALUE, "Should accept a struct without fields");
     }
 
     function test_isValidSignatureWithSender_7739Mode_revertsWhen_HeaderShorterThan64Bytes()
@@ -749,6 +869,18 @@ contract SmartSessionEmissary_isValidSignatureWithSender_Test is SmartSessionEmi
             testPermissionId,
             policyDataOffset,
             signatureWithWrapper
+        );
+    }
+
+    /// @dev Appended data for `TEST_CONTENT_TYPE` under `appDomainSeparator`.
+    function _testTail(bytes memory encodeData) internal view returns (bytes memory) {
+        bytes memory contentsDescription = abi.encodePacked(TEST_CONTENT_TYPE, TEST_CONTENT_NAME);
+        return abi.encodePacked(
+            appDomainSeparator,
+            encodeData,
+            contentsDescription,
+            uint16(encodeData.length / 32),
+            uint16(contentsDescription.length)
         );
     }
 
