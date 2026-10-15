@@ -1,0 +1,60 @@
+SmartSessionERC7739::_erc1271IsValidSignatureViaNestedEIP712
+├── given a session key signature over the ERC-7739 TypedDataSign digest
+│   ├── when the description is in implicit mode
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when the description is in explicit mode
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when the signature covers a different struct
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when the hash is of another struct of the same type
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when the signature covers a different app domain
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when the signature covers a different account
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when the signature is from a different key
+│       └── it returns INVALID_SIGNATURE
+├── given a struct with nested types
+│   ├── when it is the EIP-712 example Mail struct
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when the type string lists the primary type first
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when the explicit-mode type string lists the dependencies first
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when the signature covers the sorted TypedDataSign encoding
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when the type string is not the app's type
+│       └── it returns INVALID_SIGNATURE
+├── given an explicit-mode contents name
+│   ├── when the name differs from the primary type and the signature uses the name
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when the name differs from the primary type and the signature uses the primary type
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when the name is not a valid contents name
+│       └── it returns INVALID_SIGNATURE
+├── given the session's allowed contents
+│   ├── when the same struct uses a description the session did not enable
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when the description is enabled under another app domain
+│   │   └── it returns INVALID_SIGNATURE
+│   ├── when each of two enabled types signs its own struct
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   └── when a struct is presented under the other enabled type
+│       └── it returns INVALID_SIGNATURE
+└── given fuzzed inputs
+    ├── when the signature is arbitrary
+    │   └── it never reverts and returns ERC1271_MAGIC_VALUE or INVALID_SIGNATURE
+    ├── when the appended data and trailer are arbitrary
+    │   └── it never reverts and returns ERC1271_MAGIC_VALUE or INVALID_SIGNATURE
+    ├── when the envelope is correctly built
+    │   └── it returns ERC1271_MAGIC_VALUE
+    ├── when one byte of the app domain, encodeData, description or trailer is flipped
+    │   └── it returns INVALID_SIGNATURE
+    ├── when a struct of one type is presented under another enabled type
+    │   └── it returns INVALID_SIGNATURE
+    ├── when the header is 0 to 80 bytes
+    │   └── it returns ERC1271_MAGIC_VALUE only for a well-formed header of at least 64 bytes
+    ├── when the hash is not the ERC-7739 probe
+    │   └── it never returns 0x77390002
+    └── when the hash is the ERC-7739 probe
+        └── it returns 0x77390002

@@ -1,0 +1,12 @@
+SmartSessionERC7739::contextReplay
+└── given an envelope signed by the session key for one account, chain and app domain
+    ├── when it is replayed on another chain id
+    │   └── it never reverts and returns INVALID_SIGNATURE
+    ├── when it is replayed on another account with the same session
+    │   └── it returns INVALID_SIGNATURE
+    ├── when it is replayed on another emissary without the session
+    │   └── it returns INVALID_SIGNATURE
+    ├── when it is replayed on another emissary with the same session
+    │   └── it returns ERC1271_MAGIC_VALUE
+    └── when it is replayed under another enabled app domain
+        └── it returns INVALID_SIGNATURE

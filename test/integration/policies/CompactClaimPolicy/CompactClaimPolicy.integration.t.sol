@@ -10,6 +10,7 @@ import {
 import { MockAdapter } from "@mocks/MockAdapter.sol";
 import { AlwaysOKAllocator } from "@the-compact/test/AlwaysOKAllocator.sol";
 import { CompactClaimPolicy } from "@policies/claim/compact/CompactClaimPolicy.sol";
+import { EIP712 } from "solady/utils/EIP712.sol";
 
 // Libraries
 import { IdLib } from "@the-compact/lib/IdLib.sol";
@@ -30,9 +31,15 @@ import {
 } from "@compact-utils/types/TheCompactStructs.sol";
 import { Execution } from "@smartsessions/lib/ExecutionLib.sol";
 import { Types } from "@compact-utils/types/OrderTypes.sol";
-import { PolicyData, ActionData, PermissionId, ERC7739Data } from "@smartsessions/DataTypes.sol";
+import {
+    PolicyData,
+    ActionData,
+    PermissionId,
+    ERC7739Data,
+    ERC7739Context
+} from "@smartsessions/DataTypes.sol";
 import { Session } from "@types/DataTypes.sol";
-import { EmissaryMode, EMISSARY_SMART_SESSION } from "@lib/ModeLib.sol";
+import { EmissaryMode, EMISSARY_SMART_SESSION, IS_VALID_SIG_1271_7739 } from "@lib/ModeLib.sol";
 import {
     FIELD_ARBITER,
     FIELD_ORIGIN_OPS,
@@ -42,6 +49,11 @@ import {
     FIELD_TOKEN_OUT,
     MODE_CHECK_STORAGE
 } from "@policies/claim/base/types/BaseDataTypes.sol";
+import {
+    MODULE_TYPE_FALLBACK,
+    MODULE_TYPE_VALIDATOR
+} from "@modulekit/accounts/common/interfaces/IERC7579Module.sol";
+import { CALLTYPE_STATIC } from "erc7579/lib/ModeLib.sol";
 
 /// @title CompactClaimPolicy Integration Test
 /// @notice Integration tests for CompactClaimPolicy validation via SmartSessionEmissary
@@ -52,6 +64,7 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
 
     using TestHelperLib for *;
     using IdLib for *;
+    using ModuleKitHelpers for *;
 
     /*//////////////////////////////////////////////////////////////
                                 VARIABLES
@@ -73,6 +86,10 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
     MockAdapter mockAdapter;
     address arbiter;
     uint8 internal activeFieldMode;
+
+    /// @notice MultichainCompact type, the ERC-7739 contents type of a Compact claim
+    string internal constant COMPACT_CONTENTS_TYPE =
+        "MultichainCompact(address sponsor,uint256 nonce,uint256 expires,Element[] elements)Element(address arbiter,uint256 chainId,Lock[] commitments,Mandate mandate)Lock(bytes12 lockTag,address token,uint256 amount)Mandate(Target target,uint128 minGas,Op originOps,Op destOps,bytes32 q)Op(bytes32 vt,Ops[] ops)Ops(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry)Token(address token,uint256 amount)";
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
@@ -688,6 +705,94 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         );
     }
 
+    /// @notice A 7739-wrapped Compact claim to the pinned recipient settles through the account's
+    /// ERC-1271 check.
+    function test_integration_verifyClaim_compact_recipient_7739_notarizedChain() public {
+        // Arrange
+        _setupSession7739WithRecipientConfig(chains.originChain1, env.smartAccount1.account);
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory sig =
+            _createSmartSessionSignature7739(_createPolicyDataForElement(0), _compactEncodeData());
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+
+        // Act
+        vm.expectCall(
+            address(compactClaimPolicy),
+            abi.encodeWithSelector(compactClaimPolicy.check1271SignedAction.selector)
+        );
+        uint256 gas = _claim(
+            order.notarizedChainId,
+            abi.encodePacked(env.solver.addr),
+            _claimCalldata7739(order, sig, otherElements, allocatorSig)
+        );
+
+        assertTrue(gas > 0, "Claim should succeed - recipient matches");
+    }
+
+    /// @notice A 7739 signature for one recipient does not settle a claim to another recipient
+    /// the session allows: the Compact's hash no longer matches the signed contents.
+    function test_integration_verifyClaim_compact_recipient_7739_revertsWhen_hashNotBoundToContents()
+        public
+    {
+        // Arrange - the session pins the new recipient and the policy data describes it, so the
+        // policy would accept; the signed contents remain the original recipient's claim
+        bytes memory signedEncodeData = _compactEncodeData();
+        address newRecipient = makeAddr("other");
+        $intent.compact.elements[0].mandate.target.recipient = newRecipient;
+        ($intent.claimHash, $intent.elementHashes) = hashCompact(arbiter, $intent.compact);
+        _setupSession7739WithRecipientConfig(chains.originChain1, newRecipient);
+
+        Types.Order memory order = _getOrder($intent.compact, 0);
+        vm.chainId(order.notarizedChainId);
+
+        bytes memory sig =
+            _createSmartSessionSignature7739(_createPolicyDataForElement(0), signedEncodeData);
+
+        (, bytes memory allocatorSig) =
+            _allocatorSig(env.orchestrator, order.notarizedChainId, $intent.claimHash);
+
+        (, bytes32[] memory otherElements) = $intent.elementHashes.withoutIndex(0);
+        bytes memory adapterCalldata = _claimCalldata7739(order, sig, otherElements, allocatorSig);
+
+        // Act & Assert - rejected before the policy is consulted
+        vm.expectCall(
+            address(compactClaimPolicy),
+            abi.encodeWithSelector(compactClaimPolicy.check1271SignedAction.selector),
+            0
+        );
+        vm.expectRevert();
+        _claim(order.notarizedChainId, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
+    function _claimCalldata7739(
+        Types.Order memory order,
+        bytes memory sig,
+        bytes32[] memory otherElements,
+        bytes memory allocatorSig
+    )
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeCall(
+            MockAdapter.mock_compact_handleClaim,
+            (MockAdapter.ClaimDataCompact({
+                    order: order,
+                    userSigs: Types.Signatures(sig, ""),
+                    otherElements: otherElements,
+                    allocatorData: allocatorSig,
+                    elementIndex: 0
+                }))
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                                TOKEN OUT
     //////////////////////////////////////////////////////////////*/
@@ -1202,6 +1307,52 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
             smartSessionEmissary.enableSessions(sessions, testLockTag);
         defaultPermissionId = permissionIds[0];
     }
+
+    /// @notice Setup an ERC-1271 session with recipient whitelist check, enabled for Compact
+    /// claims as ERC-7739 typed data, and install the emissary as the account's validator
+    function _setupSession7739WithRecipientConfig(uint256 chainId, address recipient) internal {
+        activeFieldMode = FIELD_RECIPIENT;
+
+        env.smartAccount1
+            .installModule({
+                moduleTypeId: MODULE_TYPE_VALIDATOR, module: address(smartSessionEmissary), data: ""
+            });
+        bytes memory _fallback = abi.encode(EIP712.eip712Domain.selector, CALLTYPE_STATIC, "");
+        env.smartAccount1
+            .installModule({
+                moduleTypeId: MODULE_TYPE_FALLBACK, module: address(fallbackModule), data: _fallback
+            });
+
+        uint32 modeConfig = _createModeConfig(FIELD_RECIPIENT, MODE_CHECK_STORAGE);
+
+        PolicyData[] memory policyDatas = new PolicyData[](1);
+        policyDatas[0] = PolicyData({
+            policy: address(compactClaimPolicy),
+            initData: abi.encodePacked(modeConfig, uint8(1), chainId, recipient)
+        });
+
+        ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
+        allowedContent[0].contentNames = new string[](1);
+        allowedContent[0].contentNames[0] = COMPACT_CONTENTS_TYPE;
+        allowedContent[0].appDomainSeparator = _notarizedDomainSeparator();
+
+        Session memory session = Session({
+            sessionValidator: ISessionValidator(address(yesSessionValidator)),
+            salt: keccak256(abi.encodePacked("recipient7739Salt", chainId, recipient)),
+            sessionValidatorInitData: "mockInitData",
+            erc7739Policies: ERC7739Data({
+                allowedERC7739Content: allowedContent, erc1271Policies: policyDatas
+            }),
+            actions: new ActionData[](0),
+            claimPolicies: new PolicyData[](0)
+        });
+
+        Session[] memory sessions = new Session[](1);
+        sessions[0] = session;
+        vm.prank(env.smartAccount1.account);
+        defaultPermissionId = smartSessionEmissary.enableSessions(sessions, testLockTag)[0];
+    }
+
     /*//////////////////////////////////////////////////////////////
                          SIGNATURE HELPERS
     //////////////////////////////////////////////////////////////*/
@@ -1224,6 +1375,64 @@ contract CompactClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
             sessionValidatorSignature,
             policyData
         );
+    }
+
+    /// @notice Typed-data signature, checked by the account's ERC-1271, whose contents are the
+    /// MultichainCompact with `encodeData` under the notarized chain's Compact domain.
+    /// @dev Tail: [appDomainSeparator] [encodeData] [contentsDescription] [uint16 words]
+    /// [uint16 length].
+    function _createSmartSessionSignature7739(
+        bytes memory policyData,
+        bytes memory encodeData
+    )
+        internal
+        returns (bytes memory)
+    {
+        bytes32 r = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
+        bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
+        uint8 v = 27;
+        bytes memory sessionValidatorSignature = abi.encodePacked(r, s, v);
+        bytes memory contentsDescription = bytes(COMPACT_CONTENTS_TYPE);
+
+        return abi.encodePacked(
+            address(smartSessionEmissary),
+            IS_VALID_SIG_1271_7739,
+            defaultPermissionId,
+            uint256(sessionValidatorSignature.length) + 64,
+            sessionValidatorSignature,
+            policyData,
+            _notarizedDomainSeparator(),
+            encodeData,
+            contentsDescription,
+            uint16(encodeData.length / 32),
+            uint16(contentsDescription.length)
+        );
+    }
+
+    /// @notice EIP-712 `encodeData` of the MultichainCompact of `$intent`.
+    function _compactEncodeData() internal view returns (bytes memory encodeData) {
+        require(
+            keccak256(bytes(COMPACT_CONTENTS_TYPE)) == EIP712TypeHashLib.TYPEHASH_COMPACT,
+            "contents type does not match the Compact typehash"
+        );
+        encodeData = abi.encode(
+            $intent.compact.sponsor,
+            $intent.compact.nonce,
+            $intent.compact.expires,
+            keccak256(abi.encodePacked($intent.elementHashes))
+        );
+        require(
+            keccak256(abi.encodePacked(keccak256(bytes(COMPACT_CONTENTS_TYPE)), encodeData))
+                == $intent.claimHash,
+            "encodeData does not hash to claimHash"
+        );
+    }
+
+    function _notarizedDomainSeparator() internal returns (bytes32 domainSeparator) {
+        uint256 currentChain = block.chainid;
+        vm.chainId(chains.originChain1);
+        domainSeparator = env.compact.DOMAIN_SEPARATOR();
+        vm.chainId(currentChain);
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -322,9 +322,9 @@ abstract contract SmartSessionMixin is
     ///      **ERC-7739 Mode (appDomainSeparator != bytes32(0)):**
     ///      1. Verifies that the permissionId is enabled for msg.sender
     ///      2. Ensures the ERC-7739 content hash is enabled for the given permissionId and domain
-    ///      3. Checks the ERC-1271 policy with the raw hash
-    ///      4. Validates signature using ISessionValidator with the ERC-7739 wrapped hash
-    ///         (hash is already fully wrapped by _erc1271IsValidSignatureViaNestedEIP712)
+    ///      3. Checks the ERC-1271 policy with the raw hash, which
+    ///         _erc1271IsValidSignatureViaNestedEIP712 has bound to the signed contents
+    ///      4. Validates signature using ISessionValidator with the ERC-7739 nested hash
     ///
     /// @dev Direct mode skips ERC-7739 nested wrapping for session keys signing programmatically.
     ///      Since session keys don't need human-readable signature prompts, we can use simple
@@ -335,7 +335,9 @@ abstract contract SmartSessionMixin is
     ///      allowedERC7739Content to prevent accidental bypass of ERC-7739 restrictions.
     ///
     /// @param sender The address initiating the signature validation
-    /// @param hash The hash of the data to be signed (in ERC-7739 mode, already fully wrapped)
+    /// @param hash The hash of the data to be signed, as passed to isValidSignature
+    /// @param nestedHash The ERC-7739 TypedDataSign hash the session key signed
+    ///        (zero in direct mode)
     /// @param signature The signature to be validated
     ///        Format: [permissionId(32)][policyDataOffset(32)][validatorSig][policyData]
     /// @param appDomainSeparator The app's domain separator (bytes32(0) = direct mode)
@@ -344,6 +346,7 @@ abstract contract SmartSessionMixin is
     function _erc1271IsValidSignatureNowCalldata(
         address sender,
         bytes32 hash,
+        bytes32 nestedHash,
         bytes calldata signature,
         bytes32 appDomainSeparator,
         bytes calldata contents
@@ -400,9 +403,9 @@ abstract contract SmartSessionMixin is
 
         // Determine the digest based on mode:
         // 1) Direct mode: Hash bound to msg.sender and wrapped via ERC191 toEthSignedMessageHash
-        // 2) ERC-7739 mode: Hash wrapped via ERC7739 _erc1271IsValidSignatureViaNestedEIP712
+        // 2) ERC-7739 mode: `nestedHash`, computed in _erc1271IsValidSignatureViaNestedEIP712
         bytes32 digest =
-            directMode ? ECDSA.toEthSignedMessageHash(abi.encode(msg.sender, hash)) : hash;
+            directMode ? ECDSA.toEthSignedMessageHash(abi.encode(msg.sender, hash)) : nestedHash;
 
         // Validate signature using ISessionValidator
         return $sessionValidators.isValidISessionValidator({

@@ -76,12 +76,17 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         bytes userEmissarySig;
     }
 
+    /// @notice Permit2 witness type, the ERC-7739 contents type of a Permit2 claim
+    string internal constant PERMIT2_CONTENTS_TYPE =
+        "PermitBatchWitnessTransferFrom(TokenPermissions[] permitted,address spender,uint256 nonce,uint256 deadline,Mandate mandate)Mandate(Target target,uint128 minGas,Op originOps,Op destOps,bytes32 q)Op(bytes32 vt,Ops[] ops)Ops(address to,uint256 value,bytes data)Target(address recipient,Token[] tokenOut,uint256 targetChain,uint256 fillExpiry)Token(address token,uint256 amount)TokenPermissions(address token,uint256 amount)";
+
     Permit2Intent $intent;
     PermissionId defaultPermissionId;
     Permit2ClaimPolicy permit2ClaimPolicy;
     MockAdapter mockAdapter;
     address arbiter;
     uint8 internal activeFieldMode;
+    bytes32 internal permit2DomainSeparator;
 
     /*//////////////////////////////////////////////////////////////
                                  SETUP
@@ -137,6 +142,7 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
 
         // Deploy Permit2ClaimPolicy
         permit2ClaimPolicy = new Permit2ClaimPolicy(address(Constants.PERMIT2));
+        permit2DomainSeparator = Constants.PERMIT2.DOMAIN_SEPARATOR();
 
         // Install SmartSessionEmissary as validator module on the account
         env.smartAccount1
@@ -379,32 +385,94 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         );
     }
 
-    /// @notice A mode 0x01 signature for the pinned recipient must not settle a different one.
-    /// @dev Unlike the 0x00 recipient tests, the signature is not rebuilt after the recipient
-    /// changes.
-    function test_integration_verifyClaim_permit2_recipient_revertsWhen_7739SignatureReused()
+    /// @notice A 7739-wrapped Permit2 claim to the pinned recipient settles.
+    function test_integration_verifyClaim_permit2_recipient_7739_valid() public {
+        // Arrange
+        _setupSessionWithRecipientConfig(
+            $intent.element.mandate.target.targetChain, $intent.element.mandate.target.recipient
+        );
+        bytes memory sig =
+            _createSmartSessionSignature7739(_createPolicyData(), _permit2EncodeData());
+
+        // Act
+        uint256 gas =
+            _claim(block.chainid, abi.encodePacked(env.solver.addr), _claimCalldata7739(sig));
+
+        assertTrue(gas > 0, "Claim should succeed - recipient matches");
+    }
+
+    /// @notice The claim policy refuses a 7739-wrapped Permit2 claim to a recipient the session
+    /// does not pin.
+    function test_integration_verifyClaim_permit2_recipient_7739_revertsWhen_wrongRecipient()
         public
     {
-        address pinned = $intent.element.mandate.target.recipient;
-        uint256 targetChainId = $intent.element.mandate.target.targetChain;
-        _setupSessionWithRecipientConfig(targetChainId, pinned);
+        // Arrange
+        _setupSessionWithRecipientConfig(
+            $intent.element.mandate.target.targetChain, makeAddr("wrongRecipient")
+        );
+        bytes memory sig =
+            _createSmartSessionSignature7739(_createPolicyData(), _permit2EncodeData());
+        bytes memory adapterCalldata = _claimCalldata7739(sig);
 
-        bytes memory policyData = _createPolicyData();
-        bytes memory sig = _createSmartSessionSignature7739(policyData);
+        // Act & Assert
+        vm.expectCall(
+            address(permit2ClaimPolicy),
+            abi.encodeWithSelector(permit2ClaimPolicy.check1271SignedAction.selector)
+        );
+        // Permit2 reverts with `InvalidContractSignature()`; the router's adapter call rethrows
+        // it as four zero bytes
+        vm.expectRevert(bytes4(0));
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
 
+    /// @notice A 7739 signature for the pinned recipient does not settle a claim to another one.
+    function test_integration_verifyClaim_permit2_recipient_7739_revertsWhen_signatureReused()
+        public
+    {
+        // Arrange
+        _setupSessionWithRecipientConfig(
+            $intent.element.mandate.target.targetChain, $intent.element.mandate.target.recipient
+        );
+        bytes memory sig =
+            _createSmartSessionSignature7739(_createPolicyData(), _permit2EncodeData());
         $intent.element.mandate.target.recipient = makeAddr("other");
-        Types.Order memory order = _getPermit2Order();
+        bytes memory adapterCalldata = _claimCalldata7739(sig);
 
-        vm.expectRevert();
-        _claim(
-            block.chainid,
-            abi.encodePacked(env.solver.addr),
-            abi.encodeCall(
-                MockAdapter.mock_permit2_handleClaim,
-                (MockAdapter.ClaimDataPermit2({
-                        order: order, userSigs: Types.Signatures(sig, "")
-                    }))
-            )
+        // Act & Assert
+        vm.expectRevert(bytes4(0));
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
+    /// @notice A 7739 signature for one recipient does not settle a claim to another recipient
+    /// the session allows: Permit2's hash no longer matches the signed contents.
+    function test_integration_verifyClaim_permit2_recipient_7739_revertsWhen_hashNotBoundToContents()
+        public
+    {
+        // Arrange - the session pins the new recipient and the policy data describes it, so the
+        // policy would accept; the signed contents remain the original recipient's struct
+        bytes memory signedEncodeData = _permit2EncodeData();
+        address newRecipient = makeAddr("other");
+        _setupSessionWithRecipientConfig($intent.element.mandate.target.targetChain, newRecipient);
+        $intent.element.mandate.target.recipient = newRecipient;
+        bytes memory sig = _createSmartSessionSignature7739(_createPolicyData(), signedEncodeData);
+        bytes memory adapterCalldata = _claimCalldata7739(sig);
+
+        // Act & Assert - rejected before the policy is consulted
+        vm.expectCall(
+            address(permit2ClaimPolicy),
+            abi.encodeWithSelector(permit2ClaimPolicy.check1271SignedAction.selector),
+            0
+        );
+        vm.expectRevert(bytes4(0));
+        _claim(block.chainid, abi.encodePacked(env.solver.addr), adapterCalldata);
+    }
+
+    function _claimCalldata7739(bytes memory sig) internal view returns (bytes memory) {
+        return abi.encodeCall(
+            MockAdapter.mock_permit2_handleClaim,
+            (MockAdapter.ClaimDataPermit2({
+                    order: _getPermit2Order(), userSigs: Types.Signatures(sig, "")
+                }))
         );
     }
 
@@ -938,11 +1006,14 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
 
     /// @notice Helper to enable a session with given policy data
     function _enableSession(PolicyData[] memory policyDatas, string memory salt) internal {
-        // Domain 0 enabled for direct mode
-        ERC7739Context[] memory allowedContent = new ERC7739Context[](1);
+        // Domain 0 enabled for direct mode, the Permit2 domain for ERC-7739 typed data
+        ERC7739Context[] memory allowedContent = new ERC7739Context[](2);
         allowedContent[0].contentNames = new string[](1);
         allowedContent[0].contentNames[0] = "";
         allowedContent[0].appDomainSeparator = bytes32(0);
+        allowedContent[1].contentNames = new string[](1);
+        allowedContent[1].contentNames[0] = PERMIT2_CONTENTS_TYPE;
+        allowedContent[1].appDomainSeparator = permit2DomainSeparator;
         ERC7739Data memory erc7739Data =
             ERC7739Data({ allowedERC7739Content: allowedContent, erc1271Policies: policyDatas });
 
@@ -1012,10 +1083,14 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         );
     }
 
-    /// @notice Same layout as `_createSmartSessionSignature`, with mode `IS_VALID_SIG_1271_7739`
-    /// and the ERC-7739 tail from `SmartSessionEmissary` (domain, contents hash, description,
-    /// length). Domain 0 matches the session enabled in `_enableSession`.
-    function _createSmartSessionSignature7739(bytes memory policyData)
+    /// @notice Typed-data signature whose contents are the Permit2 struct with `encodeData` under
+    /// the Permit2 domain.
+    /// @dev Tail: [appDomainSeparator] [encodeData] [contentsDescription] [uint16 words]
+    /// [uint16 length].
+    function _createSmartSessionSignature7739(
+        bytes memory policyData,
+        bytes memory encodeData
+    )
         internal
         view
         returns (bytes memory)
@@ -1024,7 +1099,7 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
         bytes32 s = bytes32(0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321);
         uint8 v = 27;
         bytes memory sessionValidatorSignature = abi.encodePacked(r, s, v);
-        bytes memory contentsDescription = "";
+        bytes memory contentsDescription = bytes(PERMIT2_CONTENTS_TYPE);
 
         return abi.encodePacked(
             address(smartSessionEmissary),
@@ -1033,10 +1108,27 @@ contract Permit2ClaimPolicy_Integration_Test is CompactEnvironment, SmartSession
             uint256(sessionValidatorSignature.length) + 64,
             sessionValidatorSignature,
             policyData,
-            bytes32(0),
-            bytes32(0),
+            permit2DomainSeparator,
+            encodeData,
             contentsDescription,
+            uint16(encodeData.length / 32),
             uint16(contentsDescription.length)
+        );
+    }
+
+    /// @notice EIP-712 `encodeData` of the Permit2 struct of `$intent`.
+    function _permit2EncodeData() internal view returns (bytes memory encodeData) {
+        encodeData = abi.encode(
+            _computeTokenPermissionsHash(),
+            $intent.element.arbiter,
+            $intent.nonce,
+            $intent.expires,
+            _computeMandateHash()
+        );
+        require(
+            keccak256(abi.encodePacked(keccak256(bytes(PERMIT2_CONTENTS_TYPE)), encodeData))
+                == $intent.permit2Hash,
+            "encodeData does not hash to permit2Hash"
         );
     }
 
