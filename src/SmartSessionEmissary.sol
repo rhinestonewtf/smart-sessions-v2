@@ -108,9 +108,11 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
     ///      Mode 0x01 (IS_VALID_SIG_1271_7739) - ERC-7739 nested EIP-712 validation:
     ///        Signature format: [mode (1)] [permissionId (32)] [policyDataOffset (32)]
     ///                          [validatorSig (variable)] [policyData (variable)]
-    ///                          [appDomainSeparator (32)] [contentHash (32)]
-    ///                          [contentsDescription (variable)]
+    ///                          [appDomainSeparator (32)] [encodeData (32 * n)]
+    ///                          [contentsDescription (variable)] [uint16(n)]
     ///                          [uint16(contentsDescription.length)]
+    ///        The contents hash is derived from contentsType and encodeData, so the session
+    ///        can only sign the content types it allows
     ///        Validates typed data signatures with app-specific domain separation
     ///
     /// @param sender The address of the smart account (ERC-1271 sender)
@@ -126,9 +128,10 @@ contract SmartSessionEmissary is VanillaEmissary, SmartSessionMixin {
         view
         returns (bytes4 result)
     {
-        // ERC-7739 support detection
+        // ERC-7739 support detection. Not version 1: the appended data carries `encodeData`
+        // instead of the `contents` struct hash.
         if (hash == 0x7739773977397739773977397739773977397739773977397739773977397739) {
-            return bytes4(0x77390001);
+            return bytes4(0x77390002);
         }
         // disallow that session can be authorized by other sessions
         if (sender == address(this)) return INVALID_SIGNATURE;

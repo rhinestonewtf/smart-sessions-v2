@@ -1,0 +1,14 @@
+SmartSessionERC7739::differentialVectors
+├── given the reference vectors
+│   ├── when the account's eip712Domain is read
+│   │   └── it matches the domain the vectors were signed for
+│   ├── when the suite's helpers hash each vector
+│   │   └── they agree with the reference contents, app hash, typehash and digest
+│   ├── when each reference-signed envelope is validated
+│   │   └── it returns ERC1271_MAGIC_VALUE, or INVALID_SIGNATURE for a sorted TypedDataSign over a type whose dependency sorts first
+│   ├── when each reference-signed envelope is validated through the account
+│   │   └── it returns the same result
+│   ├── when a byte of encodeData is flipped
+│   │   └── it returns INVALID_SIGNATURE
+│   └── when a bit of the session key signature is flipped
+│       └── it returns INVALID_SIGNATURE

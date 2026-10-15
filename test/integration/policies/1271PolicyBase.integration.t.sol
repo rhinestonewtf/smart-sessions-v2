@@ -284,8 +284,9 @@ abstract contract Policy1271_Integration_Test is SmartSessionEmissary_Integratio
         view
         returns (bool valid)
     {
-        // Compute all the hashes
-        bytes32 contentHash = keccak256(typedDataPayload);
+        // Compute all the hashes; `typedDataPayload` is the struct's `encodeData`
+        bytes32 contentHash =
+            keccak256(abi.encodePacked(keccak256(bytes(contentType)), typedDataPayload));
         bytes32 typedDataSignHash =
             _computeTypedDataSignHash(account.account, contentHash, contentType, contentName);
 
@@ -300,15 +301,17 @@ abstract contract Policy1271_Integration_Test is SmartSessionEmissary_Integratio
         bytes memory contentsDescription = abi.encodePacked(contentType, contentName);
 
         // CRITICAL: policyData goes BEFORE the ERC7739 wrapper ending
-        // Structure: [r,s,v (65)] [policyData] [appDomain] [contentHash] [description] [uint16]
+        // Structure: [r,s,v (65)] [policyData] [appDomain] [encodeData] [description]
+        // [uint16 words] [uint16 length]
         bytes memory signatureBody = abi.encodePacked(
             r,
             s,
             v, // 65 bytes - validator sig
             policyData, // Policy data BEFORE wrapper
             appDomainSeparator, // 32 bytes
-            contentHash, // 32 bytes
+            typedDataPayload, // 32 bytes per field
             contentsDescription, // variable
+            uint16(typedDataPayload.length / 32), // 2 bytes
             uint16(contentsDescription.length) // 2 bytes - MUST be at the end
         );
 

@@ -1,0 +1,20 @@
+SmartSessionERC7739::sizeExtremes
+├── given a correctly bound envelope
+│   ├── when the description is 65535 bytes
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   ├── when encodeData is 65535 words
+│   │   └── it returns ERC1271_MAGIC_VALUE
+│   └── when both are at their maxima
+│       └── it returns ERC1271_MAGIC_VALUE
+├── given both at their maxima
+│   └── when a word changes after the hash was bound
+│       └── it returns INVALID_SIGNATURE
+├── given a trailer claiming both maxima over a short tail
+│   └── it returns INVALID_SIGNATURE
+├── given an enabled 65535-byte description with no closing parenthesis
+│   └── it never reverts and returns INVALID_SIGNATURE
+└── given fuzzed inputs
+    ├── when the trailer is any uint16 pair over a bounded tail
+    │   └── it never reverts and returns ERC1271_MAGIC_VALUE or INVALID_SIGNATURE
+    └── when the description is within 1024 bytes of the maximum
+        └── it returns ERC1271_MAGIC_VALUE

@@ -1,0 +1,6 @@
+SmartSessionERC7739::nestedTypeFuzz
+└── given a random acyclic graph of 2 to 5 struct types with the primary type enabled
+    ├── when the primary type's struct is signed by the session key
+    │   └── it never reverts and returns ERC1271_MAGIC_VALUE
+    └── when another type of the graph is presented under the enabled or its own description
+        └── it never reverts and returns INVALID_SIGNATURE
