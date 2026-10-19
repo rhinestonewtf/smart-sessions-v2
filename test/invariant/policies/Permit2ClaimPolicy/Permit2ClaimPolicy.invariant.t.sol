@@ -164,6 +164,16 @@ contract Permit2ClaimPolicyHandler is Permit2ClaimPolicy_Unit_Test, Permit2EIP71
         // Skip if no fields enabled
         if (fieldBitmask == 0) return;
 
+        // Per-chain destOps requires a target check (DestOpsRequiresTargetCheck); force the
+        // data-free recipientIsSponsor check so the fuzzer keeps exercising destOps configs.
+        uint16 targetCheckBits = uint16(
+            (1 << FIELD_RECIPIENT) | (1 << FIELD_FILL_EXPIRY) | (1 << FIELD_TOKEN_OUT)
+                | (1 << FIELD_RECIPIENT_IS_SPONSOR)
+        );
+        if ((fieldBitmask & (1 << FIELD_DEST_OPS)) != 0 && (fieldBitmask & targetCheckBits) == 0) {
+            fieldBitmask |= uint16(1 << FIELD_RECIPIENT_IS_SPONSOR);
+        }
+
         // Generate config values from seed
         _generateConfigValues(seed);
 
