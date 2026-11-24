@@ -111,6 +111,18 @@ contract IntentExecutionPolicy_checkAction_Unit_Test is IntentExecutionPolicy_Un
         assertEq(result, SUCCESS);
     }
 
+    /// @notice Test approve with whitelisted spender but nonzero native value returns FAILED
+    function test_checkAction_approve_whitelistedSpender_withValue() external view {
+        // Arrange
+        bytes memory callData = _encodeApprove(whitelistedTarget2, 0);
+
+        // Act
+        uint256 result = policy.checkAction(configId, address(0), nonWhitelistedTarget, 1, callData);
+
+        // Assert
+        assertEq(result, FAILED);
+    }
+
     /*//////////////////////////////////////////////////////////////
         NON-WHITELISTED TARGET - APPROVE WITH NON-WHITELISTED SPENDER
     //////////////////////////////////////////////////////////////*/

@@ -99,15 +99,17 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
 
     /// @notice Validates an action against the whitelist policy
     /// @dev If the target is whitelisted, allows immediately. If the call is an ERC20 `approve`,
-    ///      validates the spender is a whitelisted address. Otherwise, denies.
+    ///      validates the spender is a whitelisted address and the call carries no native value.
+    ///      Otherwise, denies.
     /// @param target The target contract being called
+    /// @param value The native value sent with the action
     /// @param data The calldata of the action
     /// @return VALIDATION_SUCCESS if allowed, VALIDATION_FAILED otherwise
     function checkAction(
         ConfigId,
         address,
         address target,
-        uint256,
+        uint256 value,
         bytes calldata data
     )
         external
@@ -121,7 +123,8 @@ contract IntentExecutionPolicy is IActionPolicy, Ownable {
 
         // otherwise If selector is `approve(address,uint256)`, validate the spender
         if (data.length >= 4 && bytes4(data[0:4]) == APPROVE_SELECTOR) {
-            if (data.length >= 36) {
+            // The target is not whitelisted, so it must not receive native value.
+            if (value == 0 && data.length >= 36) {
                 address spender = address(bytes20(data[16:36]));
                 if (whitelistedTargets[spender]) {
                     return VALIDATION_SUCCESS;
