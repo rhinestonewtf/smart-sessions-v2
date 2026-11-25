@@ -6,7 +6,10 @@ IntentExecutionPolicy::checkAction
 │   │   ├── given spender is paymaster
 │   │   │   └── it should return VALIDATION_SUCCESS
 │   │   ├── given spender is a whitelisted address
-│   │   │   └── it should return VALIDATION_SUCCESS
+│   │   │   ├── given value is zero
+│   │   │   │   └── it should return VALIDATION_SUCCESS
+│   │   │   └── given value is nonzero
+│   │   │       └── it should return VALIDATION_FAILED
 │   │   ├── given spender is not paymaster or whitelisted
 │   │   │   └── it should return VALIDATION_FAILED
 │   │   └── given calldata is too short (no spender argument)
