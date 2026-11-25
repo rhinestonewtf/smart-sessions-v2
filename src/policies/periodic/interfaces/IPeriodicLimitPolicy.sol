@@ -19,14 +19,19 @@ interface IPeriodicLimitPolicy {
     }
 
     /// @notice A configuration, set at install and read on every check
+    /// @param chainId The only chain the limit admits uses on. One multichain enable installs the
+    ///        configuration everywhere, but counters are per chain, so pinning one chain keeps
+    ///        one signed allowance from becoming one per chain.
     /// @param mode How windows are placed
     /// @param period Window length in seconds; never zero
-    /// @param start No use is admitted before it. `Fixed` windows are aligned to it. Zero at
-    ///        install means the install's `block.timestamp`.
+    /// @param start No use is admitted before it. `Fixed` windows are aligned to it, so it must be
+    ///        set explicitly there: a default resolved at install would move on every re-enable.
+    ///        Zero means no lower bound (`FromFirstUse` only).
     /// @param maxUses Uses admitted per window; zero means no use limit
     /// @param token The only token an amount-limited action may move; zero iff `maxAmount` is zero
     /// @param maxAmount Token amount admitted per window; zero means no amount limit
     struct PeriodicLimitConfig {
+        uint64 chainId;
         PeriodMode mode;
         uint48 period;
         uint48 start;
@@ -50,6 +55,12 @@ interface IPeriodicLimitPolicy {
 
     /// @notice Thrown when the period is zero
     error InvalidPeriod();
+
+    /// @notice Thrown when a `Fixed` configuration has no `start`
+    error InvalidStart();
+
+    /// @notice Thrown when the chain id is zero
+    error InvalidChainId();
 
     /// @notice Thrown when neither a use limit nor an amount limit is set
     error NoLimitSet();
@@ -79,6 +90,8 @@ interface IPeriodicLimitPolicy {
 
     /// @notice The usage of the window that holds `block.timestamp`: zero counts if no use was
     ///         admitted in it yet
+    /// @dev All zero when the configuration is not installed, is pinned to another chain, or
+    ///      `start` has not been reached.
     /// @return windowStart Start of that window, or zero for a `FromFirstUse` window that has not
     ///         opened yet
     /// @return uses Uses admitted in that window

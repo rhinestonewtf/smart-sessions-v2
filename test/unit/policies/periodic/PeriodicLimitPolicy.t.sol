@@ -43,6 +43,7 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
         returns (IPeriodicLimitPolicy.PeriodicLimitConfig memory)
     {
         return IPeriodicLimitPolicy.PeriodicLimitConfig({
+            chainId: uint64(block.chainid),
             mode: mode,
             period: PERIOD,
             start: START,
@@ -52,22 +53,56 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
         });
     }
 
+    function _installAs(
+        address mux,
+        address acct,
+        IPeriodicLimitPolicy.PeriodicLimitConfig memory config
+    )
+        internal
+    {
+        vm.prank(mux);
+        policy.initializeWithMultiplexer(acct, configId, abi.encode(config));
+    }
+
     function _install(IPeriodicLimitPolicy.PeriodicLimitConfig memory config) internal {
-        vm.prank(multiplexer);
-        policy.initializeWithMultiplexer(account, configId, abi.encode(config));
+        _installAs(multiplexer, account, config);
     }
 
     function _transfer(uint256 amount) internal view returns (bytes memory) {
         return abi.encodeCall(IERC20.transfer, (merchant, amount));
     }
 
+    function _checkAs(
+        address mux,
+        address acct,
+        address target,
+        uint256 value,
+        bytes memory data
+    )
+        internal
+        returns (uint256)
+    {
+        vm.prank(mux);
+        return policy.checkAction(configId, acct, target, value, data);
+    }
+
     function _check(address target, uint256 value, bytes memory data) internal returns (uint256) {
-        vm.prank(multiplexer);
-        return policy.checkAction(configId, account, target, value, data);
+        return _checkAs(multiplexer, account, target, value, data);
     }
 
     function _charge(uint256 amount) internal returns (uint256) {
         return _check(token, 0, _transfer(amount));
+    }
+
+    function _usage() internal view returns (uint48 windowStart, uint256 uses, uint256 spent) {
+        return policy.currentUsage(configId, multiplexer, account);
+    }
+
+    function _slice(bytes memory data, uint256 length) internal pure returns (bytes memory out) {
+        out = new bytes(length);
+        for (uint256 i; i < length && i < data.length; i++) {
+            out[i] = data[i];
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -79,6 +114,7 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
 
         IPeriodicLimitPolicy.PeriodicLimitConfig memory stored =
             policy.getConfig(configId, multiplexer, account);
+        assertEq(stored.chainId, block.chainid);
         assertEq(uint8(stored.mode), uint8(IPeriodicLimitPolicy.PeriodMode.Fixed));
         assertEq(stored.period, PERIOD);
         assertEq(stored.start, START);
@@ -87,23 +123,37 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
         assertEq(stored.maxAmount, 10e6);
     }
 
-    function test_initialize_zeroStartMeansNow() public {
-        IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
-            _config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0);
-        config.start = 0;
-        vm.warp(START + 5);
-        _install(config);
-
-        assertEq(policy.getConfig(configId, multiplexer, account).start, START + 5);
+    function test_initialize_emitsPolicySet() public {
+        vm.expectEmit(address(policy));
+        emit IPolicy.PolicySet(configId, multiplexer, account);
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
     }
 
-    function test_initialize_RevertWhen_wrongLength() public {
+    function test_initialize_RevertWhen_initDataTooShort() public {
         bytes memory initData = abi.encode(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
         vm.prank(multiplexer);
         vm.expectRevert(
-            abi.encodeWithSelector(IPeriodicLimitPolicy.InvalidInitDataLength.selector, 160)
+            abi.encodeWithSelector(IPeriodicLimitPolicy.InvalidInitDataLength.selector, 192)
         );
-        policy.initializeWithMultiplexer(account, configId, _slice(initData, 160));
+        policy.initializeWithMultiplexer(account, configId, _slice(initData, 192));
+    }
+
+    function test_initialize_RevertWhen_initDataTooLong() public {
+        bytes memory initData = abi.encode(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
+        vm.prank(multiplexer);
+        vm.expectRevert(
+            abi.encodeWithSelector(IPeriodicLimitPolicy.InvalidInitDataLength.selector, 256)
+        );
+        policy.initializeWithMultiplexer(account, configId, _slice(initData, 256));
+    }
+
+    function test_initialize_RevertWhen_zeroChainId() public {
+        IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
+            _config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0);
+        config.chainId = 0;
+        vm.prank(multiplexer);
+        vm.expectRevert(IPeriodicLimitPolicy.InvalidChainId.selector);
+        policy.initializeWithMultiplexer(account, configId, abi.encode(config));
     }
 
     function test_initialize_RevertWhen_zeroPeriod() public {
@@ -112,6 +162,15 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
         config.period = 0;
         vm.prank(multiplexer);
         vm.expectRevert(IPeriodicLimitPolicy.InvalidPeriod.selector);
+        policy.initializeWithMultiplexer(account, configId, abi.encode(config));
+    }
+
+    function test_initialize_RevertWhen_fixedWithoutStart() public {
+        IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
+            _config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0);
+        config.start = 0;
+        vm.prank(multiplexer);
+        vm.expectRevert(IPeriodicLimitPolicy.InvalidStart.selector);
         policy.initializeWithMultiplexer(account, configId, abi.encode(config));
     }
 
@@ -147,20 +206,43 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
 
     function test_initialize_RevertWhen_modeOutOfRange() public {
         bytes memory initData = abi.encode(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
+        // `mode` is the second word
         assembly {
-            mstore(add(initData, 0x20), 2)
+            mstore(add(initData, 0x40), 2)
         }
         vm.prank(multiplexer);
-        vm.expectRevert();
+        // the ABI decoder rejects an out-of-range enum with empty revert data
+        vm.expectRevert(bytes(""));
         policy.initializeWithMultiplexer(account, configId, initData);
     }
 
-    function test_initialize_reinstallKeepsUsage() public {
-        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
+    function test_initialize_reenableLaterKeepsUsage() public {
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 10e6));
+        assertEq(_charge(10e6), VALIDATION_SUCCESS);
+
+        vm.warp(START + 5 days);
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 10e6));
+        assertEq(_charge(10e6), VALIDATION_FAILED, "a re-enable must not open a fresh window");
+    }
+
+    function test_initialize_reenableLaterKeepsUsage_fromFirstUse() public {
+        IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
+            _config(IPeriodicLimitPolicy.PeriodMode.FromFirstUse, 1, 0);
+        config.start = 0;
+        _install(config);
         assertEq(_charge(1), VALIDATION_SUCCESS);
 
-        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
+        vm.warp(START + 5 days);
+        _install(config);
         assertEq(_charge(1), VALIDATION_FAILED, "a re-enable must not open a fresh window");
+    }
+
+    function test_initialize_droppingTheAmountLimitDoesNotBlockUses() public {
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 5, 10e6));
+        assertEq(_charge(5e6), VALIDATION_SUCCESS);
+
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 5, 0));
+        assertEq(_charge(1), VALIDATION_SUCCESS, "stale spend must not block a uses-only limit");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -251,6 +333,19 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
         assertEq(_charge(1), VALIDATION_FAILED, "window runs from the late use");
     }
 
+    function test_fromFirstUse_multipleUsesShareTheWindow() public {
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.FromFirstUse, 2, 0));
+
+        vm.warp(START + 1 days);
+        assertEq(_charge(1), VALIDATION_SUCCESS);
+        vm.warp(START + 20 days);
+        assertEq(_charge(1), VALIDATION_SUCCESS);
+        assertEq(_charge(1), VALIDATION_FAILED);
+
+        vm.warp(START + 1 days + PERIOD);
+        assertEq(_charge(1), VALIDATION_SUCCESS, "window ends a period after its first use");
+    }
+
     function test_fromFirstUse_failsBeforeStart() public {
         IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
             _config(IPeriodicLimitPolicy.PeriodMode.FromFirstUse, 1, 0);
@@ -258,6 +353,17 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
         _install(config);
 
         assertEq(_charge(1), VALIDATION_FAILED);
+        vm.warp(START + 1 days);
+        assertEq(_charge(1), VALIDATION_SUCCESS);
+    }
+
+    function test_fromFirstUse_zeroStartAdmitsAtOnce() public {
+        IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
+            _config(IPeriodicLimitPolicy.PeriodMode.FromFirstUse, 1, 0);
+        config.start = 0;
+        _install(config);
+
+        assertEq(_charge(1), VALIDATION_SUCCESS);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -312,15 +418,21 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
     function test_amount_refusesShortCalldata() public {
         _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 0, 10e6));
 
-        bytes memory data = _slice(_transfer(1), 67);
-        assertEq(_check(token, 0, data), VALIDATION_FAILED);
+        assertEq(_check(token, 0, _slice(_transfer(1), 67)), VALIDATION_FAILED);
         assertEq(_check(token, 0, hex"a9059c"), VALIDATION_FAILED);
+
+        bytes memory transferFrom = abi.encodeCall(IERC20.transferFrom, (account, merchant, 1));
+        assertEq(_check(token, 0, _slice(transferFrom, 99)), VALIDATION_FAILED);
     }
 
-    function test_amount_maxUintFailsWithoutReverting() public {
-        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 0, 10e6));
+    function test_amount_overflowingTotalFailsWithoutReverting() public {
+        IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
+            _config(IPeriodicLimitPolicy.PeriodMode.Fixed, 0, type(uint256).max);
+        _install(config);
+
         assertEq(_charge(1), VALIDATION_SUCCESS);
         assertEq(_charge(type(uint256).max), VALIDATION_FAILED);
+        assertEq(_charge(type(uint256).max - 1), VALIDATION_SUCCESS);
     }
 
     function test_usesOnly_admitsAnyCall() public {
@@ -329,54 +441,86 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                               ISOLATION
+                          CHAIN AND ISOLATION
     //////////////////////////////////////////////////////////////*/
 
     function test_failsWhenNotInstalled() public {
         assertEq(_charge(1), VALIDATION_FAILED);
     }
 
-    function test_countersAreKeyedByMultiplexerAndAccount() public {
+    function test_failsOnAnotherChain() public {
+        IPeriodicLimitPolicy.PeriodicLimitConfig memory config =
+            _config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0);
+        config.chainId = uint64(block.chainid + 1);
+        _install(config);
+
+        assertEq(_charge(1), VALIDATION_FAILED);
+        (uint48 windowStart, uint256 uses,) = _usage();
+        assertEq(windowStart, 0);
+        assertEq(uses, 0);
+    }
+
+    function test_countersAreKeyedByMultiplexer() public {
+        address other = makeAddr("otherMultiplexer");
         _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
+        _installAs(other, account, _config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
+
         assertEq(_charge(1), VALIDATION_SUCCESS);
+        assertEq(_charge(1), VALIDATION_FAILED);
+        assertEq(_checkAs(other, account, token, 0, _transfer(1)), VALIDATION_SUCCESS);
+    }
 
-        vm.prank(makeAddr("otherMultiplexer"));
-        assertEq(
-            policy.checkAction(configId, account, token, 0, _transfer(1)),
-            VALIDATION_FAILED,
-            "not installed under another multiplexer"
-        );
+    function test_countersAreKeyedByAccount() public {
+        address other = makeAddr("otherAccount");
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
+        _installAs(multiplexer, other, _config(IPeriodicLimitPolicy.PeriodMode.Fixed, 1, 0));
 
-        vm.prank(multiplexer);
-        assertEq(
-            policy.checkAction(configId, makeAddr("otherAccount"), token, 0, _transfer(1)),
-            VALIDATION_FAILED,
-            "not installed for another account"
-        );
+        assertEq(_charge(1), VALIDATION_SUCCESS);
+        assertEq(_charge(1), VALIDATION_FAILED);
+        assertEq(_checkAs(multiplexer, other, token, 0, _transfer(1)), VALIDATION_SUCCESS);
+    }
+
+    function test_refusedCheckWritesNothing() public {
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 2, 10e6));
+        assertEq(_charge(6e6), VALIDATION_SUCCESS);
+
+        assertEq(_charge(5e6), VALIDATION_FAILED);
+        (, uint256 uses, uint256 spent) = _usage();
+        assertEq(uses, 1);
+        assertEq(spent, 6e6);
     }
 
     /*//////////////////////////////////////////////////////////////
-                                 VIEWS
+                             EVENTS & VIEWS
     //////////////////////////////////////////////////////////////*/
+
+    function test_checkAction_emitsUsage() public {
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 2, 10e6));
+        vm.warp(START + 1 days);
+        _charge(3e6);
+
+        vm.expectEmit(address(policy));
+        emit IPeriodicLimitPolicy.PeriodicLimitUsed(configId, multiplexer, account, START, 2, 7e6);
+        _charge(4e6);
+    }
 
     function test_currentUsage_fixed() public {
         _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, 2, 10e6));
         vm.warp(START + 1 days);
 
-        (uint48 windowStart, uint256 uses, uint256 spent) =
-            policy.currentUsage(configId, multiplexer, account);
+        (uint48 windowStart, uint256 uses, uint256 spent) = _usage();
         assertEq(windowStart, START);
         assertEq(uses, 0);
         assertEq(spent, 0);
 
         _charge(3e6);
-        (windowStart, uses, spent) = policy.currentUsage(configId, multiplexer, account);
+        (windowStart, uses, spent) = _usage();
         assertEq(windowStart, START);
         assertEq(uses, 1);
         assertEq(spent, 3e6);
 
         vm.warp(START + PERIOD + 1);
-        (windowStart, uses, spent) = policy.currentUsage(configId, multiplexer, account);
+        (windowStart, uses, spent) = _usage();
         assertEq(windowStart, START + PERIOD);
         assertEq(uses, 0);
         assertEq(spent, 0);
@@ -385,18 +529,18 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
     function test_currentUsage_fromFirstUse() public {
         _install(_config(IPeriodicLimitPolicy.PeriodMode.FromFirstUse, 1, 0));
 
-        (uint48 windowStart, uint256 uses,) = policy.currentUsage(configId, multiplexer, account);
+        (uint48 windowStart, uint256 uses,) = _usage();
         assertEq(windowStart, 0, "no window before the first use");
         assertEq(uses, 0);
 
         vm.warp(START + 3 days);
         _charge(1);
-        (windowStart, uses,) = policy.currentUsage(configId, multiplexer, account);
+        (windowStart, uses,) = _usage();
         assertEq(windowStart, START + 3 days);
         assertEq(uses, 1);
 
         vm.warp(START + 3 days + PERIOD);
-        (windowStart, uses,) = policy.currentUsage(configId, multiplexer, account);
+        (windowStart, uses,) = _usage();
         assertEq(windowStart, 0);
         assertEq(uses, 0);
     }
@@ -413,18 +557,19 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
                                   FUZZ
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Whatever the timing, no fixed window ever admits more than its limits
+    /// @dev Whatever the timing and limits, no fixed window ever admits more than its limits
     function testFuzz_fixed_windowNeverExceedsLimits(
         uint32 maxUses,
         uint64 maxAmount,
+        bool limitAmount,
         uint32[16] memory gaps,
         uint64[16] memory amounts
     )
         public
     {
-        maxUses = uint32(bound(maxUses, 1, 4));
-        maxAmount = uint64(bound(maxAmount, 1, 100e6));
-        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, maxUses, maxAmount));
+        maxUses = uint32(bound(maxUses, limitAmount ? 0 : 1, 4));
+        uint256 cap = limitAmount ? bound(maxAmount, 1, 100e6) : 0;
+        _install(_config(IPeriodicLimitPolicy.PeriodMode.Fixed, maxUses, cap));
 
         uint256 window = type(uint256).max;
         uint256 uses;
@@ -434,8 +579,8 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
             uint256 current = (block.timestamp - START) / PERIOD;
             if (current != window) (window, uses, spent) = (current, 0, 0);
 
-            uint256 amount = bound(amounts[i], 0, maxAmount);
-            bool fits = uses < maxUses && spent + amount <= maxAmount;
+            uint256 amount = bound(amounts[i], 0, 2 * uint256(cap) + 1);
+            bool fits = (maxUses == 0 || uses < maxUses) && (cap == 0 || spent + amount <= cap);
             assertEq(_charge(amount), fits ? VALIDATION_SUCCESS : VALIDATION_FAILED);
             if (fits) (uses, spent) = (uses + 1, spent + amount);
         }
@@ -452,13 +597,6 @@ contract PeriodicLimitPolicy_Unit_Test is Test {
             bool expected = !used || block.timestamp >= last + PERIOD;
             assertEq(_charge(1), expected ? VALIDATION_SUCCESS : VALIDATION_FAILED);
             if (expected) (last, used) = (block.timestamp, true);
-        }
-    }
-
-    function _slice(bytes memory data, uint256 length) internal pure returns (bytes memory out) {
-        out = new bytes(length);
-        for (uint256 i; i < length; i++) {
-            out[i] = data[i];
         }
     }
 }

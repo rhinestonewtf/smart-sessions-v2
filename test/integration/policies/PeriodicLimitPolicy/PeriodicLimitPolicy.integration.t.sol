@@ -45,9 +45,10 @@ contract PeriodicLimitPolicy_Integration_Test is ActionPolicy_Integration_Test {
 
         bytes memory initData = abi.encode(
             IPeriodicLimitPolicy.PeriodicLimitConfig({
+                chainId: uint64(block.chainid),
                 mode: IPeriodicLimitPolicy.PeriodMode.Fixed,
                 period: PERIOD,
-                start: 0,
+                start: uint48(block.timestamp),
                 maxUses: 1,
                 token: token,
                 maxAmount: 10e6
@@ -72,6 +73,7 @@ contract PeriodicLimitPolicy_Integration_Test is ActionPolicy_Integration_Test {
         assertTrue(_charge(10e6), "charge in the next period");
     }
 
+    /// @dev The policy's refusal makes the multiplexer revert, so nothing it recorded survives
     function test_verifyExecution_refusedChargeDoesNotUseThePeriod() public {
         assertFalse(_charge(10e6 + 1), "over the amount");
         assertTrue(_charge(10e6), "the period is still unused");

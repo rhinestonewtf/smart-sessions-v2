@@ -16,21 +16,23 @@ import { VALIDATION_SUCCESS, VALIDATION_FAILED } from "erc7579/interfaces/IERC75
 /// @notice Limits how often an action runs, and how much of one token it moves, per period
 ///         (e.g. one charge of at most 10 USDC per 30 days).
 ///
-/// @dev A use is recorded when `checkAction` VALIDATES the op, not when it executes. It rolls
-///      back with the validating frame: where the executor bubbles a failed execution the window
-///      keeps its allowance, and where the failure is swallowed (a caller's try/catch) the use is
-///      spent. Either way a window never admits more than its limits.
+/// @dev A use is recorded when `checkAction` VALIDATES the op, not when it executes, and before
+///      the multiplexer checks the session signature. It rolls back only if the validating frame
+///      reverts: the executor must revert when verification fails, and where it swallows a failed
+///      execution the use is spent without a transfer. Either way a window never admits more than
+///      its limits.
 ///
 /// @dev Install requirements:
-///      - on the specific action it limits (target + selector), not the fallback action: each
-///        op validated under the configuration counts as one use;
-///      - with an amount limit, on `token`'s `transfer` or `transferFrom` only; every other op
-///        (including `approve`, whose allowance outlives the window) is refused;
-///      - the limit is per (configuration, multiplexer, account): another session, or another
-///        action of this one, has its own counters.
+///      - on exactly ONE action (target + selector), never the fallback action, and not on both
+///        `transfer` and `transferFrom`: counters are per (configuration, multiplexer, account),
+///        so every action carrying it has its own allowance;
+///      - with an amount limit, on `token`'s `transfer` or `transferFrom`; every other op
+///        (including `approve`, whose allowance outlives the window) is refused. `transferFrom`
+///        counts its amount whatever `from` is; bound the parties with another policy;
+///      - tokens the session moves through claims never reach this policy.
 contract PeriodicLimitPolicy is IPeriodicLimitPolicy, IActionPolicy {
     /// @dev Length of one ABI-encoded `PeriodicLimitConfig`
-    uint256 internal constant CONFIG_LENGTH = 6 * 32;
+    uint256 internal constant CONFIG_LENGTH = 7 * 32;
 
     mapping(
         ConfigId configId
@@ -49,7 +51,8 @@ contract PeriodicLimitPolicy is IPeriodicLimitPolicy, IActionPolicy {
     /// @notice Installs the configuration for `account` under the caller (the multiplexer)
     /// @dev Overwrites the configuration but keeps the usage: the multiplexer runs this on every
     ///      enable, and re-enabling the same configuration must not hand out a fresh window
-    ///      mid-period.
+    ///      mid-period. A changed `mode`, `period` or `start` places windows anew, which resets the
+    ///      counters.
     /// @param initData One ABI-encoded `PeriodicLimitConfig`
     function initializeWithMultiplexer(
         address account,
@@ -62,12 +65,13 @@ contract PeriodicLimitPolicy is IPeriodicLimitPolicy, IActionPolicy {
         if (initData.length != CONFIG_LENGTH) revert InvalidInitDataLength(initData.length);
         PeriodicLimitConfig memory config = abi.decode(initData, (PeriodicLimitConfig));
 
+        if (config.chainId == 0) revert InvalidChainId();
         if (config.period == 0) revert InvalidPeriod();
+        if (config.mode == PeriodMode.Fixed && config.start == 0) revert InvalidStart();
         if (config.maxUses == 0 && config.maxAmount == 0) revert NoLimitSet();
         if ((config.token == address(0)) != (config.maxAmount == 0)) {
             revert InvalidToken(config.token, config.maxAmount);
         }
-        if (config.start == 0) config.start = uint48(block.timestamp);
 
         $configs[configId][msg.sender][account] = config;
         emit IPolicy.PolicySet(configId, msg.sender, account);
@@ -92,8 +96,7 @@ contract PeriodicLimitPolicy is IPeriodicLimitPolicy, IActionPolicy {
         returns (uint256)
     {
         PeriodicLimitConfig storage $config = $configs[configId][msg.sender][account];
-        uint256 period = $config.period;
-        if (period == 0) return VALIDATION_FAILED;
+        if ($config.period == 0 || $config.chainId != block.chainid) return VALIDATION_FAILED;
         if (block.timestamp < $config.start) return VALIDATION_FAILED;
 
         uint256 maxAmount = $config.maxAmount;
@@ -112,9 +115,11 @@ contract PeriodicLimitPolicy is IPeriodicLimitPolicy, IActionPolicy {
         uint256 spent = amount;
         if (windowStart == $usage.windowStart) {
             uses += $usage.uses;
-            // `amount <= maxAmount` above, so this cannot underflow
-            if ($usage.spent > maxAmount - amount) return VALIDATION_FAILED;
-            spent += $usage.spent;
+            if (maxAmount != 0) {
+                // `amount <= maxAmount` above, so this cannot underflow
+                if ($usage.spent > maxAmount - amount) return VALIDATION_FAILED;
+                spent += $usage.spent;
+            }
         }
         uint256 maxUses = $config.maxUses;
         if (maxUses != 0 && uses > maxUses) return VALIDATION_FAILED;
@@ -158,7 +163,12 @@ contract PeriodicLimitPolicy is IPeriodicLimitPolicy, IActionPolicy {
     {
         PeriodicLimitConfig storage $config = $configs[configId][multiplexer][account];
         PeriodicUsage storage $usage = $usages[configId][multiplexer][account];
-        if ($config.period == 0 || block.timestamp < $config.start) return (0, 0, 0);
+        if (
+            $config.period == 0 || $config.chainId != block.chainid
+                || block.timestamp < $config.start
+        ) {
+            return (0, 0, 0);
+        }
 
         windowStart = _windowStart($config, $usage.windowStart);
         if (windowStart == $usage.windowStart) return (windowStart, $usage.uses, $usage.spent);
